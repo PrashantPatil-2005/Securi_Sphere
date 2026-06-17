@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { parsePaginatedList } from "@/lib/parseList";
 
 interface Host { id: string; name: string; }
 interface Scenario { scenarios: string[]; }
@@ -14,7 +15,13 @@ export default function SimulationPage() {
   const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
-    api<Host[]>("/api/v1/hosts").then((h) => { setHosts(h); if (h[0]) setHostId(h[0].id); }).catch(console.error);
+    api<{ items?: Host[] } | Host[]>("/api/v1/hosts?page_size=500")
+      .then((r) => {
+        const { items } = parsePaginatedList(r);
+        setHosts(items);
+        if (items[0]) setHostId(items[0].id);
+      })
+      .catch(console.error);
     api<Scenario>("/api/v1/simulation/scenarios").then((r) => { setScenarios(r.scenarios); if (r.scenarios[0]) setScenario(r.scenarios[0]); }).catch(console.error);
   }, []);
 
