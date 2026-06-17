@@ -2,53 +2,91 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 
-(root / "docker-compose.yml").write_text(
-    """services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: securi-postgres
-    env_file:
-      - .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-securi}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-securi}
-    ports:
-      - "5432:5432"
-    volumes:
-      - securi_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U securi -d securi"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+(root / "backend" / "app" / "config.py").write_text(
+    """from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-volumes:
-  securi_pg_data:
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    database_url: str = ""
+    jwt_secret: str = ""
+    jwt_access_expire_minutes: int = 15
+    jwt_refresh_expire_days: int = 7
+    server_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:3000"
+    mail_host: str = ""
+    mail_port: int = 587
+    mail_user: str = ""
+    mail_password: str = ""
+    mail_from: str = "noreply@securi.local"
+    telegram_bot_token: str = ""
+    debug: bool = True
+    environment: str = "development"
+    retention_days: int = 90
+
+    @model_validator(mode="after")
+    def require_secrets(self) -> "Settings":
+        if not self.database_url:
+            raise ValueError("DATABASE_URL must be set in .env")
+        if not self.jwt_secret:
+            raise ValueError("JWT_SECRET must be set in .env")
+        return self
+
+    @property
+    def smtp_host(self) -> str:
+        return self.mail_host
+
+    @property
+    def smtp_port(self) -> int:
+        return self.mail_port
+
+    @property
+    def smtp_user(self) -> str:
+        return self.mail_user
+
+    @property
+    def smtp_password(self) -> str:
+        return self.mail_password
+
+    @property
+    def smtp_from(self) -> str:
+        return self.mail_from
+
+
+settings = Settings()
 """,
     encoding="utf-8",
 )
 
 (root / ".env.example").write_text(
-    """# Copy to .env and set your own values. Never commit .env.
+    """# Copy to .env and fill in values locally. Never commit .env.
 
 POSTGRES_USER=securi
-POSTGRES_PASSWORD=REPLACE_WITH_A_STRONG_LOCAL_PASSWORD
 POSTGRES_DB=securi
-DATABASE_URL=postgresql+asyncpg://securi:REPLACE_WITH_A_STRONG_LOCAL_PASSWORD@localhost:5432/securi
+# Generate a strong password and set it here:
+POSTGRES_PASSWORD=
 
-JWT_SECRET=REPLACE_WITH_A_LONG_RANDOM_SECRET
+# Build DATABASE_URL from the values above, e.g.:
+# postgresql+asyncpg://USER:PASSWORD@localhost:5432/DBNAME
+DATABASE_URL=
+
+# Generate with: python -c "import secrets; print(secrets.token_urlsafe(64))"
+JWT_SECRET=
+
 JWT_ACCESS_EXPIRE_MINUTES=15
 JWT_REFRESH_EXPIRE_DAYS=7
 
 SERVER_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:3000
 
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-SMTP_FROM=noreply@securi.local
+# Optional email alerts - see docs/DEPLOYMENT.md
+MAIL_HOST=
+MAIL_PORT=587
+MAIL_USER=
+MAIL_PASSWORD=
+MAIL_FROM=noreply@securi.local
 
 TELEGRAM_BOT_TOKEN=
 
@@ -58,4 +96,4 @@ ENVIRONMENT=development
     encoding="utf-8",
 )
 
-print("Updated docker-compose.yml and .env.example")
+print("Updated config.py and .env.example")
