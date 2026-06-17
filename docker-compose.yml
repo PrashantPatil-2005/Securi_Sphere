@@ -2,10 +2,12 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: securi-postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: securi
-      POSTGRES_PASSWORD: securi_dev
-      POSTGRES_DB: securi
+      POSTGRES_USER: ${POSTGRES_USER:-securi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-securi}
     ports:
       - "5432:5432"
     volumes:
