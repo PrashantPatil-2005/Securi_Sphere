@@ -8,6 +8,7 @@ from agent.collector.events import LogTailer
 from agent.collector.metrics import collect_metrics
 from agent.config import load_config
 from agent.sender import Sender
+from agent.integrity import compute_agent_hash
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("securi-agent")
@@ -39,7 +40,7 @@ def main() -> None:
         sender.flush_buffer()
 
         if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-            sender.heartbeat()
+            sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": "1.1.0"})
             last_heartbeat = now
 
         if now - last_metrics >= METRICS_INTERVAL:

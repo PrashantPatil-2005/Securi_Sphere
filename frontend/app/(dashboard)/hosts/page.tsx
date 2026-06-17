@@ -1,96 +1,97 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { useWebSocket } from "@/lib/websocket";
+import { buildQuery } from "@/lib/buildQuery";
+import { useTimeRange } from "@/lib/timeRange";
+import ExportMenu from "@/components/ExportMenu";
+import PaginationBar from "@/components/PaginationBar";
+import SortSelect from "@/components/SortSelect";
+import TimeRangeBar from "@/components/TimeRangeBar";
 
 interface Host {
-  id: string;
-  name: string;
-  hostname: string | null;
-  ip_address: string | null;
-  os_info: string | null;
-  status: string;
-  last_seen: string | null;
+  id: string; name: string; hostname: string | null; status: string;
+  os_info: string | null; last_seen: string | null; risk_score: number | null; alert_count: number | null;
 }
 
-const statusColors: Record<string, string> = {
-  online: "bg-green-500",
-  offline: "bg-gray-500",
-  warning: "bg-yellow-500",
-  critical: "bg-red-500",
-};
-
 export default function HostsPage() {
+  const { queryParams } = useTimeRange();
   const [hosts, setHosts] = useState<Host[]>([]);
-  const [name, setName] = useState("");
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sort, setSort] = useState("newest");
+  const [filters, setFilters] = useState({ hostname: "", status: "", os_info: "", min_risk: "", max_risk: "" });
   const [enrollment, setEnrollment] = useState<{ token: string; install_command: string } | null>(null);
-  const [error, setError] = useState("");
+  const [newName, setNewName] = useState("");
 
-  const load = () => api<Host[]>("/api/v1/hosts").then(setHosts).catch(console.error);
-  useEffect(() => { load(); }, []);
-  useWebSocket((msg) => { if (msg.type === "host_status") load(); });
+  const load = useCallback(() => {
+    const q = buildQuery({ page, page_size: pageSize, sort, ...filters, min_risk: filters.min_risk || undefined, max_risk: filters.max_risk || undefined }, queryParams);
+    api<{ items: Host[]; total: number }>(`/api/v1/hosts${q}`).then((r) => { setHosts(r.items); setTotal(r.total); }).catch(console.error);
+  }, [page, pageSize, sort, filters, queryParams]);
 
-  async function addHost() {
-    if (!name.trim()) return;
-    try {
-      const host = await api<Host>("/api/v1/hosts", { method: "POST", body: JSON.stringify({ name }) });
-      const token = await api<{ token: string; install_command: string }>(
-        `/api/v1/hosts/${host.id}/enrollment-token`, { method: "POST" },
-      );
-      setEnrollment(token);
-      setName("");
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed");
-    }
-  }
+  useEffect(() => { load(); }, [load]);
 
-  async function deleteHost(id: string) {
-    if (!confirm("Delete this host?")) return;
-    await api(`/api/v1/hosts/${id}`, { method: "DELETE" });
+  async function addHost(e: React.FormEvent) {
+    e.preventDefault();
+    await api("/api/v1/hosts", { method: "POST", body: JSON.stringify({ name: newName }) });
+    setNewName("");
     load();
   }
 
+  async function enroll(host: Host) {
+    const token = await api<{ token: string; install_command: string }>(`/api/v1/hosts/${host.id}/enrollment-token`, { method: "POST" });
+    setEnrollment(token);
+  }
+
+  const inputCls = "px-3 py-1.5 bg-black/30 border border-[var(--border)] rounded text-sm";
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Host Inventory</h1>
-      <div className="flex gap-2 mb-6">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Host name"
-          className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded flex-1 max-w-xs" />
-        <button onClick={addHost} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">Add Host</button>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Hosts</h1>
+        <ExportMenu resource="hosts" query={buildQuery({ sort, ...filters }, queryParams)} />
       </div>
-      {error && <p className="text-red-400 mb-4">{error}</p>}
+      <TimeRangeBar />
+      <form onSubmit={addHost} className="flex gap-2 mb-4">
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className={`${inputCls} flex-1 max-w-xs`} />
+        <button type="submit" className="px-4 py-1.5 bg-blue-600 rounded text-sm">Add Host</button>
+      </form>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <input placeholder="Hostname" value={filters.hostname} onChange={(e) => setFilters({ ...filters, hostname: e.target.value })} className={inputCls} />
+        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className={inputCls}>
+          <option value="">All statuses</option>
+          {["online", "offline", "warning", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <input placeholder="OS" value={filters.os_info} onChange={(e) => setFilters({ ...filters, os_info: e.target.value })} className={inputCls} />
+        <input type="number" placeholder="Min risk" value={filters.min_risk} onChange={(e) => setFilters({ ...filters, min_risk: e.target.value })} className={`${inputCls} w-24`} />
+        <input type="number" placeholder="Max risk" value={filters.max_risk} onChange={(e) => setFilters({ ...filters, max_risk: e.target.value })} className={`${inputCls} w-24`} />
+        <SortSelect value={sort} onChange={setSort} />
+      </div>
+      <div className="space-y-2">
+        {hosts.map((h) => (
+          <div key={h.id} className="flex items-center justify-between p-3 bg-[var(--card)] border border-[var(--border)] rounded-lg">
+            <div>
+              <span className="font-medium">{h.name}</span>
+              <span className="text-xs text-gray-500 ml-2 capitalize">{h.status}</span>
+              {h.risk_score != null && <span className="text-xs text-red-400 ml-2">Risk: {h.risk_score}</span>}
+              {h.alert_count != null && h.alert_count > 0 && <span className="text-xs text-yellow-400 ml-2">{h.alert_count} alerts</span>}
+              {h.last_seen && <span className="text-xs text-gray-600 ml-2">Seen {new Date(h.last_seen).toLocaleString()}</span>}
+            </div>
+            <button onClick={() => enroll(h)} className="text-sm px-3 py-1 bg-blue-600/20 text-blue-400 rounded">Enroll</button>
+          </div>
+        ))}
+      </div>
+      <PaginationBar page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
       {enrollment && (
-        <div className="mb-6 p-4 bg-blue-900/20 border border-blue-800 rounded">
-          <p className="text-sm font-medium mb-2">Enrollment token (shown once):</p>
-          <code className="block text-xs break-all mb-3">{enrollment.token}</code>
-          <p className="text-sm font-medium mb-2">Install command:</p>
-          <code className="block text-xs break-all bg-black/30 p-2 rounded">{enrollment.install_command}</code>
-          <button onClick={() => setEnrollment(null)} className="mt-3 text-sm text-gray-400 hover:text-white">Dismiss</button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50" onClick={() => setEnrollment(null)}>
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-6 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-medium mb-2">Enrollment token (shown once)</p>
+            <code className="block text-xs break-all mb-3">{enrollment.token}</code>
+            <code className="block text-xs break-all bg-black/30 p-2 rounded">{enrollment.install_command}</code>
+          </div>
         </div>
       )}
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-gray-500 border-b border-[var(--border)]">
-            <th className="pb-2">Name</th><th className="pb-2">Hostname</th><th className="pb-2">IP</th>
-            <th className="pb-2">Status</th><th className="pb-2">Last Seen</th><th className="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {hosts.map((h) => (
-            <tr key={h.id} className="border-b border-[var(--border)]/50">
-              <td className="py-3">{h.name}</td>
-              <td>{h.hostname || "-"}</td>
-              <td>{h.ip_address || "-"}</td>
-              <td><span className={`inline-block w-2 h-2 rounded-full mr-2 ${statusColors[h.status] || "bg-gray-500"}`} />{h.status}</td>
-              <td>{h.last_seen ? new Date(h.last_seen).toLocaleString() : "-"}</td>
-              <td><button onClick={() => deleteHost(h.id)} className="text-red-400 hover:text-red-300 text-xs">Delete</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {hosts.length === 0 && <p className="text-gray-500 mt-4">No hosts registered yet.</p>}
     </div>
   );
 }

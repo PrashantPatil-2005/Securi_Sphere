@@ -55,4 +55,26 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/overview` | Dashboard KPIs |
 | WS | `/ws?token=JWT` | Real-time updates |
 
-Static: `GET /install.sh` — agent installer script
+Static: `GET /install.sh` â€” agent installer script
+
+
+## Advanced endpoints
+
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/audit` | admin | Audit log entries |
+| GET | `/mitre/matrix` | all | MITRE ATT&CK matrix from events |
+| GET | `/mitre/techniques` | all | Seeded MITRE techniques |
+| GET/POST/PATCH/DELETE | `/alert-rules` | admin/analyst | Detection rule CRUD |
+| GET | `/timelines` | all | Attack timelines |
+| GET | `/timelines/{id}/events` | all | Events in a timeline |
+| GET/POST | `/incidents` | analyst+ | Incident management |
+| GET | `/simulation/scenarios` | admin | List simulation scenarios |
+| POST | `/simulation/run/{scenario}` | admin | Inject synthetic attack chain |
+| GET | `/reports/summary` | all | Summary report (json/csv) |
+| GET | `/network/topology` | all | Host network map |
+| GET | `/threat-scores` | all | Ranked host threat scores |
+| GET | `/hosts/{id}/enrollment-tokens` | admin/analyst | List enrollment tokens |
+| DELETE | `/enrollment-tokens/{id}` | admin/analyst | Revoke token |
+
+Agent heartbeat accepts optional JSON: `{ "agent_hash", "agent_version" }`.

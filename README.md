@@ -59,3 +59,28 @@ curl -s http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROLL_T
 - docs/API.md - API reference
 - docs/SCHEMA.md - Database schema
 - docs/DEPLOYMENT.md - LAN and internet deployment
+
+
+## Advanced Features
+
+- MITRE ATT&CK mapping and matrix view
+- Correlation engine with confidence scoring
+- Attack timeline reconstruction
+- Host threat scores and network topology
+- Incident management, audit log, attack simulation
+- Agent integrity monitoring (hash change detection)
+
+## Dashboard Pages
+
+Overview, Hosts, Events, Alerts, Metrics, MITRE, Timeline, Incidents, Network, Rules, Audit, Simulation, Reports, Search
+
+## Database Migration
+
+If upgrading from an earlier version, run:
+
+```powershell
+cd backend
+.\venv\Scripts\python -m app.services.migrate
+```
+
+Or restart the backend — migrations run automatically on startup.
