@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
+import { parsePaginatedList } from "@/lib/parseList";
 import { useTimeRange } from "@/lib/timeRange";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
@@ -10,8 +11,19 @@ import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { useWebSocket } from "@/lib/websocket";
 
-interface Alert { id: string; title: string; severity: string; status: string; description: string | null; created_at: string; confidence?: number; }
-interface Host { id: string; name: string; }
+interface Alert {
+  id: string;
+  title: string;
+  severity: string;
+  status: string;
+  description: string | null;
+  created_at: string;
+  confidence?: number;
+}
+interface Host {
+  id: string;
+  name: string;
+}
 
 const STATUSES = ["open", "investigating", "resolved", "closed"];
 
@@ -27,12 +39,26 @@ export default function AlertsPage() {
 
   const load = useCallback(() => {
     const q = buildQuery({ page, page_size: pageSize, sort, ...filters }, queryParams);
-    api<{ items: Alert[]; total: number }>(`/api/v1/alerts${q}`).then((r) => { setAlerts(r.items); setTotal(r.total); }).catch(console.error);
+    api<{ items?: Alert[]; total?: number } | Alert[]>(`/api/v1/alerts${q}`)
+      .then((r) => {
+        const { items, total: count } = parsePaginatedList(r);
+        setAlerts(items);
+        setTotal(count);
+      })
+      .catch(console.error);
   }, [page, pageSize, sort, filters, queryParams]);
 
-  useEffect(() => { api<{ items: Host[] }>("/api/v1/hosts?page_size=500").then((r) => setHosts(r.items)).catch(console.error); }, []);
-  useEffect(() => { load(); }, [load]);
-  useWebSocket((msg) => { if (msg.type === "new_alert" || msg.type === "alert_resolved") load(); });
+  useEffect(() => {
+    api<{ items?: Host[] } | Host[]>("/api/v1/hosts?page_size=500")
+      .then((r) => setHosts(parsePaginatedList(r).items))
+      .catch(console.error);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useWebSocket((msg) => {
+    if (msg.type === "new_alert" || msg.type === "alert_resolved") load();
+  });
 
   async function setStatus(id: string, status: string) {
     await api(`/api/v1/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -51,17 +77,34 @@ export default function AlertsPage() {
       <div className="flex flex-wrap gap-2 mb-4">
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className={inputCls}>
           <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
         <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className={inputCls}>
           <option value="">All severities</option>
-          {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+          {["low", "medium", "high", "critical"].map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
         </select>
         <select value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className={inputCls}>
           <option value="">All hosts</option>
-          {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          {hosts.map((h) => (
+            <option key={h.id} value={h.id}>
+              {h.name}
+            </option>
+          ))}
         </select>
-        <input placeholder="Rule name" value={filters.rule_name} onChange={(e) => setFilters({ ...filters, rule_name: e.target.value })} className={inputCls} />
+        <input
+          placeholder="Rule name"
+          value={filters.rule_name}
+          onChange={(e) => setFilters({ ...filters, rule_name: e.target.value })}
+          className={inputCls}
+        />
         <input placeholder="Search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className={inputCls} />
         <SortSelect value={sort} onChange={setSort} />
       </div>
@@ -79,15 +122,31 @@ export default function AlertsPage() {
               </div>
               {a.status === "open" && (
                 <div className="flex gap-1 shrink-0">
-                  <button onClick={() => setStatus(a.id, "investigating")} className="text-xs px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded">Investigate</button>
-                  <button onClick={() => setStatus(a.id, "resolved")} className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">Resolve</button>
+                  <button
+                    onClick={() => setStatus(a.id, "investigating")}
+                    className="text-xs px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded"
+                  >
+                    Investigate
+                  </button>
+                  <button onClick={() => setStatus(a.id, "resolved")} className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">
+                    Resolve
+                  </button>
                 </div>
               )}
             </div>
           </div>
         ))}
       </div>
-      <PaginationBar page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
+      <PaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPage={setPage}
+        onPageSize={(s) => {
+          setPageSize(s);
+          setPage(1);
+        }}
+      />
     </div>
   );
 }
