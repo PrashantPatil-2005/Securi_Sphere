@@ -97,10 +97,26 @@ async def ingest_events(
     await run_correlation_engine(db, host.id)
     await build_timelines(db, host.id)
     await calculate_host_scores(db, host)
-    for item in body.events:
+    from app.services.offense_engine import link_event_to_offense
+    from app.models.event import Event as EventModel
+    ingested = (
+        await db.execute(
+            select(EventModel).where(EventModel.host_id == host.id).order_by(EventModel.timestamp.desc()).limit(len(body.events))
+        )
+    ).scalars().all()
+    for event in ingested:
+        await link_event_to_offense(db, event)
         await ws_manager.broadcast({
-            "type": "new_event",
-            "data": {"host_id": str(host.id), "event_type": item.event_type, "severity": item.severity},
+            "type": "security_feed",
+            "data": {
+                "id": str(event.id),
+                "host_id": str(host.id),
+                "host_name": host.name,
+                "event_type": event.event_type,
+                "severity": event.severity,
+                "description": event.description,
+                "timestamp": event.timestamp.isoformat(),
+            },
         })
     return {"ingested": len(body.events)}
 

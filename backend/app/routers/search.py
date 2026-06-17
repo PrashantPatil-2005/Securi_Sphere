@@ -85,3 +85,17 @@ async def global_search(
         "events": [{"id": str(e.id), "event_type": e.event_type, "description": e.description, "severity": e.severity} for e in events],
         "users": [{"id": str(u.id), "email": u.email, "full_name": u.full_name} for u in users],
     }
+
+
+@router.get("/siem")
+async def siem_search(
+    q: str = Query(..., min_length=1),
+    preset: str | None = Query(None),
+    from_time: datetime | None = Query(None, alias="from"),
+    to_time: datetime | None = Query(None, alias="to"),
+    limit: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.services.siem_search import execute_siem_search
+    return await execute_siem_search(db, q, preset, from_time, to_time, limit)

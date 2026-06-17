@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import Base, async_session, engine
-from app.routers import agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents, metrics, mitre, network, reports, search, simulation, threat_scores, timeline
+from app.routers import agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents, metrics, mitre, network, offenses, reports, saved_searches, search, siem, simulation, threat_scores, timeline
 from app.security import decode_token as jwt_decode
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.services.detection import seed_alert_rules, update_host_statuses
@@ -86,6 +86,9 @@ app.include_router(simulation.router, prefix=prefix)
 app.include_router(reports.router, prefix=prefix)
 app.include_router(network.router, prefix=prefix)
 app.include_router(threat_scores.router, prefix=prefix)
+app.include_router(siem.router, prefix=prefix)
+app.include_router(offenses.router, prefix=prefix)
+app.include_router(saved_searches.router, prefix=prefix)
 
 
 @app.get("/api/v1/overview")

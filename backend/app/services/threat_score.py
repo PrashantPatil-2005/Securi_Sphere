@@ -8,6 +8,7 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
 from app.models.threat_score import HostThreatScore
+from app.models.siem import HostRiskHistory
 
 
 async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore:
@@ -46,10 +47,32 @@ async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore
         )
     ).scalar_one_or_none()
 
+    correlated = (
+        await db.execute(
+            select(func.count()).select_from(Event).where(
+                Event.host_id == host.id,
+                Event.severity.in_(["high", "critical"]),
+                Event.timestamp >= since_1h,
+            )
+        )
+    ).scalar_one()
+
+    service_failures = (
+        await db.execute(
+            select(func.count()).select_from(Event).where(
+                Event.host_id == host.id,
+                Event.event_type == "service_failure",
+                Event.timestamp >= since_1h,
+            )
+        )
+    ).scalar_one()
+
     factors = {
-        "failed_logins_1h": min(fail_count * 3, 25),
+        "failed_logins": min(fail_count * 3, 25),
+        "service_failures": min(service_failures * 5, 15),
         "critical_alerts": min(critical_alerts * 15, 30),
         "high_alerts": min(high_alerts * 8, 15),
+        "correlated_security_events": min(correlated * 4, 15),
         "agent_offline": 10 if host.status in ("offline", "critical") and not host.last_seen else 0,
         "high_cpu": 0,
         "high_memory": 0,
@@ -76,11 +99,35 @@ async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore
         existing.health_score = health_score
         existing.factors = factors
         existing.calculated_at = now
-        return existing
+        score_row = existing
+    else:
+        score_row = HostThreatScore(host_id=host.id, score=threat_score, health_score=health_score, factors=factors)
+        db.add(score_row)
 
-    row = HostThreatScore(host_id=host.id, score=threat_score, health_score=health_score, factors=factors)
-    db.add(row)
-    return row
+    last_hist = (
+        await db.execute(
+            select(HostRiskHistory)
+            .where(HostRiskHistory.host_id == host.id)
+            .order_by(HostRiskHistory.recorded_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    should_record = (
+        not last_hist
+        or (now - last_hist.recorded_at).total_seconds() >= 3600
+        or abs(last_hist.risk_score - threat_score) >= 5
+    )
+    if should_record:
+        db.add(
+            HostRiskHistory(
+                host_id=host.id,
+                risk_score=threat_score,
+                health_score=health_score,
+                factors=factors,
+                recorded_at=now,
+            )
+        )
+    return score_row
 
 
 async def update_all_threat_scores(db: AsyncSession) -> None:

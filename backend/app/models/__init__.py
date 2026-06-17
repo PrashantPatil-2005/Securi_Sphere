@@ -14,11 +14,19 @@ from app.models.refresh_token import RefreshToken
 from app.models.role import Role
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
-from app.models.user import User
+from app.models.siem import (
+    GeneratedReport,
+    HostRiskHistory,
+    MitreMapping,
+    Offense,
+    OffenseEvent,
+    SavedSearch,
+)
 
 __all__ = [
     "Role", "User", "RefreshToken", "PasswordResetToken", "AuditLog",
     "Host", "EnrollmentToken", "Event", "Metric", "AlertRule", "Alert",
     "NotificationSettings", "MitreTechnique", "CorrelationRule", "CorrelationResult",
     "AttackTimeline", "HostThreatScore", "Incident", "IncidentNote", "IncidentAlert",
+    "Offense", "OffenseEvent", "HostRiskHistory", "MitreMapping", "SavedSearch", "GeneratedReport",
 ]
