@@ -40,6 +40,9 @@ def resolve_time_range(
     to_time: datetime | None = None,
 ) -> TimeRange:
     now = datetime.now(timezone.utc)
+    if preset == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return TimeRange(from_time=start, to_time=now)
     if preset and preset in TIME_PRESETS:
         return TimeRange(from_time=now - TIME_PRESETS[preset], to_time=now)
     ft = from_time

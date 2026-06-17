@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { clearTokens } from "@/lib/api";
+import { AppProviders } from "@/lib/providers";
 import { TimeRangeProvider } from "@/lib/timeRange";
-import { useWebSocket } from "@/lib/websocket";
+import { useWsConnected, useWsMessages } from "@/lib/websocket";
 
 const nav = [
-  { href: "/", label: "Overview" },
+  { href: "/", label: "Executive" },
+  { href: "/analytics", label: "Analytics" },
+  { href: "/offenses", label: "Offenses" },
   { href: "/hosts", label: "Hosts" },
   { href: "/events", label: "Events" },
   { href: "/alerts", label: "Alerts" },
@@ -24,51 +27,81 @@ const nav = [
   { href: "/search", label: "Search" },
 ];
 
-function DashboardShell({ children }: { children: React.ReactNode }) {
+const NavLink = memo(function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link href={href} className={`nav-link ${active ? "nav-link-active" : "nav-link-idle"}`}>
+      {label}
+    </Link>
+  );
+});
+
+function AlertToast() {
+  const [toast, setToast] = useState<string | null>(null);
+  useWsMessages(["new_alert"], (msg) => {
+    const title = String(msg.data.title || "New alert");
+    setToast(title);
+    setTimeout(() => setToast(null), 5000);
+  });
+  if (!toast) return null;
+  return (
+    <div className="fixed bottom-4 right-4 z-50 animate-fade-in px-4 py-3 rounded-md border border-red-900/50 bg-red-950/90 text-red-100 text-sm shadow-lg">
+      Alert: {toast}
+    </div>
+  );
+}
+
+function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [toast, setToast] = useState<string | null>(null);
-  const { connected } = useWebSocket((msg) => {
-    if (msg.type === "new_alert") {
-      setToast(`New alert: ${msg.data.title}`);
-      setTimeout(() => setToast(null), 5000);
-    }
-  });
+  const connected = useWsConnected();
 
   useEffect(() => {
     if (!localStorage.getItem("access_token")) router.push("/login");
   }, [router]);
 
+  const logout = useCallback(() => {
+    clearTokens();
+    router.push("/login");
+  }, [router]);
+
+  return (
+    <aside className="w-56 bg-[var(--card)] border-r border-[var(--border-subtle)] flex flex-col shrink-0">
+      <div className="px-4 py-4 border-b border-[var(--border-subtle)]">
+        <h1 className="text-base font-semibold tracking-tight text-[var(--accent)]">SecuriSphere</h1>
+        <p className="text-[11px] text-[var(--muted)] uppercase tracking-widest mt-0.5">Security Operations</p>
+      </div>
+      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+        {nav.map((item) => (
+          <NavLink key={item.href} href={item.href} label={item.label} active={pathname === item.href} />
+        ))}
+      </nav>
+      <div className="p-3 border-t border-[var(--border-subtle)] text-[11px] text-[var(--muted)]">
+        <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${connected ? "bg-[var(--success)]" : "bg-[var(--danger)]"}`} />
+        {connected ? "Live feed connected" : "Reconnecting…"}
+        <button onClick={logout} className="block mt-2 text-left hover:text-[var(--foreground)] transition-colors">
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+function DashboardShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen">
-      <aside className="w-56 bg-[var(--card)] border-r border-[var(--border)] p-4 flex flex-col shrink-0">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-blue-400">SecuriSphere</h1>
-          <p className="text-xs text-gray-500">Mini SIEM</p>
-        </div>
-        <nav className="flex-1 space-y-0.5 overflow-y-auto">
-          {nav.map((item) => (
-            <Link key={item.href} href={item.href}
-              className={`block px-3 py-1.5 rounded text-sm ${pathname === item.href ? "bg-blue-600/20 text-blue-400" : "text-gray-400 hover:text-white hover:bg-white/5"}`}>
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="text-xs text-gray-500 mb-2 mt-4">
-          WS: {connected ? <span className="text-green-400">Connected</span> : <span className="text-red-400">Disconnected</span>}
-        </div>
-        <button onClick={() => { clearTokens(); router.push("/login"); }} className="text-sm text-gray-400 hover:text-white text-left px-3 py-2">Logout</button>
-      </aside>
-      <main className="flex-1 p-6 overflow-auto">{children}</main>
-      {toast && <div className="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-3 rounded shadow-lg z-50">{toast}</div>}
+      <Sidebar />
+      <main className="flex-1 p-5 overflow-auto animate-fade-in">{children}</main>
+      <AlertToast />
     </div>
   );
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <TimeRangeProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </TimeRangeProvider>
+    <AppProviders>
+      <TimeRangeProvider>
+        <DashboardShell>{children}</DashboardShell>
+      </TimeRangeProvider>
+    </AppProviders>
   );
 }

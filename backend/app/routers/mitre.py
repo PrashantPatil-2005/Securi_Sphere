@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,7 @@ from app.models.event import Event
 from app.models.mitre import MitreTechnique
 from app.models.user import User
 from app.services.mitre import get_matrix_summary
+from app.utils.query import ListParams, resolve_time_range, apply_time_range
 
 router = APIRouter(prefix="/mitre", tags=["mitre"])
 
@@ -27,8 +30,18 @@ async def list_techniques(db: AsyncSession = Depends(get_db), user: User = Depen
 
 
 @router.get("/matrix")
-async def get_matrix(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    events = list((await db.execute(select(Event).limit(5000))).scalars().all())
+async def get_matrix(
+    preset: str | None = ListParams.preset(),
+    from_time: datetime | None = ListParams.from_time(),
+    to_time: datetime | None = ListParams.to_time(),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    tr = resolve_time_range(preset, from_time, to_time)
+    q = select(Event)
+    for clause in apply_time_range(Event.timestamp, tr):
+        q = q.where(clause)
+    events = list((await db.execute(q.limit(10000))).scalars().all())
     techniques = get_matrix_summary(events)
     tactics = {}
     for t in techniques.values():

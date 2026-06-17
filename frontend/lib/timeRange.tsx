@@ -1,13 +1,9 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 export const TIME_PRESETS = [
-  { value: "15m", label: "Last 15 Minutes" },
-  { value: "30m", label: "Last 30 Minutes" },
-  { value: "1h", label: "Last 1 Hour" },
-  { value: "6h", label: "Last 6 Hours" },
-  { value: "12h", label: "Last 12 Hours" },
+  { value: "today", label: "Today" },
   { value: "24h", label: "Last 24 Hours" },
   { value: "7d", label: "Last 7 Days" },
   { value: "30d", label: "Last 30 Days" },
@@ -36,6 +32,10 @@ const TimeRangeContext = createContext<TimeRangeContextValue | null>(null);
 export function TimeRangeProvider({ children }: { children: ReactNode }) {
   const [range, setRange] = useState<TimeRangeState>({ preset: "24h", from: "", to: "" });
 
+  const setPreset = useCallback((preset: TimePreset) => setRange((r) => ({ ...r, preset })), []);
+  const setFrom = useCallback((from: string) => setRange((r) => ({ ...r, from })), []);
+  const setTo = useCallback((to: string) => setRange((r) => ({ ...r, to })), []);
+
   const queryParams = useMemo(() => {
     const p: Record<string, string> = {};
     if (range.preset === "custom") {
@@ -45,15 +45,12 @@ export function TimeRangeProvider({ children }: { children: ReactNode }) {
       p.preset = range.preset;
     }
     return p;
-  }, [range]);
+  }, [range.preset, range.from, range.to]);
 
-  const value: TimeRangeContextValue = {
-    range,
-    setPreset: (preset) => setRange((r) => ({ ...r, preset })),
-    setFrom: (from) => setRange((r) => ({ ...r, from })),
-    setTo: (to) => setRange((r) => ({ ...r, to })),
-    queryParams,
-  };
+  const value = useMemo(
+    () => ({ range, setPreset, setFrom, setTo, queryParams }),
+    [range, setPreset, setFrom, setTo, queryParams],
+  );
 
   return <TimeRangeContext.Provider value={value}>{children}</TimeRangeContext.Provider>;
 }

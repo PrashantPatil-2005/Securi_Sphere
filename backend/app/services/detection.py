@@ -71,8 +71,20 @@ async def create_alert(
     )
     db.add(alert)
     await db.flush()
+    from app.services.offense_engine import process_new_alert
+    await process_new_alert(db, alert)
     await notify_alert(db, alert)
-    await ws_manager.broadcast({"type": "new_alert", "data": {"id": str(alert.id), "title": title, "severity": severity, "confidence": confidence}})
+    await ws_manager.broadcast({
+        "type": "new_alert",
+        "data": {
+            "id": str(alert.id),
+            "title": title,
+            "severity": severity,
+            "confidence": confidence,
+            "host_id": str(host_id),
+            "timestamp": alert.created_at.isoformat(),
+        },
+    })
     return alert
 
 

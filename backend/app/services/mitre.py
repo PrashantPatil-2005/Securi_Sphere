@@ -23,11 +23,24 @@ async def seed_mitre(db) -> None:
     from sqlalchemy import func, select
 
     from app.models.mitre import MitreTechnique
+    from app.models.siem import MitreMapping
 
     if (await db.execute(select(func.count()).select_from(MitreTechnique))).scalar_one() > 0:
-        return
-    for m in MITRE_SEED:
-        db.add(MitreTechnique(**m, description=m["name"]))
+        pass
+    else:
+        for m in MITRE_SEED:
+            db.add(MitreTechnique(**m, description=m["name"]))
+
+    if (await db.execute(select(func.count()).select_from(MitreMapping))).scalar_one() == 0:
+        for event_type, mapping in EVENT_MITRE_MAP.items():
+            db.add(
+                MitreMapping(
+                    event_type=event_type,
+                    technique_id=mapping["technique_id"],
+                    tactic=mapping["tactic"],
+                    technique_name=mapping["name"],
+                )
+            )
 
 
 def enrich_event(event) -> None:
