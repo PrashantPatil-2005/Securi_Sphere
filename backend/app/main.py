@@ -12,10 +12,14 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.database import Base, async_session, engine
-from app.routers import agent, alerts, auth, events, hosts, metrics, search
+from app.routers import agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents, metrics, mitre, network, reports, search, simulation, threat_scores, timeline
 from app.security import decode_token as jwt_decode
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.services.detection import seed_alert_rules, update_host_statuses
+from app.services.migrate import migrate_schema
+from app.services.mitre import seed_mitre
+from app.services.correlation_engine import seed_correlation_rules
+from app.services.threat_score import update_all_threat_scores
 from app.services.retention import run_retention
 from app.websocket.manager import ws_manager
 
@@ -26,18 +30,20 @@ scheduler = AsyncIOScheduler()
 
 
 async def init_db() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await migrate_schema()
     async with async_session() as db:
         from app.routers.auth import seed_roles
         await seed_roles(db)
         await seed_alert_rules(db)
+        await seed_mitre(db)
+        await seed_correlation_rules(db)
         await db.commit()
 
 
 async def status_job() -> None:
     async with async_session() as db:
         await update_host_statuses(db)
+        await update_all_threat_scores(db)
         await db.commit()
 
 
@@ -70,6 +76,16 @@ app.include_router(events.router, prefix=prefix)
 app.include_router(metrics.router, prefix=prefix)
 app.include_router(alerts.router, prefix=prefix)
 app.include_router(search.router, prefix=prefix)
+app.include_router(analytics.router, prefix=prefix)
+app.include_router(audit.router, prefix=prefix)
+app.include_router(mitre.router, prefix=prefix)
+app.include_router(alert_rules.router, prefix=prefix)
+app.include_router(timeline.router, prefix=prefix)
+app.include_router(incidents.router, prefix=prefix)
+app.include_router(simulation.router, prefix=prefix)
+app.include_router(reports.router, prefix=prefix)
+app.include_router(network.router, prefix=prefix)
+app.include_router(threat_scores.router, prefix=prefix)
 
 
 @app.get("/api/v1/overview")

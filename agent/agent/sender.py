@@ -30,8 +30,8 @@ class Sender:
                 enqueue(buffer_kind, data)
             return False
 
-    def heartbeat(self) -> bool:
-        return self._post("/api/v1/agent/heartbeat", {})
+    def heartbeat(self, payload: dict | None = None) -> bool:
+        return self._post("/api/v1/agent/heartbeat", payload or {})
 
     def send_events(self, events: list[dict]) -> bool:
         if not events:

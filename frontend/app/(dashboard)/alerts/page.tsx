@@ -1,72 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { buildQuery } from "@/lib/buildQuery";
+import { useTimeRange } from "@/lib/timeRange";
+import ExportMenu from "@/components/ExportMenu";
+import PaginationBar from "@/components/PaginationBar";
+import SortSelect from "@/components/SortSelect";
+import TimeRangeBar from "@/components/TimeRangeBar";
 import { useWebSocket } from "@/lib/websocket";
 
-interface Alert {
-  id: string;
-  host_id: string;
-  severity: string;
-  title: string;
-  description: string | null;
-  status: string;
-  created_at: string;
-  resolved_at: string | null;
-}
+interface Alert { id: string; title: string; severity: string; status: string; description: string | null; created_at: string; confidence?: number; }
+interface Host { id: string; name: string; }
+
+const STATUSES = ["open", "investigating", "resolved", "closed"];
 
 export default function AlertsPage() {
-  const [tab, setTab] = useState<"open" | "resolved" | "all">("open");
+  const { queryParams } = useTimeRange();
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [sort, setSort] = useState("newest");
+  const [hosts, setHosts] = useState<Host[]>([]);
+  const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "" });
 
-  const load = () => {
-    const params = new URLSearchParams();
-    if (tab === "open") params.set("status", "open");
-    if (tab === "resolved") params.set("status", "resolved");
-    api<{ items: Alert[] }>(`/api/v1/alerts?${params}`).then((r) => setAlerts(r.items)).catch(console.error);
-  };
+  const load = useCallback(() => {
+    const q = buildQuery({ page, page_size: pageSize, sort, ...filters }, queryParams);
+    api<{ items: Alert[]; total: number }>(`/api/v1/alerts${q}`).then((r) => { setAlerts(r.items); setTotal(r.total); }).catch(console.error);
+  }, [page, pageSize, sort, filters, queryParams]);
 
-  useEffect(() => { load(); }, [tab]);
-  useWebSocket((msg) => {
-    if (msg.type === "new_alert" || msg.type === "alert_resolved") load();
-  });
+  useEffect(() => { api<{ items: Host[] }>("/api/v1/hosts?page_size=500").then((r) => setHosts(r.items)).catch(console.error); }, []);
+  useEffect(() => { load(); }, [load]);
+  useWebSocket((msg) => { if (msg.type === "new_alert" || msg.type === "alert_resolved") load(); });
 
-  async function resolve(id: string) {
-    await api(`/api/v1/alerts/${id}/resolve`, { method: "PATCH" });
+  async function setStatus(id: string, status: string) {
+    await api(`/api/v1/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
     load();
   }
 
+  const inputCls = "px-3 py-1.5 bg-black/30 border border-[var(--border)] rounded text-sm";
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Alerts</h1>
-      <div className="flex gap-2 mb-4">
-        {(["open", "resolved", "all"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 rounded text-sm capitalize ${tab === t ? "bg-blue-600" : "bg-[var(--card)] border border-[var(--border)]"}`}>
-            {t === "all" ? "History" : t}
-          </button>
-        ))}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Alerts</h1>
+        <ExportMenu resource="alerts" query={buildQuery({ sort, ...filters }, queryParams)} />
+      </div>
+      <TimeRangeBar />
+      <div className="flex flex-wrap gap-2 mb-4">
+        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} className={inputCls}>
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className={inputCls}>
+          <option value="">All severities</option>
+          {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className={inputCls}>
+          <option value="">All hosts</option>
+          {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
+        <input placeholder="Rule name" value={filters.rule_name} onChange={(e) => setFilters({ ...filters, rule_name: e.target.value })} className={inputCls} />
+        <input placeholder="Search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className={inputCls} />
+        <SortSelect value={sort} onChange={setSort} />
       </div>
       <div className="space-y-3">
         {alerts.map((a) => (
           <div key={a.id} className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-lg">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-4">
               <div>
                 <span className={`text-xs uppercase font-bold mr-2 severity-${a.severity}`}>{a.severity}</span>
                 <span className="font-medium">{a.title}</span>
+                <span className="text-xs text-gray-500 ml-2 capitalize">{a.status}</span>
+                {a.confidence != null && <span className="text-xs text-gray-500 ml-2">{a.confidence.toFixed(0)}% conf</span>}
                 <p className="text-sm text-gray-400 mt-1">{a.description}</p>
-                <p className="text-xs text-gray-500 mt-2">{new Date(a.created_at).toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">{new Date(a.created_at).toLocaleString()}</p>
               </div>
               {a.status === "open" && (
-                <button onClick={() => resolve(a.id)} className="text-sm px-3 py-1 bg-green-600/20 text-green-400 rounded hover:bg-green-600/30">
-                  Resolve
-                </button>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => setStatus(a.id, "investigating")} className="text-xs px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded">Investigate</button>
+                  <button onClick={() => setStatus(a.id, "resolved")} className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">Resolve</button>
+                </div>
               )}
             </div>
           </div>
         ))}
       </div>
-      {alerts.length === 0 && <p className="text-gray-500 mt-4">No alerts found.</p>}
+      <PaginationBar page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
     </div>
   );
 }

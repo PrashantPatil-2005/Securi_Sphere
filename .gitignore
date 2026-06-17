@@ -4,6 +4,7 @@ venv/
 .env
 backend/.env
 backend/venv
+scripts/
 frontend/.env.local
 *.db
 node_modules/

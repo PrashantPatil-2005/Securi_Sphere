@@ -10,7 +10,9 @@ from app.models.alert_rule import AlertRule
 from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
-from app.services.correlation import check_suspicious_login
+from app.services.correlation_engine import run_correlation_engine
+from app.services.timeline import build_timelines
+from app.services.threat_score import update_all_threat_scores
 from app.services.notifications import notify_alert
 from app.websocket.manager import ws_manager
 
@@ -42,6 +44,9 @@ async def create_alert(
     description: str,
     severity: str,
     rule_id=None,
+    confidence: float | None = None,
+    mitre_technique_id: str | None = None,
+    mitre_tactic: str | None = None,
 ) -> Alert | None:
     existing = await db.execute(
         select(Alert).where(
@@ -60,11 +65,14 @@ async def create_alert(
         title=title,
         description=description,
         status="open",
+        confidence=confidence,
+        mitre_technique_id=mitre_technique_id,
+        mitre_tactic=mitre_tactic,
     )
     db.add(alert)
     await db.flush()
     await notify_alert(db, alert)
-    await ws_manager.broadcast({"type": "new_alert", "data": {"id": str(alert.id), "title": title, "severity": severity}})
+    await ws_manager.broadcast({"type": "new_alert", "data": {"id": str(alert.id), "title": title, "severity": severity, "confidence": confidence}})
     return alert
 
 
@@ -109,7 +117,9 @@ async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
                 rule.severity, rule.id,
             )
 
-    await check_suspicious_login(db, host, create_alert)
+    await run_correlation_engine(db, host.id)
+    await build_timelines(db, host.id)
+    await update_all_threat_scores(db)
 
     metrics_result = await db.execute(
         select(Metric).where(Metric.host_id == host.id).order_by(Metric.recorded_at.desc()).limit(3)

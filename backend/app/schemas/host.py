@@ -17,8 +17,17 @@ class HostResponse(BaseModel):
     status: str
     last_seen: datetime | None
     created_at: datetime
+    risk_score: int | None = None
+    alert_count: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+class HostListResponse(BaseModel):
+    items: list[HostResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 class EnrollmentTokenResponse(BaseModel):

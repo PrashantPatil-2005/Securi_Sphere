@@ -20,3 +20,20 @@ PostgreSQL with UUID primary keys. Tables created automatically on backend start
 ## Retention
 
 Events and metrics older than 90 days are deleted daily at 2 AM.
+
+
+## Advanced tables (v1.1)
+
+- mitre_techniques - seeded ATT&CK technique catalog
+- correlation_rules - multi-event sequence rules (seeded)
+- correlation_results - matched correlation events with confidence
+- attack_timelines - reconstructed attack chains per host
+- host_threat_scores - threat and health scores per host
+- incidents, incident_alerts, incident_notes - incident workflow
+
+## Extended columns
+
+- hosts: agent_hash, agent_version, agent_hash_changed_at, health_status
+- events: mitre_technique_id, mitre_tactic
+- alerts: mitre_technique_id, mitre_tactic, confidence
+- enrollment_tokens: revoked_at, revoked_by, label

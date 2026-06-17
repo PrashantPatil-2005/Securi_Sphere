@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { api } from "@/lib/api";
+import { buildQuery } from "@/lib/buildQuery";
+import { useTimeRange } from "@/lib/timeRange";
+import TimeRangeBar from "@/components/TimeRangeBar";
 
 interface Host { id: string; name: string; }
 interface Metric {
@@ -10,30 +13,28 @@ interface Metric {
   cpu_percent: number | null;
   memory_percent: number | null;
   disk_percent: number | null;
-  network_in: number | null;
-  network_out: number | null;
 }
 
 export default function MetricsPage() {
+  const { queryParams } = useTimeRange();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [hostId, setHostId] = useState("");
   const [metrics, setMetrics] = useState<Metric[]>([]);
 
   useEffect(() => {
-    api<Host[]>("/api/v1/hosts").then((h) => {
-      setHosts(h);
-      if (h.length) setHostId(h[0].id);
-    });
+    api<{ items: Host[] }>("/api/v1/hosts?page_size=500").then((r) => {
+      setHosts(r.items);
+      if (r.items[0]) setHostId(r.items[0].id);
+    }).catch(console.error);
   }, []);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!hostId) return;
-    api<Metric[]>(`/api/v1/metrics?host_id=${hostId}&limit=100`).then(setMetrics).catch(console.error);
-    const interval = setInterval(() => {
-      api<Metric[]>(`/api/v1/metrics?host_id=${hostId}&limit=100`).then(setMetrics).catch(console.error);
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [hostId]);
+    const q = buildQuery({ host_id: hostId, limit: 500 }, queryParams);
+    api<Metric[]>(`/api/v1/metrics${q}`).then(setMetrics).catch(console.error);
+  }, [hostId, queryParams]);
+
+  useEffect(() => { load(); const i = setInterval(load, 30000); return () => clearInterval(i); }, [load]);
 
   const chartData = metrics.map((m) => ({
     time: new Date(m.recorded_at).toLocaleTimeString(),
@@ -45,8 +46,9 @@ export default function MetricsPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Metrics</h1>
+      <TimeRangeBar />
       <select value={hostId} onChange={(e) => setHostId(e.target.value)}
-        className="mb-6 px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded">
+        className="mb-6 px-3 py-2 bg-black/30 border border-[var(--border)] rounded">
         {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
       </select>
       {chartData.length > 0 ? (
@@ -54,7 +56,7 @@ export default function MetricsPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <XAxis dataKey="time" stroke="#666" fontSize={11} />
-              <YAxis stroke="#666" fontSize={11} domain={[0, 100]} />
+              <YAxis stroke="#666" domain={[0, 100]} fontSize={11} />
               <Tooltip contentStyle={{ background: "#1a2332", border: "1px solid #2f3b4f" }} />
               <Legend />
               <Line type="monotone" dataKey="cpu" stroke="#3b82f6" dot={false} name="CPU %" />
@@ -64,7 +66,7 @@ export default function MetricsPage() {
           </ResponsiveContainer>
         </div>
       ) : (
-        <p className="text-gray-500">No metrics data for selected host.</p>
+        <p className="text-gray-500">No metrics data for selected host and time range.</p>
       )}
     </div>
   );
