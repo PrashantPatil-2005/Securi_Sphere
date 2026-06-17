@@ -1,0 +1,15 @@
+[Unit]
+Description=Securi Security Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/securi-agent/venv/bin/python3 -m agent.main
+WorkingDirectory=/opt/securi-agent
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target
