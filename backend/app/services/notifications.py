@@ -47,14 +47,30 @@ async def send_telegram(chat_id: str, message: str) -> None:
         logger.error("Failed to send Telegram: %s", e)
 
 
+async def send_slack(webhook_url: str, message: str) -> None:
+    if not webhook_url:
+        return
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(webhook_url, json={"text": message}, timeout=10.0)
+    except Exception as e:
+        logger.error("Failed to send Slack notification: %s", e)
+
+
 async def notify_alert(db: AsyncSession, alert: Alert) -> None:
-    message = f"<b>[{alert.severity.upper()}]</b> {alert.title}\n{alert.description or ''}"
+    message = f"[{alert.severity.upper()}] {alert.title}\n{alert.description or ''}"
+    html_message = f"<b>[{alert.severity.upper()}]</b> {alert.title}\n{alert.description or ''}"
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.email_enabled.is_(True)))
     for settings_row in result.scalars().all():
         if settings_row.email_address:
-            await send_email(settings_row.email_address, f"Securi Alert: {alert.title}", message)
+            await send_email(settings_row.email_address, f"Securi Alert: {alert.title}", html_message)
 
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.telegram_enabled.is_(True)))
     for settings_row in result.scalars().all():
         if settings_row.telegram_chat_id:
-            await send_telegram(settings_row.telegram_chat_id, message)
+            await send_telegram(settings_row.telegram_chat_id, html_message)
+
+    result = await db.execute(select(NotificationSettings).where(NotificationSettings.slack_enabled.is_(True)))
+    for settings_row in result.scalars().all():
+        if settings_row.slack_webhook_url:
+            await send_slack(settings_row.slack_webhook_url, message)

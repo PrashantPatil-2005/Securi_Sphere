@@ -55,6 +55,15 @@ def create_refresh_token(subject: str) -> str:
     )
 
 
+def create_ws_ticket(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(seconds=60)
+    return jwt.encode(
+        {"sub": subject, "type": "ws", "exp": expire},
+        settings.jwt_secret,
+        algorithm=ALGORITHM,
+    )
+
+
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
 

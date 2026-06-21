@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_roles
 from app.models.host import Host
 from app.models.siem import Offense, OffenseEvent
 from app.models.user import User
@@ -137,7 +137,7 @@ async def update_offense_status(
     offense_id: UUID,
     body: OffenseStatusUpdate,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("admin", "analyst")),
 ):
     from datetime import timezone
     from fastapi import HTTPException

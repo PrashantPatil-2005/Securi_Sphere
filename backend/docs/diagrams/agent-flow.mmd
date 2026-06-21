@@ -1,0 +1,25 @@
+flowchart TD
+    START[Agent Installed] --> ENROLL[Admin creates host + enrollment token]
+    ENROLL --> REG[POST /agent/register with enroll_token]
+    REG --> VALID{Token valid?}
+    VALID -->|No| REJECT[400 Invalid/Expired]
+    VALID -->|Yes| KEY[Generate sk_live_* API key]
+    KEY --> STORE[Store api_key_hash + mark token used]
+    STORE --> RETURN[Return API key to agent]
+
+    RETURN --> LOOP[Agent Loop]
+    LOOP --> HB[POST /heartbeat every 30s]
+    LOOP --> EVT[POST /events batch]
+    LOOP --> MET[POST /metrics batch]
+
+    HB --> INTEGRITY{Hash changed?}
+    INTEGRITY -->|Yes| ALERT[Tamper Alert]
+    INTEGRITY -->|No| ONLINE[Update last_seen]
+
+    EVT --> SIGN{Signing enabled?}
+    SIGN -->|Yes| VERIFY[HMAC + nonce check]
+    SIGN -->|No| INGEST[Pipeline ingest]
+    VERIFY --> INGEST
+
+    LOOP --> ROTATE[POST /rotate-key optional]
+    ROTATE --> NEWKEY[New key, old revoked]

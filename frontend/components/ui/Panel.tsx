@@ -1,4 +1,5 @@
-import { type ReactNode } from "react";
+import { memo, type ReactNode } from "react";
+import Link from "next/link";
 
 interface PanelProps {
   title?: string;
@@ -9,7 +10,7 @@ interface PanelProps {
   noPadding?: boolean;
 }
 
-export function Panel({ title, subtitle, action, children, className = "", noPadding }: PanelProps) {
+export const Panel = memo(function Panel({ title, subtitle, action, children, className = "", noPadding }: PanelProps) {
   return (
     <section className={`panel ${className}`}>
       {(title || action) && (
@@ -24,9 +25,9 @@ export function Panel({ title, subtitle, action, children, className = "", noPad
       <div className={noPadding ? "" : "panel-body"}>{children}</div>
     </section>
   );
-}
+});
 
-export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export const PageHeader = memo(function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
     <header className="page-header">
       <div>
@@ -36,22 +37,52 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
       {action}
     </header>
   );
-}
+});
 
-export function StatCard({ label, value, tone = "default" }: { label: string; value: ReactNode; tone?: "default" | "success" | "warning" | "danger" | "info" }) {
-  return (
+export const StatCard = memo(function StatCard({
+  label,
+  value,
+  tone = "default",
+  href,
+}: {
+  label: string;
+  value: ReactNode;
+  tone?: "default" | "success" | "warning" | "danger" | "info";
+  href?: string;
+}) {
+  const card = (
     <div className={`stat-card stat-${tone}`}>
       <span className="stat-label">{label}</span>
       <span className="stat-value">{value ?? "—"}</span>
     </div>
   );
-}
+  if (href) return <Link href={href} className="block">{card}</Link>;
+  return card;
+});
 
-export function EmptyState({ title, description }: { title: string; description?: string }) {
+export function EmptyState({
+  title,
+  description,
+  action,
+  actionLabel,
+  icon,
+}: {
+  title: string;
+  description?: string;
+  action?: string;
+  actionLabel?: string;
+  icon?: ReactNode;
+}) {
   return (
     <div className="empty-state">
+      {icon && <div className="mb-4 flex justify-center text-muted">{icon}</div>}
       <p className="empty-title">{title}</p>
       {description && <p className="empty-desc">{description}</p>}
+      {action && actionLabel && (
+        <Link href={action} className="btn-primary inline-flex mt-4">
+          {actionLabel}
+        </Link>
+      )}
     </div>
   );
 }

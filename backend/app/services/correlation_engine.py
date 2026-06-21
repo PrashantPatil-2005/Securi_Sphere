@@ -5,33 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.correlation import CorrelationResult, CorrelationRule
 from app.models.event import Event
+from app.services.correlation.framework import MATCHERS, CoOccurrenceMatcher, SequenceMatcher
+from app.services.correlation.rules import CO_OCCURRENCE_RULES, DEFAULT_CORRELATION_RULES
 
-ATTACK_EVENTS = {
-    "ssh_login_failure", "ssh_login_success", "root_login", "sudo_usage", "service_failure",
-}
 
-DEFAULT_CORRELATION_RULES = [
-    {
-        "name": "Brute Force to Privilege Escalation",
-        "description": "Failed logins followed by success and sudo usage",
-        "event_sequence": ["ssh_login_failure", "ssh_login_success", "sudo_usage"],
-        "window_minutes": 20,
-        "min_occurrences": {"ssh_login_failure": 3},
-        "severity": "critical",
-        "confidence_base": 0.75,
-        "is_system": True,
-    },
-    {
-        "name": "Suspicious Login After Failures",
-        "description": "Successful login after multiple failed attempts",
-        "event_sequence": ["ssh_login_failure", "ssh_login_success"],
-        "window_minutes": 15,
-        "min_occurrences": {"ssh_login_failure": 3},
-        "severity": "high",
-        "confidence_base": 0.65,
-        "is_system": True,
-    },
-]
+def _matcher_for_rule(rule: CorrelationRule):
+    if rule.description and rule.description.startswith("[co_occurrence]"):
+        return MATCHERS["co_occurrence"]
+    if len(rule.event_sequence or []) >= 2 and not rule.min_occurrences:
+        types = rule.event_sequence or []
+        if types != sorted(types, key=lambda t: t):
+            pass
+    return MATCHERS["sequence"]
 
 
 async def seed_correlation_rules(db: AsyncSession) -> None:
@@ -39,47 +24,8 @@ async def seed_correlation_rules(db: AsyncSession) -> None:
 
     if (await db.execute(select(func.count()).select_from(CorrelationRule))).scalar_one() > 0:
         return
-    for rule in DEFAULT_CORRELATION_RULES:
+    for rule in DEFAULT_CORRELATION_RULES + CO_OCCURRENCE_RULES:
         db.add(CorrelationRule(**rule))
-
-
-def _score_match(events: list[Event], rule: CorrelationRule) -> float:
-    base = (rule.confidence_base or 0.5) * 100
-    types = [e.event_type for e in events]
-    if "sudo_usage" in types and "ssh_login_success" in types:
-        base += 15
-    if types.count("ssh_login_failure") >= 5:
-        base += 10
-    if len(events) >= 2:
-        span = (events[-1].timestamp - events[0].timestamp).total_seconds()
-        if span < 600:
-            base += 10
-    return min(base, 100)
-
-
-def _sequence_matches(events: list[Event], rule: CorrelationRule) -> list[Event] | None:
-    window = timedelta(minutes=rule.window_minutes or 20)
-    now = datetime.now(timezone.utc)
-    recent = [e for e in events if e.timestamp >= now - window]
-    recent.sort(key=lambda x: x.timestamp)
-
-    for etype, min_count in (rule.min_occurrences or {}).items():
-        if sum(1 for e in recent if e.event_type == etype) < min_count:
-            return None
-
-    seq = rule.event_sequence or []
-    if not seq:
-        return recent if recent else None
-
-    found_idx = 0
-    matched: list[Event] = []
-    for event in recent:
-        if event.event_type == seq[found_idx]:
-            matched.append(event)
-            found_idx += 1
-            if found_idx >= len(seq):
-                return matched
-    return None
 
 
 async def run_correlation_engine(db: AsyncSession, host_id) -> list[CorrelationResult]:
@@ -96,10 +42,11 @@ async def run_correlation_engine(db: AsyncSession, host_id) -> list[CorrelationR
     ).scalars().all()
 
     for rule in rules:
-        matched = _sequence_matches(list(events), rule)
+        matcher = _matcher_for_rule(rule)
+        matched = matcher.matches(list(events), rule)
         if not matched:
             continue
-        confidence = _score_match(matched, rule)
+        confidence = matcher.score(matched, rule)
         existing = (
             await db.execute(
                 select(CorrelationResult).where(

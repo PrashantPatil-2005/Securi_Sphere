@@ -16,6 +16,7 @@ class RoleResponse(BaseModel):
 class UserResponse(BaseModel):
     id: UUID
     email: str
+    full_name: str | None = None
     role: RoleResponse
     is_active: bool
     created_at: datetime
@@ -51,3 +52,11 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(min_length=8)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    full_name: str | None = Field(default=None, max_length=255)

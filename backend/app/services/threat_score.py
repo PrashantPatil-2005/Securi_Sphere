@@ -67,12 +67,23 @@ async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore
         )
     ).scalar_one()
 
+    from app.models.siem import Offense
+    open_offenses = (
+        await db.execute(
+            select(func.count()).select_from(Offense).where(
+                Offense.host_id == host.id,
+                Offense.status.in_(["open", "investigating"]),
+            )
+        )
+    ).scalar_one()
+
     factors = {
         "failed_logins": min(fail_count * 3, 25),
         "service_failures": min(service_failures * 5, 15),
         "critical_alerts": min(critical_alerts * 15, 30),
         "high_alerts": min(high_alerts * 8, 15),
         "correlated_security_events": min(correlated * 4, 15),
+        "open_offenses": min(open_offenses * 10, 20),
         "agent_offline": 10 if host.status in ("offline", "critical") and not host.last_seen else 0,
         "high_cpu": 0,
         "high_memory": 0,

@@ -1,4 +1,5 @@
-"""QRadar-style offense grouping — correlates related alerts and events on a host."""
+"""QRadar-style offense grouping with related entities and timeline."""
+
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -21,6 +22,10 @@ RISK_FROM_SEVERITY = {
 
 RISK_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 
+AUTH_EVENT_TYPES = frozenset({
+    "ssh_login_failure", "ssh_login_success", "sudo_usage", "root_login",
+})
+
 
 async def _next_offense_number(db: AsyncSession) -> int:
     current = (await db.execute(select(func.max(Offense.offense_number)))).scalar_one()
@@ -29,6 +34,22 @@ async def _next_offense_number(db: AsyncSession) -> int:
 
 def _max_risk(a: str, b: str) -> str:
     return a if RISK_RANK.get(a, 0) >= RISK_RANK.get(b, 0) else b
+
+
+def _append_timeline_entry(offense: Offense, entry: dict) -> None:
+    timeline = list(offense.timeline or [])
+    timeline.append(entry)
+    timeline.sort(key=lambda x: x.get("timestamp", ""))
+    offense.timeline = timeline[-500:]
+
+
+def _track_user(offense: Offense, username: str | None) -> None:
+    if not username:
+        return
+    users = list(offense.related_users or [])
+    if username not in users:
+        users.append(username)
+        offense.related_users = users
 
 
 async def find_or_create_offense(
@@ -60,10 +81,14 @@ async def find_or_create_offense(
         offense_number=await _next_offense_number(db),
         host_id=host_id,
         title=title,
-        description=f"Correlated security activity on host",
+        description="Correlated security activity on host",
         risk_level=risk_level,
         status="open",
         event_count=0,
+        alert_count=0,
+        related_hosts=[str(host_id)],
+        related_users=[],
+        timeline=[],
     )
     db.add(offense)
     await db.flush()
@@ -87,20 +112,37 @@ async def link_alert_to_offense(db: AsyncSession, alert: Alert) -> Offense:
     ).scalar_one_or_none()
     if not dup:
         db.add(OffenseEvent(offense_id=offense.id, alert_id=alert.id))
+        offense.alert_count += 1
         offense.event_count += 1
         offense.updated_at = datetime.now(timezone.utc)
+        _append_timeline_entry(offense, {
+            "type": "alert",
+            "id": str(alert.id),
+            "title": alert.title,
+            "severity": alert.severity,
+            "timestamp": alert.created_at.isoformat() if alert.created_at else datetime.now(timezone.utc).isoformat(),
+        })
+
+    hosts = list(offense.related_hosts or [])
+    host_str = str(alert.host_id)
+    if host_str not in hosts:
+        hosts.append(host_str)
+        offense.related_hosts = hosts
+
     return offense
 
 
 async def link_event_to_offense(db: AsyncSession, event: Event) -> Offense | None:
-    if event.event_type not in ("ssh_login_failure", "ssh_login_success", "sudo_usage", "root_login"):
+    if event.event_type not in AUTH_EVENT_TYPES and event.event_type not in (
+        "service_failure", "service_stop", "agent_disconnect",
+    ):
         return None
 
-    risk = "high" if event.event_type in ("ssh_login_failure", "root_login") else "medium"
+    risk = "high" if event.event_type in ("ssh_login_failure", "root_login", "service_stop") else "medium"
     offense = await find_or_create_offense(
         db,
         event.host_id,
-        title=f"Authentication activity: {event.event_type}",
+        title=f"Security activity: {event.event_type}",
         risk_level=risk,
     )
 
@@ -115,8 +157,38 @@ async def link_event_to_offense(db: AsyncSession, event: Event) -> Offense | Non
         db.add(OffenseEvent(offense_id=offense.id, event_id=event.id))
         offense.event_count += 1
         offense.updated_at = datetime.now(timezone.utc)
+        _append_timeline_entry(offense, {
+            "type": "event",
+            "id": str(event.id),
+            "event_type": event.event_type,
+            "severity": event.severity,
+            "username": event.username,
+            "source_ip": str(event.source_ip) if event.source_ip else None,
+            "timestamp": event.timestamp.isoformat(),
+        })
+        _track_user(offense, event.username)
+
     return offense
 
 
 async def process_new_alert(db: AsyncSession, alert: Alert) -> Offense:
     return await link_alert_to_offense(db, alert)
+
+
+async def get_offense_summary(db: AsyncSession, offense_id: UUID) -> dict | None:
+    offense = await db.get(Offense, offense_id)
+    if not offense:
+        return None
+    links = (
+        await db.execute(select(OffenseEvent).where(OffenseEvent.offense_id == offense.id))
+    ).scalars().all()
+    alert_ids = [l.alert_id for l in links if l.alert_id]
+    event_ids = [l.event_id for l in links if l.event_id]
+    return {
+        "offense": offense,
+        "alert_ids": alert_ids,
+        "event_ids": event_ids,
+        "related_hosts": offense.related_hosts,
+        "related_users": offense.related_users,
+        "timeline": offense.timeline,
+    }

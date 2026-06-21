@@ -1,182 +1,197 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { buildQuery } from "@/lib/buildQuery";
+import { memo, useMemo } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import { Server, Activity, Shield } from "lucide-react";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
-import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
-import LiveSecurityFeed from "@/components/LiveSecurityFeed";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
-import { PageHeader, Panel, StatCard } from "@/components/ui/Panel";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
+import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-function ExecutiveKpis() {
+const LiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), {
+  loading: () => <ChartSkeleton height={280} />,
+  ssr: false,
+});
+
+const ExecutiveKpis = memo(function ExecutiveKpis() {
   const { data, isLoading } = useSiemQuery<{
     total_hosts: number;
     online_hosts: number;
     active_alerts: number;
     critical_alerts: number;
-    total_events: number;
     average_risk_score: number;
-    most_attacked_host: string | null;
-    most_attacked_count: number;
   }>("executive");
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        {Array.from({ length: 7 }).map((_, i) => <CardSkeleton key={i} />)}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
       </div>
     );
   }
 
+  const healthPct = data?.total_hosts ? Math.round((data.online_hosts / data.total_hosts) * 100) : 0;
+
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-      <StatCard label="Total hosts" value={data?.total_hosts} tone="info" />
-      <StatCard label="Online" value={data?.online_hosts} tone="success" />
-      <StatCard label="Active alerts" value={data?.active_alerts} tone="warning" />
-      <StatCard label="Critical" value={data?.critical_alerts} tone="danger" />
-      <StatCard label="Period events" value={data?.total_events} />
-      <StatCard label="Avg risk" value={data?.average_risk_score} tone="warning" />
-      <StatCard label="Top target" value={data?.most_attacked_host || "—"} tone="danger" />
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <StatCard label="Total hosts" value={data?.total_hosts} tone="info" href="/hosts" />
+      <StatCard label="Host health" value={`${healthPct}%`} tone={healthPct >= 80 ? "success" : healthPct >= 50 ? "warning" : "danger"} href="/hosts" />
+      <StatCard label="Active alerts" value={data?.active_alerts} tone="warning" href="/alerts" />
+      <StatCard label="Critical alerts" value={data?.critical_alerts} tone="danger" href="/alerts" />
+      <StatCard label="Threat score" value={data?.average_risk_score} tone="warning" href="/analytics" />
+      <StatCard label="Online hosts" value={`${data?.online_hosts ?? 0}/${data?.total_hosts ?? 0}`} tone="success" href="/hosts" />
     </div>
   );
-}
+});
 
-function SecurityTrendWidget() {
+const SecurityTimeline = memo(function SecurityTimeline() {
   const { data, isLoading } = useSiemQuery<{ security_trend: { period: string; count: number }[] }>("executive");
   const trendData = useMemo(
-    () => (data?.security_trend ?? []).slice(-60).map((p) => ({ period: String(p.period).slice(5, 16), count: p.count })),
+    () => (data?.security_trend ?? []).slice(-48).map((p) => ({
+      period: String(p.period).slice(5, 16),
+      count: p.count,
+    })),
     [data],
   );
 
+  if (isLoading) return <ChartSkeleton height={240} />;
+
+  if (!trendData.length) {
+    return (
+      <EmptyState
+        title="No security events"
+        description="Events will appear here as your agents begin reporting."
+        action="/hosts"
+        actionLabel="Add hosts"
+        icon={<Activity className="w-10 h-10 opacity-40" />}
+      />
+    );
+  }
+
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart data={trendData}>
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={CHART_THEME.colors.primary} stopOpacity={0.3} />
+            <stop offset="100%" stopColor={CHART_THEME.colors.primary} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <XAxis dataKey="period" {...axisProps} />
+        <YAxis {...axisProps} width={36} />
+        <Tooltip {...CHART_THEME.tooltip} />
+        <Area type="monotone" dataKey="count" stroke={CHART_THEME.colors.primary} fill="url(#trendGrad)" strokeWidth={2} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+});
+
+const RiskyHostsWidget = memo(function RiskyHostsWidget() {
+  const { data = [], isLoading } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number }[]>("top-risky-hosts", {});
+
   if (isLoading) return <ChartSkeleton height={200} />;
-  if (!trendData.length) return null;
+
+  if (!data.length) {
+    return (
+      <EmptyState
+        title="No hosts monitored"
+        description="Deploy agents to start tracking host risk scores."
+        action="/hosts"
+        actionLabel="Manage hosts"
+        icon={<Server className="w-10 h-10 opacity-40" />}
+      />
+    );
+  }
 
   return (
-    <Panel title="Security trend">
-      <ResponsiveContainer width="100%" height={200}>
-        <LineChart data={trendData}>
-          <XAxis dataKey="period" tick={{ fontSize: 10, fill: "#7b8ba3" }} stroke="#243044" />
-          <YAxis stroke="#7b8ba3" width={32} />
-          <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
-          <Line type="monotone" dataKey="count" stroke="#ff6b6b" dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </Panel>
+    <div className="space-y-3">
+      {data.slice(0, 6).map((h) => (
+        <Link key={h.host_id} href="/hosts" className="flex items-center gap-3 group">
+          <span className="w-28 truncate text-body group-hover:text-accent transition-colors">{h.host_name}</span>
+          <div className="flex-1 h-2 bg-[var(--input-bg)] rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${h.risk_score}%`,
+                backgroundColor: h.risk_score > 70 ? CHART_THEME.colors.danger : h.risk_score > 40 ? CHART_THEME.colors.warning : CHART_THEME.colors.success,
+              }}
+            />
+          </div>
+          <span className="w-8 tabular-nums text-caption normal-case text-right">{h.risk_score}</span>
+        </Link>
+      ))}
+    </div>
   );
-}
+});
 
-function RiskyHostsWidget() {
-  const { data = [], isLoading } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number; active_alerts: number }[]>(
-    "top-risky-hosts",
-    {},
-  );
-
-  return (
-    <Panel title="Top risky hosts">
-      {isLoading ? <ChartSkeleton height={120} /> : (
-        <div className="space-y-2">
-          {data.slice(0, 8).map((h) => (
-            <div key={h.host_id} className="flex items-center gap-2 text-sm">
-              <span className="w-24 truncate">{h.host_name}</span>
-              <div className="flex-1 h-2 bg-[#0a1018] rounded overflow-hidden">
-                <div className="h-full bg-[var(--danger)]" style={{ width: `${h.risk_score}%` }} />
-              </div>
-              <span className="w-6 tabular-nums text-xs">{h.risk_score}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function TimelinesWidget() {
+const AttackTimelines = memo(function AttackTimelines() {
   const { data = [], isLoading } = useSiemQuery<
-    { id: string; host_name: string; title: string; risk_level: string; events: { event_type: string; description?: string }[] }[]
+    { id: string; host_name: string; title: string; risk_level: string }[]
   >("attack-timelines");
 
-  return (
-    <Panel title="Attack timelines">
-      {isLoading ? <ChartSkeleton height={120} /> : (
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          {data.slice(0, 5).map((t) => (
-            <div key={t.id} className="p-2 border border-[var(--border-subtle)] rounded text-sm">
-              <p className="font-medium">{t.host_name}: {t.title}</p>
-              <p className="text-[11px] text-[var(--muted)]">Risk: {t.risk_level}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
+  if (isLoading) return <ChartSkeleton height={200} />;
 
-function HistoricalWidget() {
-  const [view, setView] = useState<"daily" | "weekly" | "monthly">("daily");
-  const { data, isLoading } = useQuery({
-    queryKey: ["siem", "historical", view],
-    queryFn: () => api<{ events: { period: string; count: number }[]; alerts: { period: string; count: number }[] }>(`/api/v1/siem/historical?view=${view}`),
-    staleTime: 120_000,
-  });
+  if (!data.length) {
+    return (
+      <EmptyState
+        title="No active timelines"
+        description="Attack timelines are generated when correlated events are detected."
+        icon={<Shield className="w-10 h-10 opacity-40" />}
+      />
+    );
+  }
 
   return (
-    <Panel
-      title="90-day history"
-      action={
-        <select value={view} onChange={(e) => setView(e.target.value as typeof view)} className="input-siem text-xs py-1">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-      }
-    >
-      {isLoading ? <ChartSkeleton height={100} /> : (
-        <div className="grid md:grid-cols-2 gap-4 text-xs font-mono max-h-40 overflow-y-auto">
-          <div>{data?.events.slice(-10).map((r) => <div key={r.period} className="flex justify-between py-0.5"><span>{r.period.slice(0, 10)}</span><span>{r.count}</span></div>)}</div>
-          <div>{data?.alerts.slice(-10).map((r) => <div key={r.period} className="flex justify-between py-0.5"><span>{r.period.slice(0, 10)}</span><span>{r.count}</span></div>)}</div>
-        </div>
-      )}
-    </Panel>
+    <div className="space-y-2">
+      {data.slice(0, 5).map((t) => (
+        <Link
+          key={t.id}
+          href="/timeline"
+          className="block p-3 rounded-lg border border-border-subtle hover:border-border hover:bg-[var(--sidebar-hover)] transition-all duration-fast"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-body font-medium truncate">{t.title}</p>
+            <span className={`badge badge-${t.risk_level === "critical" ? "critical" : t.risk_level === "high" ? "high" : "medium"}`}>
+              {t.risk_level}
+            </span>
+          </div>
+          <p className="text-caption normal-case text-muted mt-1">{t.host_name}</p>
+        </Link>
+      ))}
+    </div>
   );
-}
-
-function FeedWidget() {
-  const { queryParams } = useTimeRange();
-  const { data } = useQuery({
-    queryKey: ["events", "feed", queryParams],
-    queryFn: async () => {
-      const q = buildQuery({ page_size: 15 }, queryParams);
-      const r = await api<{ items?: { id: string; timestamp: string; event_type: string; severity: string; description: string | null }[] }>(`/api/v1/events${q}`);
-      return Array.isArray(r) ? r : r.items || [];
-    },
-    staleTime: 20_000,
-  });
-  const initial = (data ?? []).map((e) => ({ id: e.id, timestamp: e.timestamp, severity: e.severity, event_type: e.event_type, description: e.description }));
-
-  return (
-    <Panel title="Live security feed" subtitle="Real-time events via WebSocket">
-      <LiveSecurityFeed initial={initial} />
-    </Panel>
-  );
-}
+});
 
 export default function ExecutiveDashboard() {
   return (
-    <div className="space-y-5">
-      <PageHeader title="Executive dashboard" subtitle="Operational summary across your environment" />
-      <TimeRangeBar />
+    <div className="space-y-6">
+      <PageHeader
+        title="Security Operations"
+        subtitle="Real-time overview of your security posture"
+        action={<TimeRangeBar />}
+      />
+
       <ExecutiveKpis />
-      <SecurityTrendWidget />
-      <div className="grid lg:grid-cols-2 gap-5">
-        <RiskyHostsWidget />
-        <TimelinesWidget />
+
+      <Panel title="Security timeline" subtitle="Event volume over selected period">
+        <SecurityTimeline />
+      </Panel>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Panel title="Host risk ranking" subtitle="Highest risk scores in your environment">
+          <RiskyHostsWidget />
+        </Panel>
+        <Panel title="Active attack timelines" subtitle="Correlated threat sequences">
+          <AttackTimelines />
+        </Panel>
       </div>
-      <HistoricalWidget />
-      <FeedWidget />
+
+      <Panel title="Live security feed" subtitle="Real-time events via WebSocket">
+        <LiveSecurityFeed initial={[]} />
+      </Panel>
     </div>
   );
 }

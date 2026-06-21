@@ -1,0 +1,56 @@
+erDiagram
+    users ||--o{ refresh_tokens : has
+    users ||--o{ user_sessions : has
+    users }o--|| roles : belongs_to
+    users ||--o{ audit_logs : generates
+
+    hosts ||--o{ events : generates
+    hosts ||--o{ metrics : reports
+    hosts ||--o{ alerts : triggers
+    hosts ||--o{ offenses : groups
+    hosts ||--o| host_threat_scores : scored
+
+    events {
+        uuid id PK
+        uuid host_id FK
+        string event_type
+        string severity
+        string category
+        inet source_ip
+        string username
+        text raw_event
+        jsonb normalized_event
+        timestamptz timestamp
+    }
+
+    alerts ||--o| alert_rules : triggered_by
+    alerts ||--o{ offense_events : linked
+
+    offenses ||--o{ offense_events : contains
+    offenses {
+        uuid id PK
+        int offense_number
+        uuid host_id FK
+        string risk_level
+        string status
+        jsonb timeline
+        jsonb related_users
+        jsonb related_hosts
+    }
+
+    correlation_rules ||--o{ correlation_results : produces
+    correlation_results }o--o| alerts : creates
+
+    host_risk_scores {
+        uuid host_id FK
+        int risk_score
+        jsonb factors
+        timestamptz recorded_at
+    }
+
+    analytics_daily_stats {
+        date stat_date
+        string metric_name
+        string dimension_key
+        int value
+    }

@@ -10,13 +10,20 @@ from app.models.alert_rule import AlertRule
 from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
-from app.services.correlation_engine import run_correlation_engine
-from app.services.timeline import build_timelines
-from app.services.threat_score import update_all_threat_scores
 from app.services.notifications import notify_alert
 from app.websocket.manager import ws_manager
 
 logger = logging.getLogger(__name__)
+
+SUPPORTED_RULE_TYPES = frozenset({
+    "failed_logins",
+    "brute_force",
+    "high_cpu",
+    "high_memory",
+    "high_disk",
+    "service_failure",
+    "agent_offline",
+})
 
 DEFAULT_RULES = [
     {"name": "Failed Logins", "rule_type": "failed_logins", "threshold": 5, "window_minutes": 5, "severity": "high"},
@@ -48,13 +55,15 @@ async def create_alert(
     mitre_technique_id: str | None = None,
     mitre_tactic: str | None = None,
 ) -> Alert | None:
-    existing = await db.execute(
-        select(Alert).where(
-            Alert.host_id == host_id,
-            Alert.title == title,
-            Alert.status == "open",
-        )
-    )
+    dedup_filters = [
+        Alert.host_id == host_id,
+        Alert.status == "open",
+    ]
+    if rule_id is not None:
+        dedup_filters.append(Alert.rule_id == rule_id)
+    else:
+        dedup_filters.append(Alert.title == title)
+    existing = await db.execute(select(Alert).where(*dedup_filters))
     if existing.scalar_one_or_none():
         return None
 
@@ -73,7 +82,8 @@ async def create_alert(
     await db.flush()
     from app.services.offense_engine import process_new_alert
     await process_new_alert(db, alert)
-    await notify_alert(db, alert)
+    from app.jobs.queue import job_queue
+    await job_queue.enqueue("notify_alert", {"alert_id": str(alert.id)})
     await ws_manager.broadcast({
         "type": "new_alert",
         "data": {
@@ -93,45 +103,35 @@ async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
     rules = {r.rule_type: r for r in rules_result.scalars().all()}
     now = datetime.now(timezone.utc)
 
-    if "failed_logins" in rules:
-        rule = rules["failed_logins"]
-        since = now - timedelta(minutes=rule.window_minutes or 5)
-        count_result = await db.execute(
-            select(func.count()).select_from(Event).where(
-                Event.host_id == host.id,
-                Event.event_type == "ssh_login_failure",
-                Event.timestamp >= since,
-            )
+    bf_rule = rules.get("brute_force")
+    fl_rule = rules.get("failed_logins")
+    if bf_rule or fl_rule:
+        window = max(
+            (bf_rule.window_minutes if bf_rule else 0) or 5,
+            (fl_rule.window_minutes if fl_rule else 0) or 5,
         )
-        fail_count = count_result.scalar_one()
-        if fail_count >= (rule.threshold or 5):
-            await create_alert(
-                db, host.id, "Multiple Failed Logins",
-                f"{fail_count} failed SSH logins in {rule.window_minutes} minutes",
-                rule.severity, rule.id,
+        since = now - timedelta(minutes=window)
+        fail_count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "ssh_login_failure",
+                    Event.timestamp >= since,
+                )
             )
-
-    if "brute_force" in rules:
-        rule = rules["brute_force"]
-        since = now - timedelta(minutes=rule.window_minutes or 5)
-        count_result = await db.execute(
-            select(func.count()).select_from(Event).where(
-                Event.host_id == host.id,
-                Event.event_type == "ssh_login_failure",
-                Event.timestamp >= since,
-            )
-        )
-        bf_count = count_result.scalar_one()
-        if bf_count >= (rule.threshold or 10):
+        ).scalar_one()
+        if bf_rule and fail_count >= (bf_rule.threshold or 10):
             await create_alert(
                 db, host.id, "Brute Force Attempt",
-                f"{bf_count} failed SSH logins detected",
-                rule.severity, rule.id,
+                f"{fail_count} failed SSH logins detected",
+                bf_rule.severity, bf_rule.id,
             )
-
-    await run_correlation_engine(db, host.id)
-    await build_timelines(db, host.id)
-    await update_all_threat_scores(db)
+        elif fl_rule and fail_count >= (fl_rule.threshold or 5):
+            await create_alert(
+                db, host.id, "Multiple Failed Logins",
+                f"{fail_count} failed SSH logins in {fl_rule.window_minutes} minutes",
+                fl_rule.severity, fl_rule.id,
+            )
 
     metrics_result = await db.execute(
         select(Metric).where(Metric.host_id == host.id).order_by(Metric.recorded_at.desc()).limit(3)
@@ -183,11 +183,15 @@ async def update_host_statuses(db: AsyncSession) -> None:
 
         if offline or critical_alerts:
             host.status = "critical" if critical_alerts or offline else "offline"
-            if offline and "agent_offline" not in [a.title for a in alerts]:
-                rules_result = await db.execute(select(AlertRule).where(AlertRule.rule_type == "agent_offline"))
-                rule = rules_result.scalar_one_or_none()
-                if rule:
-                    await create_alert(db, host.id, "Agent Offline", f"Host {host.name} has not sent a heartbeat", rule.severity, rule.id)
+            rules_result = await db.execute(select(AlertRule).where(AlertRule.rule_type == "agent_offline"))
+            offline_rule = rules_result.scalar_one_or_none()
+            open_rule_ids = {a.rule_id for a in alerts if a.rule_id}
+            if offline and offline_rule and offline_rule.id not in open_rule_ids:
+                await create_alert(
+                    db, host.id, "Agent Offline",
+                    f"Host {host.name} has not sent a heartbeat",
+                    offline_rule.severity, offline_rule.id,
+                )
         elif high_alerts:
             host.status = "warning"
         else:

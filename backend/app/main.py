@@ -1,31 +1,44 @@
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from jose import JWTError
 from sqlalchemy import select
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
-from app.database import Base, async_session, engine
-from app.routers import agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents, metrics, mitre, network, offenses, reports, saved_searches, search, siem, simulation, threat_scores, timeline
-from app.security import decode_token as jwt_decode
+from app.core.errors import http_exception_handler, validation_exception_handler
+from app.core.health import liveness, readiness
+from app.core.logging import configure_logging
+from app.database import async_session, engine
+from app.jobs.handlers import register_job_handlers
+from app.jobs.queue import job_queue
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.request_context import RequestContextMiddleware
+from app.routers import (
+    agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents,
+    metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
+    simulation, threat_scores, timeline, settings as settings_router,
+)
+from app.dependencies import get_current_user
+from app.models.user import User
+from app.security import create_ws_ticket, decode_token as jwt_decode
+from app.services.correlation_engine import seed_correlation_rules
 from app.services.detection import seed_alert_rules, update_host_statuses
 from app.services.migrate import migrate_schema
 from app.services.mitre import seed_mitre
-from app.services.correlation_engine import seed_correlation_rules
-from app.services.threat_score import update_all_threat_scores
 from app.services.retention import run_retention
+from app.services.threat_score import update_all_threat_scores
+from app.services.analytics.aggregator import aggregate_daily_stats
 from app.websocket.manager import ws_manager
 
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
-
 scheduler = AsyncIOScheduler()
 
 
@@ -47,18 +60,39 @@ async def status_job() -> None:
         await db.commit()
 
 
+async def analytics_job() -> None:
+    async with async_session() as db:
+        await aggregate_daily_stats(db)
+        await db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    register_job_handlers()
+    job_queue.start()
     await init_db()
     scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
     scheduler.add_job(run_retention, "cron", hour=2, id="retention")
+    scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
     scheduler.start()
+    logger.info("SecuriSphere backend started", extra={"environment": settings.environment})
     yield
     scheduler.shutdown()
+    await job_queue.stop()
+    await engine.dispose()
+    logger.info("SecuriSphere backend shutdown complete")
 
 
-app = FastAPI(title="Mini SIEM API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="SecuriSphere SIEM API",
+    version="2.0.0",
+    lifespan=lifespan,
+    description="Production-grade security operations platform backend",
+)
 
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -89,10 +123,27 @@ app.include_router(threat_scores.router, prefix=prefix)
 app.include_router(siem.router, prefix=prefix)
 app.include_router(offenses.router, prefix=prefix)
 app.include_router(saved_searches.router, prefix=prefix)
+app.include_router(settings_router.router, prefix=prefix)
+app.include_router(notifications.router, prefix=prefix)
+
+
+@app.get("/health")
+async def health():
+    return await liveness()
+
+
+@app.get("/health/live")
+async def health_live():
+    return await liveness()
+
+
+@app.get("/health/ready")
+async def health_ready():
+    return await readiness()
 
 
 @app.get("/api/v1/overview")
-async def overview():
+async def overview(user: User = Depends(get_current_user)):
     from sqlalchemy import func
     from app.models.alert import Alert
     from app.models.host import Host
@@ -119,7 +170,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
         return
     try:
         payload = jwt_decode(token)
-        if payload.get("type") != "access":
+        if payload.get("type") not in ("access", "ws"):
             await websocket.close(code=4001)
             return
     except JWTError:
@@ -134,14 +185,14 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
         ws_manager.disconnect(websocket)
 
 
+@app.post("/api/v1/ws/token")
+async def ws_token(user: User = Depends(get_current_user)):
+    return {"token": create_ws_ticket(str(user.id)), "expires_in": 60}
+
+
 @app.get("/install.sh")
 async def serve_install_script():
     script = Path(__file__).resolve().parents[2] / "agent" / "install.sh"
     if not script.exists():
         script = Path(__file__).resolve().parents[1].parent / "agent" / "install.sh"
     return FileResponse(script, media_type="text/plain")
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}

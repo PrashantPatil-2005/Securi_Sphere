@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -8,6 +9,12 @@ from app.models.timeline import AttackTimeline
 from app.services.mitre import EVENT_MITRE_MAP
 
 ATTACK_EVENT_TYPES = set(EVENT_MITRE_MAP.keys())
+
+
+def _timeline_fingerprint(host_id, title: str, started_at: datetime) -> str:
+    bucket = started_at.replace(minute=0, second=0, microsecond=0).isoformat()
+    raw = f"{host_id}:{title}:{bucket}"
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 async def build_timelines(db: AsyncSession, host_id, window_minutes: int = 60) -> list[AttackTimeline]:
@@ -30,6 +37,26 @@ async def build_timelines(db: AsyncSession, host_id, window_minutes: int = 60) -
 
     title = _chain_title([e.event_type for e in chain])
     confidence = _chain_confidence(chain)
+    fingerprint = _timeline_fingerprint(host_id, title, started)
+
+    existing = (
+        await db.execute(
+            select(AttackTimeline).where(
+                AttackTimeline.host_id == host_id,
+                AttackTimeline.fingerprint == fingerprint,
+                AttackTimeline.status == "active",
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        existing.ended_at = ended
+        existing.event_ids = [str(e.id) for e in chain]
+        existing.mitre_techniques = techniques
+        existing.confidence = confidence
+        existing.description = f"{len(chain)} correlated security events detected"
+        existing.severity = "critical" if confidence >= 80 else "high" if confidence >= 60 else "medium"
+        return [existing]
 
     timeline = AttackTimeline(
         host_id=host_id,
@@ -42,6 +69,7 @@ async def build_timelines(db: AsyncSession, host_id, window_minutes: int = 60) -
         severity="critical" if confidence >= 80 else "high" if confidence >= 60 else "medium",
         confidence=confidence,
         status="active",
+        fingerprint=fingerprint,
     )
     db.add(timeline)
     return [timeline]

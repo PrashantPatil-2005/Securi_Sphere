@@ -1,0 +1,19 @@
+flowchart TD
+    ALERT[New Alert] --> PROC[process_new_alert]
+    EVENT[Security Event] --> LINK[link_event_to_offense]
+
+    PROC --> FIND
+    LINK --> FIND
+
+    FIND{Open offense on host within 30min?}
+    FIND -->|Yes| UPDATE[Update offense]
+    FIND -->|No| CREATE[Create offense #N]
+
+    UPDATE --> ADD[Add OffenseEvent link]
+    CREATE --> ADD
+
+    ADD --> META[Update metadata]
+    META --> TL[Append timeline entry]
+    META --> USR[Track related_users]
+    META --> HOST[Track related_hosts]
+    META --> RISK[Recalculate risk_level]

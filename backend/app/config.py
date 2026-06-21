@@ -20,6 +20,14 @@ class Settings(BaseSettings):
     debug: bool = True
     environment: str = "development"
     retention_days: int = 90
+    async_event_pipeline: bool = True
+    agent_request_signing: bool = False
+    account_lockout_attempts: int = 5
+    account_lockout_minutes: int = 15
+    idempotency_ttl_seconds: int = 86400
+    allow_registration: bool = True
+    redis_url: str = ""
+    trusted_proxy: bool = False
 
     @model_validator(mode="after")
     def require_secrets(self) -> "Settings":

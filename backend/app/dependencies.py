@@ -8,10 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.database import get_db
 from app.models.host import Host
 from app.models.user import User
 from app.security import decode_token, hash_token
+from app.services.agent_auth import validate_api_key_host
 
 
 async def get_current_user(
@@ -19,9 +21,13 @@ async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
+    token: str | None = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+    elif request.cookies.get("access_token"):
+        token = request.cookies.get("access_token")
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    token = authorization.split(" ", 1)[1]
     try:
         payload = decode_token(token)
         if payload.get("type") != "access":
@@ -54,12 +60,7 @@ async def get_host_by_api_key(
 ) -> Host:
     if not x_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key required")
-    key_hash = hash_token(x_api_key)
-    result = await db.execute(select(Host).where(Host.api_key_hash == key_hash))
-    host = result.scalar_one_or_none()
-    if not host:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
-    return host
+    return await validate_api_key_host(db, x_api_key)
 
 
 def client_ip(request: Request) -> str | None:

@@ -1,0 +1,30 @@
+flowchart LR
+    subgraph Input
+        EV[Recent Events per Host]
+    end
+
+    subgraph Rules
+        R1[Brute Force Success]
+        R2[Privilege Escalation]
+        R3[Host Compromise]
+        R4[Service Failure Chain]
+    end
+
+    subgraph Matchers
+        SEQ[SequenceMatcher]
+        CO[CoOccurrenceMatcher]
+    end
+
+    subgraph Output
+        AL[Alert]
+        CR[CorrelationResult]
+    end
+
+    EV --> R1 & R2 & R3 & R4
+    R1 --> SEQ
+    R2 --> SEQ
+    R3 --> CO
+    R4 --> SEQ
+    SEQ --> SCORE[Confidence Score]
+    CO --> SCORE
+    SCORE --> AL --> CR
