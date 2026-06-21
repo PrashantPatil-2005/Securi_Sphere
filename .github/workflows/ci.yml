@@ -37,6 +37,7 @@ jobs:
       - run: pip install -r requirements.txt redis
       - run: pytest tests/ -v
         env:
+          TESTING: "true"
           DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
           JWT_SECRET: ci-test-secret-key-minimum-length
           REDIS_URL: redis://localhost:6379/0
@@ -69,6 +70,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
 
   docker-build:
     runs-on: ubuntu-latest

@@ -88,21 +88,50 @@ class WebSocketStore {
 
 const store = new WebSocketStore();
 
+/** Map WS message types to the query families that actually need refetching. */
+const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
+  new_event: [["events"], ["siem"]],
+  new_alert: [["alerts"], ["siem"]],
+  alert_resolved: [["alerts"], ["siem"]],
+  host_status: [["hosts"], ["siem"]],
+  // security_feed is handled by useSecurityFeedStore — no query invalidation
+};
+
+const INVALIDATION_DEBOUNCE_MS = 600;
+
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
     store.connect();
-    const unsub = store.subscribe((msg) => {
-      if (["new_event", "security_feed", "new_alert", "alert_resolved", "host_status"].includes(msg.type)) {
-        queryClient.invalidateQueries({ queryKey: ["events"] });
-        queryClient.invalidateQueries({ queryKey: ["alerts"] });
-        queryClient.invalidateQueries({ queryKey: ["hosts"] });
-        queryClient.invalidateQueries({ queryKey: ["siem"] });
+
+    const pending = new Set<string>();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = () => {
+      timer = null;
+      const keys = Array.from(pending);
+      pending.clear();
+      for (const serialized of keys) {
+        const queryKey = JSON.parse(serialized) as string[];
+        queryClient.invalidateQueries({ queryKey });
       }
+    };
+
+    const scheduleInvalidation = (queryKey: readonly string[]) => {
+      pending.add(JSON.stringify(queryKey));
+      if (!timer) timer = setTimeout(flush, INVALIDATION_DEBOUNCE_MS);
+    };
+
+    const unsub = store.subscribe((msg) => {
+      const targets = INVALIDATION_BY_TYPE[msg.type];
+      if (!targets) return;
+      for (const queryKey of targets) scheduleInvalidation(queryKey);
     });
+
     return () => {
       unsub();
+      if (timer) clearTimeout(timer);
       store.disconnect();
     };
   }, [queryClient]);

@@ -5,6 +5,7 @@ import { usePaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
@@ -105,7 +106,7 @@ export default function EventsPage() {
         <TableSkeleton />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={(e) => e.id} />
+          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
         </div>
       )}
       <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />

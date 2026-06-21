@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useDebounce } from "@/lib/hooks/useDebounce";
+import { VirtualList } from "@/components/VirtualList";
+import { rowKeyById } from "@/lib/rowKey";
 
 interface AuditEntry {
   id: string;
@@ -13,16 +17,30 @@ interface AuditEntry {
   timestamp: string;
 }
 
+function AuditRow({ entry }: { entry: AuditEntry }) {
+  return (
+    <div className="grid grid-cols-[minmax(140px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_100px_1fr] gap-3 py-2 border-b border-[var(--border)]/50 text-sm items-start">
+      <span className="text-gray-400 whitespace-nowrap">{new Date(entry.timestamp).toLocaleString()}</span>
+      <span className="font-mono text-blue-400">{entry.action}</span>
+      <span>{entry.resource_type}{entry.resource_id ? ` / ${entry.resource_id.slice(0, 8)}...` : ""}</span>
+      <span className="text-gray-500">{entry.ip_address || "-"}</span>
+      <span className="text-gray-500 truncate">{entry.details ? JSON.stringify(entry.details) : "-"}</span>
+    </div>
+  );
+}
+
 export default function AuditPage() {
-  const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [filter, setFilter] = useState("");
+  const debouncedFilter = useDebounce(filter, 400);
 
-  const load = () => {
-    const q = filter ? `?action=${encodeURIComponent(filter)}` : "";
-    api<AuditEntry[]>(`/api/v1/audit${q}`).then(setLogs).catch(console.error);
-  };
-
-  useEffect(() => { load(); }, [filter]);
+  const { data: logs = [] } = useQuery({
+    queryKey: ["audit", debouncedFilter],
+    queryFn: async () => {
+      const q = debouncedFilter ? `?action=${encodeURIComponent(debouncedFilter)}` : "";
+      return api<AuditEntry[]>(`/api/v1/audit${q}`);
+    },
+    staleTime: 30_000,
+  });
 
   return (
     <div>
@@ -33,31 +51,24 @@ export default function AuditPage() {
         placeholder="Filter by action..."
         className="mb-4 px-3 py-2 bg-[var(--card)] border border-[var(--border)] rounded w-64 text-sm"
       />
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500 border-b border-[var(--border)]">
-              <th className="py-2 pr-4">Time</th>
-              <th className="py-2 pr-4">Action</th>
-              <th className="py-2 pr-4">Resource</th>
-              <th className="py-2 pr-4">IP</th>
-              <th className="py-2">Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l) => (
-              <tr key={l.id} className="border-b border-[var(--border)]/50">
-                <td className="py-2 pr-4 text-gray-400 whitespace-nowrap">{new Date(l.timestamp).toLocaleString()}</td>
-                <td className="py-2 pr-4 font-mono text-blue-400">{l.action}</td>
-                <td className="py-2 pr-4">{l.resource_type}{l.resource_id ? ` / ${l.resource_id.slice(0, 8)}...` : ""}</td>
-                <td className="py-2 pr-4 text-gray-500">{l.ip_address || "-"}</td>
-                <td className="py-2 text-gray-500 truncate max-w-xs">{l.details ? JSON.stringify(l.details) : "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {logs.length === 0 && <p className="text-gray-500 mt-4">No audit entries (admin only).</p>}
+      <div className="text-left text-gray-500 border-b border-[var(--border)] grid grid-cols-[minmax(140px,1fr)_minmax(120px,1fr)_minmax(140px,1fr)_100px_1fr] gap-3 py-2 text-xs uppercase">
+        <span>Time</span>
+        <span>Action</span>
+        <span>Resource</span>
+        <span>IP</span>
+        <span>Details</span>
       </div>
+      {logs.length === 0 ? (
+        <p className="text-gray-500 mt-4">No audit entries (admin only).</p>
+      ) : (
+        <VirtualList
+          items={logs}
+          rowKey={rowKeyById}
+          renderItem={(entry) => <AuditRow entry={entry} />}
+          height={560}
+          estimateSize={44}
+        />
+      )}
     </div>
   );
 }

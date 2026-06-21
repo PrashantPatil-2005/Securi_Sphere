@@ -1,18 +1,19 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.dependencies import get_current_user, require_roles
+from app.dependencies import client_ip, get_current_user, require_roles
 from app.models.host import Host
 from app.models.siem import Offense, OffenseEvent
 from app.models.user import User
 from app.utils.query import ListParams, resolve_time_range
+from app.services.incident_promotion import promote_offense_to_incident
 
 router = APIRouter(prefix="/offenses", tags=["offenses"])
 
@@ -34,20 +35,29 @@ async def list_offenses(
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    q = select(Offense).options(selectinload(Offense.links))
+    filters = []
     if status:
-        q = q.where(Offense.status == status)
+        filters.append(Offense.status == status)
     if host_id:
-        q = q.where(Offense.host_id == host_id)
+        filters.append(Offense.host_id == host_id)
     if tr.from_time:
-        q = q.where(Offense.created_at >= tr.from_time)
+        filters.append(Offense.created_at >= tr.from_time)
     if tr.to_time:
-        q = q.where(Offense.created_at <= tr.to_time)
+        filters.append(Offense.created_at <= tr.to_time)
 
-    all_rows = list((await db.execute(q.order_by(Offense.updated_at.desc()))).scalars().all())
-    hosts = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
+    count_q = select(func.count()).select_from(Offense)
+    for f in filters:
+        count_q = count_q.where(f)
+    total = (await db.execute(count_q)).scalar_one()
+
+    q = select(Offense).options(selectinload(Offense.links))
+    for f in filters:
+        q = q.where(f)
     offset = (page - 1) * page_size
-    page_rows = all_rows[offset : offset + page_size]
+    page_rows = list(
+        (await db.execute(q.order_by(Offense.updated_at.desc()).offset(offset).limit(page_size))).scalars().all()
+    )
+    hosts = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
 
     return {
         "items": [
@@ -61,12 +71,16 @@ async def list_offenses(
                 "risk_level": o.risk_level,
                 "status": o.status,
                 "event_count": o.event_count,
+                "alert_count": o.alert_count,
+                "incident_id": str(o.incident_id) if o.incident_id else None,
+                "related_hosts": o.related_hosts or [],
+                "related_users": o.related_users or [],
                 "created_at": o.created_at.isoformat(),
                 "updated_at": o.updated_at.isoformat(),
             }
             for o in page_rows
         ],
-        "total": len(all_rows),
+        "total": total,
         "page": page,
         "page_size": page_size,
     }
@@ -125,6 +139,11 @@ async def get_offense(
         "risk_level": offense.risk_level,
         "status": offense.status,
         "event_count": offense.event_count,
+        "alert_count": offense.alert_count,
+        "incident_id": str(offense.incident_id) if offense.incident_id else None,
+        "timeline": offense.timeline or [],
+        "related_hosts": offense.related_hosts or [],
+        "related_users": offense.related_users or [],
         "events": events,
         "alerts": alerts,
         "created_at": offense.created_at.isoformat(),
@@ -155,3 +174,18 @@ async def update_offense_status(
         offense.closed_at = datetime.now(timezone.utc)
     await db.commit()
     return {"id": str(offense.id), "status": offense.status}
+
+
+@router.post("/{offense_id}/promote-to-incident")
+async def promote_offense(
+    offense_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    return await promote_offense_to_incident(
+        db,
+        offense_id,
+        user,
+        ip_address=client_ip(request),
+    )

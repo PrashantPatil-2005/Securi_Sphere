@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, type ReactNode } from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 export interface Column<T> {
@@ -28,6 +28,7 @@ function VirtualDataTableInner<T>({
   emptyMessage = "No records match your filters.",
 }: Props<T>) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const gridCols = useMemo(() => columns.map((c) => c.width || "1fr").join(" "), [columns]);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
@@ -38,8 +39,6 @@ function VirtualDataTableInner<T>({
   if (rows.length === 0) {
     return <p className="empty-desc py-8 text-center">{emptyMessage}</p>;
   }
-
-  const gridCols = columns.map((c) => c.width || "1fr").join(" ");
 
   return (
     <div className="data-table-wrap">
@@ -52,7 +51,7 @@ function VirtualDataTableInner<T>({
           </tr>
         </thead>
       </table>
-      <div ref={parentRef} className="data-table-body" style={{ height, overflow: "auto" }}>
+      <div ref={parentRef} className="data-table-body" style={{ height, overflow: "auto", contain: "strict" }}>
         <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
           {virtualizer.getVirtualItems().map((vRow) => {
             const row = rows[vRow.index];

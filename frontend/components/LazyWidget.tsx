@@ -19,3 +19,4 @@ export function LazyWidget({ children, fallback, minHeight = 280 }: LazyWidgetPr
 
 export const LazyEventTrendChart = lazy(() => import("@/components/charts/EventTrendChart"));
 export const LazySeverityCharts = lazy(() => import("@/components/charts/SeverityCharts"));
+export const LazyAnalyticsCharts = lazy(() => import("@/components/charts/AnalyticsCharts"));

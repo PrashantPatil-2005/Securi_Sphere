@@ -27,6 +27,7 @@ class Incident(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[list["IncidentNote"]] = relationship("IncidentNote", back_populates="incident")
+    alert_links: Mapped[list["IncidentAlert"]] = relationship("IncidentAlert", back_populates="incident")
 
 
 class IncidentNote(Base):
@@ -47,3 +48,4 @@ class IncidentAlert(Base):
 
     incident_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("incidents.id"), primary_key=True)
     alert_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("alerts.id"), primary_key=True)
+    incident: Mapped["Incident"] = relationship("Incident", back_populates="alert_links")

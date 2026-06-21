@@ -26,8 +26,20 @@ class Settings(BaseSettings):
     account_lockout_minutes: int = 15
     idempotency_ttl_seconds: int = 86400
     allow_registration: bool = True
+    enable_simulation: bool = True
     redis_url: str = ""
     trusted_proxy: bool = False
+    testing: bool = False
+    opensearch_url: str = ""
+    search_backend: str = "postgres"
+
+    @model_validator(mode="after")
+    def apply_testing_env(self) -> "Settings":
+        import os
+        if os.environ.get("TESTING", "").lower() in ("1", "true", "yes"):
+            self.testing = True
+            self.debug = False
+        return self
 
     @model_validator(mode="after")
     def require_secrets(self) -> "Settings":

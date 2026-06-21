@@ -6,6 +6,7 @@ import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
@@ -141,7 +142,7 @@ export default function HostsPage() {
         <EmptyState title="No hosts" description="Register a host and enroll an agent to begin monitoring." />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={(h) => h.id} />
+          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
         </div>
       )}
       <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />

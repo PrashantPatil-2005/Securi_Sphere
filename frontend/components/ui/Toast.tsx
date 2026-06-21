@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CheckCircle, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
@@ -48,8 +48,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => dismiss(id), 5000);
   }, [dismiss]);
 
+  const value = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
+
   return (
-    <ToastContext.Provider value={{ toast, dismiss }}>
+    <ToastContext.Provider value={value}>
       {children}
       <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none" aria-live="polite">
         <AnimatePresence>

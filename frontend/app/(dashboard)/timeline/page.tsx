@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
-import { PageHeader, Panel } from "@/components/ui/Panel";
+import { PageHeader } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 
 interface Timeline {

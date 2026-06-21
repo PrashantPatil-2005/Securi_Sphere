@@ -1,19 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
-import LiveSecurityFeed from "@/components/LiveSecurityFeed";
-import { LazyEventTrendChart, LazySeverityCharts, LazyWidget } from "@/components/LazyWidget";
+import { LazyEventTrendChart, LazySeverityCharts, LazyAnalyticsCharts, LazyWidget } from "@/components/LazyWidget";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from "recharts";
 
-const CAT_COLORS = ["#4c9aff", "#ff6b6b", "#f5c842", "#3dd68c", "#a78bfa", "#f472b6", "#7b8ba3"];
+const LazyLiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), {
+  loading: () => <ChartSkeleton height={280} />,
+  ssr: false,
+});
 
 export default function AnalyticsPage() {
   const { queryParams } = useTimeRange();
@@ -62,13 +64,17 @@ export default function AnalyticsPage() {
     staleTime: 30_000,
   });
 
-  const feedInitial = (feedData ?? []).map((e) => ({
-    id: e.id,
-    timestamp: e.timestamp,
-    severity: e.severity,
-    event_type: e.event_type,
-    description: e.description,
-  }));
+  const feedInitial = useMemo(
+    () =>
+      (feedData ?? []).map((e) => ({
+        id: e.id,
+        timestamp: e.timestamp,
+        severity: e.severity,
+        event_type: e.event_type,
+        description: e.description,
+      })),
+    [feedData],
+  );
 
   return (
     <div className="space-y-5">
@@ -100,63 +106,13 @@ export default function AnalyticsPage() {
         )}
       </Panel>
 
-      <div className="grid lg:grid-cols-2 gap-5">
-        <Panel title="Event type distribution">
-          {typesLoading ? <ChartSkeleton height={260} /> : eventTypes && (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={eventTypes.categories} dataKey="count" nameKey="category" cx="50%" cy="50%" outerRadius={88} isAnimationActive={false}>
-                  {eventTypes.categories.map((_, i) => <Cell key={i} fill={CAT_COLORS[i % CAT_COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </Panel>
-        <Panel title="Category trend">
-          {typesLoading ? <ChartSkeleton height={260} /> : eventTypes && (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={eventTypes.trend.slice(-60)}>
-                <XAxis dataKey="period" tick={{ fontSize: 9, fill: "#7b8ba3" }} tickFormatter={(v) => String(v).slice(5, 16)} />
-                <YAxis stroke="#7b8ba3" width={32} />
-                <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
-                {eventTypes.categories.map((c, i) => (
-                  <Line key={c.category} type="monotone" dataKey={c.category} stroke={CAT_COLORS[i % CAT_COLORS.length]} dot={false} isAnimationActive={false} />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          )}
-        </Panel>
-      </div>
-
-      <Panel title="Failed login analytics">
-        {failLoading ? <ChartSkeleton /> : failedLogins && (
-          <div className="grid md:grid-cols-2 gap-6">
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={(failedLogins.over_time as { period: string; count: number }[])?.slice(-60) || []}>
-                <XAxis dataKey="period" tick={{ fontSize: 9, fill: "#7b8ba3" }} tickFormatter={(v) => String(v).slice(5, 16)} />
-                <YAxis stroke="#7b8ba3" width={32} />
-                <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
-                <Bar dataKey="count" fill="#ff6b6b" isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-[11px] uppercase text-[var(--muted)] mb-2">Top attacking IPs</p>
-                {((failedLogins.top_attacking_ips as { source_ip: string; count: number }[]) || []).slice(0, 8).map((r) => (
-                  <div key={r.source_ip} className="flex justify-between py-1 border-b border-[var(--border-subtle)]"><span className="font-mono text-xs">{r.source_ip}</span><span className="text-[var(--danger)]">{r.count}</span></div>
-                ))}
-              </div>
-              <div>
-                <p className="text-[11px] uppercase text-[var(--muted)] mb-2">Targeted accounts</p>
-                {((failedLogins.most_targeted_accounts as { username: string; count: number }[]) || []).slice(0, 8).map((r) => (
-                  <div key={r.username} className="flex justify-between py-1 border-b border-[var(--border-subtle)]"><span>{r.username}</span><span className="text-[var(--warning)]">{r.count}</span></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </Panel>
+      {typesLoading || failLoading ? (
+        <ChartSkeleton height={260} />
+      ) : eventTypes && failedLogins ? (
+        <LazyWidget minHeight={460}>
+          <LazyAnalyticsCharts eventTypes={eventTypes} failedLogins={failedLogins} />
+        </LazyWidget>
+      ) : null}
 
       <div className="grid lg:grid-cols-2 gap-5">
         <Panel title="Top risky hosts">
@@ -183,7 +139,7 @@ export default function AnalyticsPage() {
       </div>
 
       <Panel title="Live security feed">
-        <LiveSecurityFeed initial={feedInitial} />
+        <LazyLiveSecurityFeed initial={feedInitial} />
       </Panel>
     </div>
   );
