@@ -1,3 +1,5 @@
+import { clearAuthCookie, setAuthCookie } from "./auth/session";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface TokenPair {
@@ -16,20 +18,22 @@ function getTokens(): TokenPair | null {
 export function setTokens(tokens: TokenPair) {
   localStorage.setItem("access_token", tokens.access_token);
   localStorage.setItem("refresh_token", tokens.refresh_token);
+  setAuthCookie();
 }
 
 export function clearTokens() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
+  clearAuthCookie();
 }
 
 async function refreshAccessToken(): Promise<string | null> {
   const tokens = getTokens();
-  if (!tokens?.refresh_token) return null;
   const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: tokens.refresh_token }),
+    credentials: "include",
+    body: JSON.stringify(tokens?.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
   });
   if (!res.ok) {
     clearTokens();
@@ -38,6 +42,21 @@ async function refreshAccessToken(): Promise<string | null> {
   const data: TokenPair = await res.json();
   setTokens(data);
   return data.access_token;
+}
+
+export async function logoutApi(): Promise<void> {
+  const tokens = getTokens();
+  try {
+    await fetch(`${API_URL}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(tokens?.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+    });
+  } catch {
+    /* best effort */
+  }
+  clearTokens();
 }
 
 export async function api<T>(
@@ -54,17 +73,23 @@ export async function api<T>(
     headers.Authorization = `Bearer ${tokens.access_token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
+  } catch {
+    throw new Error("Cannot reach the server. Make sure the backend is running on " + API_URL);
+  }
 
   if (res.status === 401 && retry) {
     const newToken = await refreshAccessToken();
     if (newToken) {
       headers.Authorization = `Bearer ${newToken}`;
-      const retryRes = await fetch(`${API_URL}${path}`, { ...options, headers });
+      const retryRes = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => ({ detail: "Request failed" }));
         throw new Error(err.detail || "Request failed");
       }
+      if (retryRes.status === 204) return {} as T;
       return retryRes.json();
     }
     throw new Error("Session expired");
@@ -77,6 +102,15 @@ export async function api<T>(
 
   if (res.status === 204) return {} as T;
   return res.json();
+}
+
+export async function fetchWsToken(): Promise<string | null> {
+  try {
+    const data = await api<{ token: string }>("/api/v1/ws/token", { method: "POST" });
+    return data.token;
+  } catch {
+    return getTokens()?.access_token ?? null;
+  }
 }
 
 export { API_URL };

@@ -81,7 +81,7 @@ async def list_hosts(
 @router.get("/export")
 async def export_hosts(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("admin", "analyst")),
     format: str = Query("csv", pattern="^(csv|json|pdf)$"),
     hostname: str | None = None,
     status: str | None = None,

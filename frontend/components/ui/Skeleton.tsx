@@ -1,5 +1,5 @@
 export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
-  return <div className={`animate-pulse rounded bg-white/5 ${className}`} style={style} aria-hidden />;
+  return <div className={`skeleton rounded-md ${className}`} style={style} aria-hidden />;
 }
 
 export function TableSkeleton({ rows = 8 }: { rows?: number }) {

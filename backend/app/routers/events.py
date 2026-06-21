@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_roles
 from app.models.user import User
 from app.schemas.event import EventListResponse, EventResponse
 from app.services.export_service import export_csv, export_json, export_pdf
@@ -59,7 +59,7 @@ async def list_event_types(db: AsyncSession = Depends(get_db), user: User = Depe
 @router.get("/export")
 async def export_events(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("admin", "analyst")),
     format: str = Query("csv", pattern="^(csv|json|pdf)$"),
     host_id: UUID | None = None,
     severity: str | None = None,

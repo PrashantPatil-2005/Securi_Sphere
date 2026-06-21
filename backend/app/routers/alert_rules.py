@@ -9,6 +9,7 @@ from app.database import get_db
 from app.dependencies import require_roles
 from app.models.alert_rule import AlertRule
 from app.models.user import User
+from app.services.detection import SUPPORTED_RULE_TYPES
 
 router = APIRouter(prefix="/alert-rules", tags=["alert-rules"])
 
@@ -39,6 +40,11 @@ class RuleResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+@router.get("/meta")
+async def rules_meta(user: User = Depends(require_roles("admin", "analyst"))):
+    return {"supported_rule_types": sorted(SUPPORTED_RULE_TYPES)}
+
+
 @router.get("", response_model=list[RuleResponse])
 async def list_rules(db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
     return list((await db.execute(select(AlertRule))).scalars().all())
@@ -46,6 +52,11 @@ async def list_rules(db: AsyncSession = Depends(get_db), user: User = Depends(re
 
 @router.post("", response_model=RuleResponse)
 async def create_rule(body: RuleCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin"))):
+    if body.rule_type not in SUPPORTED_RULE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported rule_type. Valid types: {sorted(SUPPORTED_RULE_TYPES)}",
+        )
     rule = AlertRule(**body.model_dump())
     db.add(rule)
     await db.flush()

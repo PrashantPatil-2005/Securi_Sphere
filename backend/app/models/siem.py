@@ -19,6 +19,10 @@ class Offense(Base):
     risk_level: Mapped[str] = mapped_column(String(20), default="medium", index=True)
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
     event_count: Mapped[int] = mapped_column(Integer, default=0)
+    alert_count: Mapped[int] = mapped_column(Integer, default=0)
+    related_hosts: Mapped[list] = mapped_column(JSONB, default=list)
+    related_users: Mapped[list] = mapped_column(JSONB, default=list)
+    timeline: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )

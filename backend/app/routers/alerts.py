@@ -60,7 +60,7 @@ async def list_alerts(
 @router.get("/export")
 async def export_alerts(
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_roles("admin", "analyst")),
     format: str = Query("csv", pattern="^(csv|json|pdf)$"),
     host_id: UUID | None = None,
     severity: str | None = None,

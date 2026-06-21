@@ -107,9 +107,21 @@ async def execute_siem_search(
             et = "ssh_login_failure"
         event_clauses.append(Event.event_type == et)
     if "username" in parsed["filters"]:
-        event_clauses.append(Event.metadata_["username"].astext.ilike(parsed["filters"]["username"]))
+        username_filter = parsed["filters"]["username"]
+        event_clauses.append(
+            or_(
+                Event.username.ilike(username_filter),
+                Event.metadata_["username"].astext.ilike(username_filter),
+            )
+        )
     if "source_ip" in parsed["filters"]:
-        event_clauses.append(Event.metadata_["source_ip"].astext == parsed["filters"]["source_ip"])
+        ip_filter = parsed["filters"]["source_ip"]
+        event_clauses.append(
+            or_(
+                Event.source_ip == ip_filter,
+                Event.metadata_["source_ip"].astext == ip_filter,
+            )
+        )
     if parsed["free_text"]:
         pattern = f"%{parsed['free_text']}%"
         event_clauses.append(

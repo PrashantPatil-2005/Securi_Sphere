@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { PageHeader, Panel } from "@/components/ui/Panel";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 
 interface Timeline {
   id: string;
@@ -30,26 +33,23 @@ interface TEvent {
 
 export default function TimelinePage() {
   const { queryParams } = useTimeRange();
-  const [items, setItems] = useState<Timeline[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [events, setEvents] = useState<TEvent[]>([]);
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ["timelines", queryParams],
+    queryFn: () => api<Timeline[]>(`/api/v1/timelines${buildQuery({ page_size: 100 }, queryParams)}`),
+  });
 
-  const load = useCallback(() => {
-    const q = buildQuery({ page_size: 100 }, queryParams);
-    api<Timeline[]>(`/api/v1/timelines${q}`).then(setItems).catch(console.error);
-  }, [queryParams]);
-
-  useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!selected) return;
-    api<TEvent[]>(`/api/v1/timelines/${selected}/events`).then(setEvents).catch(console.error);
-  }, [selected]);
+  const { data: events = [] } = useQuery({
+    queryKey: ["timeline-events", selected],
+    queryFn: () => api<TEvent[]>(`/api/v1/timelines/${selected}/events`),
+    enabled: !!selected,
+  });
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Attack Timelines</h1>
+    <div className="space-y-6">
+      <PageHeader title="Attack Timelines" subtitle="Reconstructed attack chains per host" />
       <TimeRangeBar />
+      {isLoading && <TableSkeleton rows={4} />}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="space-y-3">
           {items.map((t) => (

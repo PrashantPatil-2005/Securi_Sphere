@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { PageHeader, Panel } from "@/components/ui/Panel";
+import { TableSkeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 
 interface Rule {
   id: string;
@@ -14,33 +18,48 @@ interface Rule {
 }
 
 export default function RulesPage() {
-  const [rules, setRules] = useState<Rule[]>([]);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: "", rule_type: "failed_logins", threshold: 5, window_minutes: 5, severity: "high" });
 
-  const load = () => api<Rule[]>("/api/v1/alert-rules").then(setRules).catch(console.error);
-  useEffect(() => { load(); }, []);
+  const { data: rules = [], isLoading } = useQuery({
+    queryKey: ["alert-rules"],
+    queryFn: () => api<Rule[]>("/api/v1/alert-rules"),
+  });
 
-  async function toggle(id: string, enabled: boolean) {
-    await api(`/api/v1/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: !enabled }) });
-    load();
-  }
+  const { data: meta } = useQuery({
+    queryKey: ["alert-rules-meta"],
+    queryFn: () => api<{ supported_rule_types: string[] }>("/api/v1/alert-rules/meta"),
+  });
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    await api("/api/v1/alert-rules", { method: "POST", body: JSON.stringify(form) });
-    setForm({ name: "", rule_type: "failed_logins", threshold: 5, window_minutes: 5, severity: "high" });
-    load();
-  }
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api(`/api/v1/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: !enabled }) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alert-rules"] }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => api("/api/v1/alert-rules", { method: "POST", body: JSON.stringify(form) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alert-rules"] });
+      setForm({ name: "", rule_type: "failed_logins", threshold: 5, window_minutes: 5, severity: "high" });
+      toast("success", "Rule created");
+    },
+    onError: (e: Error) => toast("error", "Failed", e.message),
+  });
+
+  const ruleTypes = meta?.supported_rule_types ?? ["failed_logins", "brute_force", "high_cpu", "high_memory", "high_disk", "service_failure", "agent_offline"];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Detection Rules</h1>
-      <form onSubmit={create} className="mb-6 p-4 bg-[var(--card)] border border-[var(--border)] rounded-lg grid md:grid-cols-6 gap-3 items-end">
+    <div className="space-y-6">
+      <PageHeader title="Detection Rules" subtitle="Supported rule types only — invalid types are rejected by the API" />
+      {isLoading && <TableSkeleton rows={4} />}
+      <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="mb-6 p-4 panel grid md:grid-cols-6 gap-3 items-end">
         <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
           className="px-3 py-2 bg-black/30 border border-[var(--border)] rounded text-sm" />
         <select value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}
           className="px-3 py-2 bg-black/30 border border-[var(--border)] rounded text-sm">
-          {["failed_logins", "brute_force", "high_cpu", "high_memory", "high_disk", "service_failure", "agent_offline"].map((t) => (
+          {ruleTypes.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
@@ -62,7 +81,7 @@ export default function RulesPage() {
               <span className="text-gray-500 text-sm ml-2">{r.rule_type}</span>
               <span className={`text-xs ml-2 severity-${r.severity}`}>{r.severity}</span>
             </div>
-            <button onClick={() => toggle(r.id, r.enabled)} className={`text-sm px-3 py-1 rounded ${r.enabled ? "bg-green-900/30 text-green-400" : "bg-gray-800 text-gray-500"}`}>
+            <button type="button" onClick={() => toggleMutation.mutate({ id: r.id, enabled: r.enabled })} className={`text-sm px-3 py-1 rounded ${r.enabled ? "bg-success/20 text-success" : "bg-muted/20 text-muted"}`}>
               {r.enabled ? "Enabled" : "Disabled"}
             </button>
           </div>

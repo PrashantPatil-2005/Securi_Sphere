@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Agent
+    participant API
+    participant Validator
+    participant Normalizer
+    participant DB as PostgreSQL
+    participant Queue as Job Queue
+    participant Pipeline as Security Pipeline
+    participant WS as WebSocket
+
+    Agent->>API: POST /agent/events (batch)
+    API->>Validator: validate each event
+    Validator-->>API: ok / errors
+
+    loop Each valid event
+        API->>Normalizer: build_normalized_event()
+        Normalizer-->>API: normalized_event JSON
+        API->>DB: INSERT event
+    end
+
+    API->>Queue: enqueue correlation_pipeline
+    API->>DB: link offenses + broadcast
+    API-->>Agent: 200 {ingested, errors}
+
+    Queue->>Pipeline: run_post_ingestion_pipeline
+    Pipeline->>Pipeline: detection
+    Pipeline->>Pipeline: correlation
+    Pipeline->>Pipeline: timelines
+    Pipeline->>Pipeline: threat scoring
+    Pipeline->>DB: commit results
+    Pipeline->>WS: new_alert broadcasts

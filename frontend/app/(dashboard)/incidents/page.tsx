@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { PageHeader, Panel } from "@/components/ui/Panel";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 
 interface Incident {
   id: string;
@@ -13,57 +16,62 @@ interface Incident {
 }
 
 export default function IncidentsPage() {
-  const [items, setItems] = useState<Incident[]>([]);
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
 
-  const load = () => api<Incident[]>("/api/v1/incidents").then(setItems).catch(console.error);
-  useEffect(() => { load(); }, []);
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ["incidents"],
+    queryFn: () => api<Incident[]>("/api/v1/incidents"),
+  });
 
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    await api("/api/v1/incidents", { method: "POST", body: JSON.stringify({ title, description: desc, severity: "medium" }) });
-    setTitle("");
-    setDesc("");
-    load();
-  }
+  const createMutation = useMutation({
+    mutationFn: () => api("/api/v1/incidents", { method: "POST", body: JSON.stringify({ title, description: desc, severity: "medium" }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      setTitle("");
+      setDesc("");
+    },
+  });
 
-  async function setStatus(id: string, status: string) {
-    await api(`/api/v1/incidents/${id}/status?status=${status}`, { method: "PATCH" });
-    load();
-  }
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api(`/api/v1/incidents/${id}/status?status=${status}`, { method: "PATCH" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["incidents"] }),
+  });
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Incidents</h1>
-      <form onSubmit={create} className="mb-6 p-4 bg-[var(--card)] border border-[var(--border)] rounded-lg flex gap-3">
-        <input required placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
-          className="flex-1 px-3 py-2 bg-black/30 border border-[var(--border)] rounded text-sm" />
-        <input placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)}
-          className="flex-1 px-3 py-2 bg-black/30 border border-[var(--border)] rounded text-sm" />
-        <button type="submit" className="px-4 py-2 bg-blue-600 rounded text-sm">Create</button>
+    <div className="space-y-6">
+      <PageHeader title="Investigations" subtitle="Incident tracking and status workflow" />
+      {isLoading && <TableSkeleton rows={4} />}
+      <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="panel p-4 flex gap-3 flex-wrap">
+        <input required placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} className="input-siem flex-1 min-w-[200px]" />
+        <input placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} className="input-siem flex-1 min-w-[200px]" />
+        <button type="submit" className="btn-primary">Create</button>
       </form>
+      <Panel title="Incidents">
       <div className="space-y-3">
         {items.map((i) => (
-          <div key={i.id} className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-lg">
+          <div key={i.id} className="p-4 border border-border-subtle rounded-lg">
             <div className="flex justify-between items-start">
               <div>
                 <span className={`text-xs severity-${i.severity} uppercase font-bold mr-2`}>{i.severity}</span>
                 <span className="font-medium">{i.title}</span>
-                <span className="text-xs text-gray-500 ml-2 capitalize">{i.status}</span>
-                {i.description && <p className="text-sm text-gray-400 mt-1">{i.description}</p>}
+                <span className="text-xs text-muted ml-2 capitalize">{i.status}</span>
+                {i.description && <p className="text-sm text-muted mt-1">{i.description}</p>}
               </div>
               {i.status === "open" && (
                 <div className="flex gap-2">
-                  <button onClick={() => setStatus(i.id, "investigating")} className="text-xs px-2 py-1 bg-yellow-900/30 text-yellow-400 rounded">Investigate</button>
-                  <button onClick={() => setStatus(i.id, "resolved")} className="text-xs px-2 py-1 bg-green-900/30 text-green-400 rounded">Resolve</button>
+                  <button type="button" onClick={() => statusMutation.mutate({ id: i.id, status: "investigating" })} className="btn-ghost text-xs">Investigate</button>
+                  <button type="button" onClick={() => statusMutation.mutate({ id: i.id, status: "resolved" })} className="btn-ghost text-xs">Resolve</button>
                 </div>
               )}
             </div>
           </div>
         ))}
-        {items.length === 0 && <p className="text-gray-500">No incidents.</p>}
+        {!isLoading && items.length === 0 && <p className="text-muted">No incidents.</p>}
       </div>
+      </Panel>
     </div>
   );
 }

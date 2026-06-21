@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { API_URL } from "./api";
+import { API_URL, fetchWsToken } from "./api";
 
 export type WSMessage = {
   type: string;
@@ -50,30 +50,31 @@ class WebSocketStore {
 
   connect() {
     if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) return;
 
-    const wsUrl = API_URL.replace("http", "ws") + `/api/v1/ws?token=${token}`;
-    const ws = new WebSocket(wsUrl);
-    this.ws = ws;
+    void fetchWsToken().then((token) => {
+      if (!token) return;
+      const wsUrl = API_URL.replace("http", "ws") + `/api/v1/ws?token=${token}`;
+      const ws = new WebSocket(wsUrl);
+      this.ws = ws;
 
-    ws.onopen = () => {
-      this.connected = true;
-      this.notifyStatus();
-    };
-    ws.onclose = () => {
-      this.connected = false;
-      this.notifyStatus();
-      this.reconnectTimer = setTimeout(() => this.connect(), 3000);
-    };
-    ws.onmessage = (ev) => {
-      try {
-        this.emit(JSON.parse(ev.data) as WSMessage);
-      } catch {
-        /* ignore */
-      }
-    };
+      ws.onopen = () => {
+        this.connected = true;
+        this.notifyStatus();
+      };
+      ws.onclose = () => {
+        this.connected = false;
+        this.notifyStatus();
+        this.reconnectTimer = setTimeout(() => this.connect(), 3000);
+      };
+      ws.onmessage = (ev) => {
+        try {
+          this.emit(JSON.parse(ev.data) as WSMessage);
+        } catch {
+          /* ignore */
+        }
+      };
+    });
   }
 
   disconnect() {

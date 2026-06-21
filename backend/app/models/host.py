@@ -17,6 +17,8 @@ class Host(Base):
     ip_address: Mapped[str | None] = mapped_column(INET)
     os_info: Mapped[str | None] = mapped_column(String(255))
     api_key_hash: Mapped[str | None] = mapped_column(String(64))
+    api_key_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    api_key_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     agent_hash: Mapped[str | None] = mapped_column(String(64))
     agent_version: Mapped[str | None] = mapped_column(String(20))
     agent_hash_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

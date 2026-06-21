@@ -8,10 +8,14 @@ from app.models.host import Host
 from app.models.incident import Incident, IncidentAlert, IncidentNote
 from app.models.metric import Metric
 from app.models.mitre import MitreTechnique
-from app.models.notification import NotificationSettings
+from app.models.ingest_dedup import IngestDedup
 from app.models.password_reset import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.role import Role
+from app.models.user import User
+from app.models.user_session import UserSession
+from app.models.agent_nonce import AgentRequestNonce
+from app.models.analytics import AnalyticsDailyStat
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
 from app.models.siem import (
@@ -29,4 +33,5 @@ __all__ = [
     "NotificationSettings", "MitreTechnique", "CorrelationRule", "CorrelationResult",
     "AttackTimeline", "HostThreatScore", "Incident", "IncidentNote", "IncidentAlert",
     "Offense", "OffenseEvent", "HostRiskHistory", "MitreMapping", "SavedSearch", "GeneratedReport",
+    "UserSession", "AgentRequestNonce", "AnalyticsDailyStat", "IngestDedup",
 ]

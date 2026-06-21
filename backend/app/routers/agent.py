@@ -1,25 +1,22 @@
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import host_id_var
 from app.database import get_db
 from app.dependencies import get_host_by_api_key
 from app.models.enrollment import EnrollmentToken
-from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
 from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, EventsBatch, MetricsBatch
 from app.security import generate_api_key, hash_token
 from app.services.agent_integrity import check_agent_integrity
-from app.services.detection import check_service_failure_event, run_detection_for_host
-from app.services.mitre import enrich_event
-from app.services.correlation_engine import run_correlation_engine
-from app.services.timeline import build_timelines
+from app.services.detection import run_detection_for_host
 from app.services.threat_score import calculate_host_scores
-from app.websocket.manager import ws_manager
+from app.pipeline.ingestion import ingest_event_batch
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -27,6 +24,12 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 class HeartbeatPayload(BaseModel):
     agent_hash: str | None = None
     agent_version: str | None = None
+
+
+class EventsIngestResponse(BaseModel):
+    ingested: int
+    deduplicated: int = 0
+    errors: list[str] = []
 
 
 @router.post("/register", response_model=AgentRegisterResponse)
@@ -48,6 +51,8 @@ async def register_agent(body: AgentRegisterRequest, db: AsyncSession = Depends(
     host = host_result.scalar_one()
     api_key = generate_api_key()
     host.api_key_hash = hash_token(api_key)
+    host.api_key_created_at = datetime.now(timezone.utc)
+    host.api_key_revoked_at = None
     host.hostname = body.hostname
     host.ip_address = body.ip_address
     host.os_info = body.os_info
@@ -63,6 +68,7 @@ async def heartbeat(
     host: Host = Depends(get_host_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    host_id_var.set(str(host.id))
     host.last_seen = datetime.now(timezone.utc)
     if host.status == "offline":
         host.status = "online"
@@ -71,54 +77,15 @@ async def heartbeat(
     return {"status": "ok"}
 
 
-@router.post("/events")
+@router.post("/events", response_model=EventsIngestResponse)
 async def ingest_events(
     body: EventsBatch,
     host: Host = Depends(get_host_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
-    for item in body.events:
-        event = Event(
-            host_id=host.id,
-            event_type=item.event_type,
-            severity=item.severity,
-            description=item.description,
-            source=item.source,
-            raw_log=item.raw_log,
-            metadata_=item.metadata,
-            timestamp=item.timestamp,
-        )
-        enrich_event(event)
-        db.add(event)
-        await check_service_failure_event(db, host, item.event_type)
-
-    await db.flush()
-    await run_detection_for_host(db, host)
-    await run_correlation_engine(db, host.id)
-    await build_timelines(db, host.id)
-    await calculate_host_scores(db, host)
-    from app.services.offense_engine import link_event_to_offense
-    from app.models.event import Event as EventModel
-    ingested = (
-        await db.execute(
-            select(EventModel).where(EventModel.host_id == host.id).order_by(EventModel.timestamp.desc()).limit(len(body.events))
-        )
-    ).scalars().all()
-    for event in ingested:
-        await link_event_to_offense(db, event)
-        await ws_manager.broadcast({
-            "type": "security_feed",
-            "data": {
-                "id": str(event.id),
-                "host_id": str(host.id),
-                "host_name": host.name,
-                "event_type": event.event_type,
-                "severity": event.severity,
-                "description": event.description,
-                "timestamp": event.timestamp.isoformat(),
-            },
-        })
-    return {"ingested": len(body.events)}
+    host_id_var.set(str(host.id))
+    ingested, errors, deduplicated = await ingest_event_batch(db, host, body.events)
+    return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
 
 
 @router.post("/metrics")
@@ -127,6 +94,7 @@ async def ingest_metrics(
     host: Host = Depends(get_host_by_api_key),
     db: AsyncSession = Depends(get_db),
 ):
+    host_id_var.set(str(host.id))
     for item in body.metrics:
         db.add(Metric(
             host_id=host.id,
@@ -144,3 +112,16 @@ async def ingest_metrics(
     await run_detection_for_host(db, host)
     await calculate_host_scores(db, host)
     return {"ingested": len(body.metrics)}
+
+
+@router.post("/rotate-key")
+async def rotate_api_key(
+    host: Host = Depends(get_host_by_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rotate agent API key. Old key is immediately revoked."""
+    new_key = generate_api_key()
+    host.api_key_hash = hash_token(new_key)
+    host.api_key_created_at = datetime.now(timezone.utc)
+    host.api_key_revoked_at = None
+    return {"api_key": new_key, "rotated_at": host.api_key_created_at.isoformat()}
