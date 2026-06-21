@@ -1,26 +1,48 @@
+import hashlib
+import hmac
+import json
 import logging
-import time
+import secrets
+from datetime import datetime, timezone
 
-import psutil
 import requests
 
 from agent.buffer import clear_queue, dequeue_all, enqueue
 
 logger = logging.getLogger(__name__)
 
+AGENT_VERSION = "2.0.0"
+SIGNING_ENABLED = False  # Set True when server has AGENT_REQUEST_SIGNING=true
+
+
+def _sign(api_key: str, timestamp: str, nonce: str, body: bytes) -> str:
+    message = f"{timestamp}.{nonce}.".encode() + body
+    return hmac.new(api_key.encode(), message, hashlib.sha256).hexdigest()
+
 
 class Sender:
-    def __init__(self, server_url: str, api_key: str) -> None:
+    def __init__(self, server_url: str, api_key: str, *, signing: bool = False) -> None:
         self.base = server_url.rstrip("/")
         self.api_key = api_key
+        self.signing = signing or SIGNING_ENABLED
         self.session = requests.Session()
-        self.session.headers.update({"X-API-Key": api_key, "Content-Type": "application/json"})
+        self.session.headers.update({"X-API-Key": api_key, "Content-Type": "application/json", "X-Agent-Version": AGENT_VERSION})
 
     def _post(self, path: str, data: dict, buffer_kind: str | None = None) -> bool:
+        body = json.dumps(data, separators=(",", ":"), default=str).encode()
+        headers = {}
+        if self.signing:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            nonce = secrets.token_hex(16)
+            headers = {
+                "X-Agent-Timestamp": ts,
+                "X-Agent-Nonce": nonce,
+                "X-Agent-Signature": _sign(self.api_key, ts, nonce, body),
+            }
         try:
-            r = self.session.post(f"{self.base}{path}", json=data, timeout=15)
+            r = self.session.post(f"{self.base}{path}", data=body, headers=headers, timeout=15)
             if r.status_code == 401:
-                logger.error("Invalid API key")
+                logger.error("Invalid API key or signature rejected")
                 return False
             r.raise_for_status()
             return True

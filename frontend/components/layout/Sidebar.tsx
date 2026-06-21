@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Server,
@@ -27,12 +26,14 @@ import {
   FlaskConical,
   ScrollText,
   Shield,
+  Gauge,
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { useWsConnected } from "@/lib/websocket";
 import { cn } from "@/lib/utils/cn";
+import { BrandLogo } from "./BrandLogo";
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 320;
@@ -56,7 +57,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
-      { href: "/metrics", label: "Metrics", icon: Activity },
+      { href: "/metrics", label: "Metrics", icon: Gauge },
     ],
   },
   {
@@ -85,6 +86,7 @@ const navSections: NavSection[] = [
       { href: "/reports", label: "Reports", icon: FileText },
       { href: "/audit", label: "Audit Log", icon: ScrollText },
       { href: "/simulation", label: "Simulation", icon: FlaskConical },
+      { href: "/system", label: "System Health", icon: Activity },
     ],
   },
 ];
@@ -154,28 +156,28 @@ export function Sidebar() {
     router.push("/login");
   }, [router]);
 
-  const filteredSections = navSections.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => canAccessRoute(role, item.href)),
-  })).filter((s) => s.items.length > 0);
+  const filteredSections = useMemo(
+    () =>
+      navSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => canAccessRoute(role, item.href)),
+        }))
+        .filter((s) => s.items.length > 0),
+    [role],
+  );
 
   return (
-    <motion.aside
-      animate={{ width: effectiveWidth }}
-      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-      className="relative flex flex-col shrink-0 bg-sidebar border-r border-border-subtle h-screen sticky top-0"
+    <aside
+      style={{ width: effectiveWidth }}
+      className={cn(
+        "relative flex flex-col shrink-0 bg-sidebar border-r border-border-subtle h-screen sticky top-0",
+        !isDragging && "transition-[width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
+      )}
     >
       {/* Brand */}
-      <div className={cn("flex items-center gap-3 px-4 py-4 border-b border-border-subtle", collapsed && "justify-center px-2")}>
-        <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center shrink-0">
-          <Shield className="w-4 h-4 text-accent" />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0">
-            <h1 className="text-body font-semibold tracking-tight text-foreground truncate">SecuriSphere</h1>
-            <p className="text-[10px] text-muted uppercase tracking-widest">Security Operations</p>
-          </div>
-        )}
+      <div className={cn("px-4 py-3.5 border-b border-border-subtle", collapsed && "px-2")}>
+        <BrandLogo collapsed={collapsed} />
       </div>
 
       {/* Navigation */}
@@ -254,6 +256,6 @@ export function Sidebar() {
           aria-hidden
         />
       )}
-    </motion.aside>
+    </aside>
   );
 }

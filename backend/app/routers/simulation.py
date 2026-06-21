@@ -2,7 +2,8 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from app.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -35,6 +36,8 @@ async def list_scenarios(user: User = Depends(require_roles("admin"))):
 
 @router.post("/run/{scenario}")
 async def run_simulation(scenario: str, host_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin"))):
+    if not settings.enable_simulation:
+        raise HTTPException(status_code=403, detail="Simulation disabled in this environment")
     if scenario not in SCENARIOS:
         return {"error": "unknown scenario"}
     host = (await db.execute(__import__("sqlalchemy").select(Host).where(Host.id == host_id))).scalar_one()

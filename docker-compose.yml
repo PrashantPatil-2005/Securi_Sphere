@@ -41,6 +41,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       SERVER_URL: ${SERVER_URL:-http://localhost:8000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
+      SEARCH_BACKEND: ${SEARCH_BACKEND:-postgres}
     ports:
       - "8000:8000"
     depends_on:
@@ -48,6 +50,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: securi-opensearch
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - securi_os_data:/usr/share/opensearch/data
 
   frontend:
     build:
@@ -63,3 +77,4 @@ services:
 
 volumes:
   securi_pg_data:
+  securi_os_data:

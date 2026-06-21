@@ -30,6 +30,36 @@ async def global_search(
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
+
+    os_from = tr.from_time.isoformat() if tr.from_time else None
+    os_to = tr.to_time.isoformat() if tr.to_time else None
+    from app.search.opensearch_client import global_search_opensearch
+
+    os_result = await global_search_opensearch(
+        q, exact=exact, from_time=os_from, to_time=os_to, limit=20
+    )
+    if os_result is not None:
+        users: list[User] = []
+        user_with_role = (
+            await db.execute(select(User).options(selectinload(User.role)).where(User.id == user.id))
+        ).scalar_one()
+        if user_with_role.role and user_with_role.role.name == "admin":
+            uq = select(User).limit(20)
+            if exact:
+                uq = uq.where(User.email == q)
+            else:
+                uq = uq.where(or_(User.email.ilike(f"%{q}%"), User.full_name.ilike(f"%{q}%")))
+            users = list((await db.execute(uq)).scalars().all())
+        return {
+            "query": q,
+            "exact": exact,
+            "backend": "opensearch",
+            "hosts": os_result["hosts"],
+            "alerts": os_result["alerts"],
+            "events": os_result["events"],
+            "users": [{"id": str(u.id), "email": u.email, "full_name": u.full_name} for u in users],
+        }
+
     pattern = q if exact else f"%{q}%"
 
     host_q = select(Host).limit(20)
@@ -80,6 +110,7 @@ async def global_search(
     return {
         "query": q,
         "exact": exact,
+        "backend": "postgres",
         "hosts": [{"id": str(h.id), "name": h.name, "hostname": h.hostname, "status": h.status, "ip": str(h.ip_address) if h.ip_address else None} for h in hosts],
         "alerts": [{"id": str(a.id), "title": a.title, "severity": a.severity, "status": a.status} for a in alerts],
         "events": [{"id": str(e.id), "event_type": e.event_type, "description": e.description, "severity": e.severity} for e in events],

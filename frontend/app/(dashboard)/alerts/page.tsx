@@ -1,14 +1,17 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { usePaginatedResource, useHostsList, useAlertStatusMutation } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { VirtualList } from "@/components/VirtualList";
+import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { PageHeader } from "@/components/ui/Panel";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -61,6 +64,10 @@ const AlertRow = memo(function AlertRow({
 
 export default function AlertsPage() {
   const { queryParams } = useTimeRange();
+  const listHeight = useMemo(
+    () => (typeof window !== "undefined" ? Math.min(720, Math.max(360, window.innerHeight - 280)) : 640),
+    [],
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
@@ -80,11 +87,20 @@ export default function AlertsPage() {
   });
   const statusMutation = useAlertStatusMutation();
 
-  const setStatus = (id: string, status: string) => statusMutation.mutate({ id, status });
+  const setStatus = useCallback(
+    (id: string, status: string) => statusMutation.mutate({ id, status }),
+    [statusMutation],
+  );
+
+  const renderAlert = useCallback(
+    (alert: Alert) => <AlertRow alert={alert} onStatus={setStatus} />,
+    [setStatus],
+  );
 
   return (
     <div>
       <PageHeader title="Alerts" subtitle="Detection alerts with workflow status" action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
+      <InvestigationTrail />
       <TimeRangeBar />
       <div className="filter-bar">
         <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">
@@ -110,7 +126,14 @@ export default function AlertsPage() {
           {(data?.items ?? []).length === 0 ? (
             <EmptyState title="No alerts" description="Adjust filters or time range to see detection results." />
           ) : (
-            (data?.items ?? []).map((a) => <AlertRow key={a.id} alert={a} onStatus={setStatus} />)
+            <VirtualList
+              items={data?.items ?? []}
+              rowKey={rowKeyById}
+              renderItem={renderAlert}
+              height={listHeight}
+              estimateSize={96}
+              emptyMessage="No alerts"
+            />
           )}
         </div>
       )}

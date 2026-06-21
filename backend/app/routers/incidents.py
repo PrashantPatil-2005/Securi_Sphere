@@ -40,6 +40,41 @@ class IncidentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class IncidentDetailResponse(IncidentResponse):
+    notes: list[dict] = []
+    alert_ids: list[str] = []
+
+
+@router.get("/{incident_id}", response_model=IncidentDetailResponse)
+async def get_incident(
+    incident_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    inc = (
+        await db.execute(
+            select(Incident)
+            .options(selectinload(Incident.notes), selectinload(Incident.alert_links))
+            .where(Incident.id == incident_id)
+        )
+    ).scalar_one_or_none()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Not found")
+    return IncidentDetailResponse(
+        id=inc.id,
+        title=inc.title,
+        description=inc.description,
+        severity=inc.severity,
+        status=inc.status,
+        host_id=inc.host_id,
+        assigned_to=inc.assigned_to,
+        created_at=inc.created_at,
+        resolved_at=inc.resolved_at,
+        notes=[{"id": str(n.id), "content": n.content, "user_id": str(n.user_id), "created_at": n.created_at.isoformat()} for n in inc.notes],
+        alert_ids=[str(l.alert_id) for l in inc.alert_links],
+    )
+
+
 @router.get("", response_model=list[IncidentResponse])
 async def list_incidents(status: str | None = None, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
     q = select(Incident).order_by(Incident.created_at.desc())

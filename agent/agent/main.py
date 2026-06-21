@@ -7,7 +7,7 @@ from agent.collector.logs import collect_events
 from agent.collector.events import LogTailer
 from agent.collector.metrics import collect_metrics
 from agent.config import load_config
-from agent.sender import Sender
+from agent.sender import Sender, AGENT_VERSION
 from agent.integrity import compute_agent_hash
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -27,7 +27,7 @@ def main() -> None:
         logger.error("Missing config at /etc/securi/config.json")
         raise SystemExit(1)
 
-    sender = Sender(server_url, api_key)
+    sender = Sender(server_url, api_key, signing=bool(config.get("signing_enabled")))
     tailer = LogTailer()
     last_heartbeat = 0.0
     last_metrics = 0.0
@@ -40,7 +40,7 @@ def main() -> None:
         sender.flush_buffer()
 
         if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-            sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": "1.1.0"})
+            sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": AGENT_VERSION})
             last_heartbeat = now
 
         if now - last_metrics >= METRICS_INTERVAL:

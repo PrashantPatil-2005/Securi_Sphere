@@ -120,6 +120,8 @@ async def ingest_event_batch(
 
     for event in ingested:
         await link_event_to_offense(db, event)
+        from app.search.indexer import index_event
+        await index_event(event, host.name)
         await ws_manager.broadcast({
             "type": "security_feed",
             "data": {

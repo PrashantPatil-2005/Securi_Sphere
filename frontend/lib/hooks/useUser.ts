@@ -21,7 +21,7 @@ export function useUser() {
 export function canAccessRoute(role: string | undefined, href: string): boolean {
   if (!role) return true;
   if (role === "admin") return true;
-  const adminOnly = ["/audit", "/simulation", "/rules"];
+  const adminOnly = ["/audit", "/simulation", "/rules", "/system"];
   if (adminOnly.some((p) => href.startsWith(p))) return role === "admin";
   const analystOnly = ["/reports"];
   if (analystOnly.some((p) => href.startsWith(p)) && role === "viewer") return false;

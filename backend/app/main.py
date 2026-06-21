@@ -19,11 +19,12 @@ from app.database import async_session, engine
 from app.jobs.handlers import register_job_handlers
 from app.jobs.queue import job_queue
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import (
     agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents,
     metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
-    simulation, threat_scores, timeline, settings as settings_router,
+    simulation, threat_scores, timeline, settings as settings_router, system,
 )
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -69,16 +70,19 @@ async def analytics_job() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     register_job_handlers()
-    job_queue.start()
+    if not settings.testing:
+        job_queue.start()
     await init_db()
-    scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
-    scheduler.add_job(run_retention, "cron", hour=2, id="retention")
-    scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
-    scheduler.start()
+    if not settings.testing:
+        scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
+        scheduler.add_job(run_retention, "cron", hour=2, id="retention")
+        scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
+        scheduler.start()
     logger.info("SecuriSphere backend started", extra={"environment": settings.environment})
     yield
-    scheduler.shutdown()
-    await job_queue.stop()
+    if not settings.testing:
+        scheduler.shutdown()
+        await job_queue.stop()
     await engine.dispose()
     logger.info("SecuriSphere backend shutdown complete")
 
@@ -88,10 +92,14 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
     description="Production-grade security operations platform backend",
+    docs_url="/docs" if settings.environment == "development" else None,
+    redoc_url="/redoc" if settings.environment == "development" else None,
+    openapi_url="/openapi.json" if settings.environment == "development" else None,
 )
 
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
@@ -125,6 +133,7 @@ app.include_router(offenses.router, prefix=prefix)
 app.include_router(saved_searches.router, prefix=prefix)
 app.include_router(settings_router.router, prefix=prefix)
 app.include_router(notifications.router, prefix=prefix)
+app.include_router(system.router, prefix=prefix)
 
 
 @app.get("/health")

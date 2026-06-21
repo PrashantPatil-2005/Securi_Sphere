@@ -49,7 +49,7 @@ export default function MitrePage() {
               <XAxis type="number" stroke="#888" />
               <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} stroke="#888" />
               <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid #333" }} />
-              <Bar dataKey="count" fill="#60a5fa" />
+              <Bar dataKey="count" fill="#60a5fa" isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </div>

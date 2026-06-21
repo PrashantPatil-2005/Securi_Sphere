@@ -37,6 +37,7 @@ COLUMN_MIGRATIONS = [
     "ALTER TABLE offenses ADD COLUMN IF NOT EXISTS related_hosts JSONB DEFAULT '[]'",
     "ALTER TABLE offenses ADD COLUMN IF NOT EXISTS related_users JSONB DEFAULT '[]'",
     "ALTER TABLE offenses ADD COLUMN IF NOT EXISTS timeline JSONB DEFAULT '[]'",
+    "ALTER TABLE offenses ADD COLUMN IF NOT EXISTS incident_id UUID REFERENCES incidents(id)",
     "ALTER TABLE attack_timelines ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64)",
     "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS slack_enabled BOOLEAN DEFAULT FALSE",
     "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(512)",

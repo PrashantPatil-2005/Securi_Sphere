@@ -30,6 +30,9 @@ class Offense(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("incidents.id"), index=True
+    )
 
     host: Mapped["Host"] = relationship("Host")
     links: Mapped[list["OffenseEvent"]] = relationship("OffenseEvent", back_populates="offense")
