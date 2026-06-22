@@ -46,6 +46,9 @@ const config: Config = {
         lg: "0 8px 24px rgba(0,0,0,0.45)",
         glow: "0 0 20px rgba(76,154,255,0.15)",
       },
+      fontFamily: {
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+      },
       fontSize: {
         display: ["2rem", { lineHeight: "1.2", fontWeight: "700", letterSpacing: "-0.025em" }],
         heading: ["1.25rem", { lineHeight: "1.3", fontWeight: "600", letterSpacing: "-0.015em" }],

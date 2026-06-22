@@ -58,6 +58,8 @@ async def send_slack(webhook_url: str, message: str) -> None:
 
 
 async def notify_alert(db: AsyncSession, alert: Alert) -> None:
+    if alert.severity not in ("critical", "high"):
+        return
     message = f"[{alert.severity.upper()}] {alert.title}\n{alert.description or ''}"
     html_message = f"<b>[{alert.severity.upper()}]</b> {alert.title}\n{alert.description or ''}"
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.email_enabled.is_(True)))
@@ -70,6 +72,25 @@ async def notify_alert(db: AsyncSession, alert: Alert) -> None:
         if settings_row.telegram_chat_id:
             await send_telegram(settings_row.telegram_chat_id, html_message)
 
+    result = await db.execute(select(NotificationSettings).where(NotificationSettings.slack_enabled.is_(True)))
+    for settings_row in result.scalars().all():
+        if settings_row.slack_webhook_url:
+            await send_slack(settings_row.slack_webhook_url, message)
+
+
+async def notify_offense(db: AsyncSession, offense) -> None:
+    if offense.risk_level not in ("critical", "high"):
+        return
+    message = f"[OFFENSE {offense.risk_level.upper()}] #{offense.offense_number} {offense.title}"
+    html_message = f"<b>[OFFENSE {offense.risk_level.upper()}]</b> #{offense.offense_number} {offense.title}"
+    result = await db.execute(select(NotificationSettings).where(NotificationSettings.email_enabled.is_(True)))
+    for settings_row in result.scalars().all():
+        if settings_row.email_address:
+            await send_email(settings_row.email_address, f"Securi Offense: {offense.title}", html_message)
+    result = await db.execute(select(NotificationSettings).where(NotificationSettings.telegram_enabled.is_(True)))
+    for settings_row in result.scalars().all():
+        if settings_row.telegram_chat_id:
+            await send_telegram(settings_row.telegram_chat_id, html_message)
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.slack_enabled.is_(True)))
     for settings_row in result.scalars().all():
         if settings_row.slack_webhook_url:

@@ -13,6 +13,7 @@ import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualList } from "@/components/VirtualList";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { PageHeader } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Panel";
@@ -77,7 +78,7 @@ export default function AlertsPage() {
   const queryFilters = { ...filters, q: debouncedQ, rule_name: debouncedRule };
 
   const { data: hosts = [] } = useHostsList();
-  const { data, isLoading, isFetching } = usePaginatedResource<Alert>({
+  const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Alert>({
     endpoint: "/api/v1/alerts",
     queryKey: "alerts",
     page,
@@ -121,6 +122,8 @@ export default function AlertsPage() {
       </div>
       {isLoading ? (
         <TableSkeleton rows={6} />
+      ) : isError ? (
+        <QueryError onRetry={() => refetch()} />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
           {(data?.items ?? []).length === 0 ? (

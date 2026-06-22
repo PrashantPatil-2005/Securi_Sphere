@@ -66,3 +66,16 @@ CO_OCCURRENCE_RULES = [
         "is_system": True,
     },
 ]
+
+CROSS_HOST_RULES = [
+    {
+        "name": "Cross-Host SSH Brute Force",
+        "description": "[cross_host] Same IP fails SSH on 2+ hosts within 10 minutes",
+        "event_sequence": ["ssh_login_failure"],
+        "window_minutes": 10,
+        "min_occurrences": {"ssh_login_failure": 2, "hosts": 2},
+        "severity": "high",
+        "confidence_base": 0.72,
+        "is_system": True,
+    },
+]

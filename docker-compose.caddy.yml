@@ -1,0 +1,20 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: securi-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      SECURI_DOMAIN: ${SECURI_DOMAIN:-localhost}
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  caddy_data:
+  caddy_config:

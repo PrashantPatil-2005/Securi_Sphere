@@ -1,19 +1,20 @@
 from datetime import datetime, timezone
 from pydantic import BaseModel
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import host_id_var
 from app.database import get_db
-from app.dependencies import get_host_by_api_key
+from app.dependencies_agent import AuthenticatedAgent, get_authenticated_agent
 from app.models.enrollment import EnrollmentToken
 from app.models.host import Host
 from app.models.metric import Metric
 from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, EventsBatch, MetricsBatch
 from app.security import generate_api_key, hash_token
 from app.services.agent_integrity import check_agent_integrity
+from app.services.audit import log_audit
 from app.services.detection import run_detection_for_host
 from app.services.threat_score import calculate_host_scores
 from app.pipeline.ingestion import ingest_event_batch
@@ -49,6 +50,8 @@ async def register_agent(body: AgentRegisterRequest, db: AsyncSession = Depends(
 
     host_result = await db.execute(select(Host).where(Host.id == enrollment.host_id))
     host = host_result.scalar_one()
+
+    was_enrolled = bool(host.api_key_hash)
     api_key = generate_api_key()
     host.api_key_hash = hash_token(api_key)
     host.api_key_created_at = datetime.now(timezone.utc)
@@ -59,42 +62,61 @@ async def register_agent(body: AgentRegisterRequest, db: AsyncSession = Depends(
     host.status = "online"
     host.last_seen = datetime.now(timezone.utc)
     enrollment.used_at = datetime.now(timezone.utc)
+
+    if was_enrolled:
+        await log_audit(
+            db,
+            "agent_reregister",
+            resource_type="host",
+            resource_id=host.id,
+            details={"hostname": body.hostname},
+        )
+
+    if body.agent_hash:
+        await check_agent_integrity(db, host, body.agent_hash, body.agent_version)
+
     return AgentRegisterResponse(api_key=api_key, host_id=host.id)
 
 
 @router.post("/heartbeat")
 async def heartbeat(
-    body: HeartbeatPayload | None = None,
-    host: Host = Depends(get_host_by_api_key),
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
     db: AsyncSession = Depends(get_db),
 ):
+    host = auth.host
     host_id_var.set(str(host.id))
     host.last_seen = datetime.now(timezone.utc)
-    if host.status == "offline":
+
+    payload = HeartbeatPayload.model_validate(auth.parse_json()) if auth.raw_body else HeartbeatPayload()
+    if host.status in ("offline", "critical", "warning"):
         host.status = "online"
-    if body:
-        await check_agent_integrity(db, host, body.agent_hash, body.agent_version)
+    if payload.agent_hash or payload.agent_version:
+        await check_agent_integrity(db, host, payload.agent_hash, payload.agent_version)
     return {"status": "ok"}
 
 
 @router.post("/events", response_model=EventsIngestResponse)
 async def ingest_events(
-    body: EventsBatch,
-    host: Host = Depends(get_host_by_api_key),
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
     db: AsyncSession = Depends(get_db),
 ):
+    host = auth.host
     host_id_var.set(str(host.id))
+    body = EventsBatch.model_validate_json(auth.raw_body)
     ingested, errors, deduplicated = await ingest_event_batch(db, host, body.events)
+    if ingested:
+        await run_detection_for_host(db, host)
     return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
 
 
 @router.post("/metrics")
 async def ingest_metrics(
-    body: MetricsBatch,
-    host: Host = Depends(get_host_by_api_key),
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
     db: AsyncSession = Depends(get_db),
 ):
+    host = auth.host
     host_id_var.set(str(host.id))
+    body = MetricsBatch.model_validate_json(auth.raw_body)
     for item in body.metrics:
         db.add(Metric(
             host_id=host.id,
@@ -108,6 +130,8 @@ async def ingest_metrics(
             recorded_at=item.recorded_at,
         ))
     host.last_seen = datetime.now(timezone.utc)
+    if host.status in ("offline", "critical", "warning"):
+        host.status = "online"
     await db.flush()
     await run_detection_for_host(db, host)
     await calculate_host_scores(db, host)
@@ -116,10 +140,11 @@ async def ingest_metrics(
 
 @router.post("/rotate-key")
 async def rotate_api_key(
-    host: Host = Depends(get_host_by_api_key),
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
     db: AsyncSession = Depends(get_db),
 ):
     """Rotate agent API key. Old key is immediately revoked."""
+    host = auth.host
     new_key = generate_api_key()
     host.api_key_hash = hash_token(new_key)
     host.api_key_created_at = datetime.now(timezone.utc)

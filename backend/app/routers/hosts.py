@@ -11,6 +11,8 @@ from app.database import get_db
 from app.dependencies import client_ip, get_current_user, require_roles
 from app.models.enrollment import EnrollmentToken
 from app.models.host import Host
+from app.models.siem import HostRiskHistory
+from app.models.threat_score import HostThreatScore
 from app.models.user import User
 from app.schemas.host import EnrollmentTokenResponse, HostCreate, HostListResponse, HostResponse
 from app.security import generate_enrollment_token, hash_token
@@ -35,7 +37,8 @@ def _host_row(host, score, alert_count) -> HostResponse:
     return HostResponse(
         id=host.id, name=host.name, hostname=host.hostname,
         ip_address=str(host.ip_address) if host.ip_address else None,
-        os_info=host.os_info, status=host.status, last_seen=host.last_seen,
+        os_info=host.os_info, status=host.status, enrolled=bool(host.api_key_hash),
+        last_seen=host.last_seen,
         created_at=host.created_at, risk_score=score, alert_count=alert_count or 0,
     )
 
@@ -103,7 +106,69 @@ async def get_host(host_id: UUID, db: AsyncSession = Depends(get_db), user: User
     host = result.scalar_one_or_none()
     if not host:
         raise HTTPException(status_code=404, detail="Host not found")
-    return _host_row(host, None, 0)
+    score_row = (
+        await db.execute(select(HostThreatScore).where(HostThreatScore.host_id == host_id))
+    ).scalar_one_or_none()
+    return _host_row(host, score_row.score if score_row else None, 0)
+
+
+class RiskFactorItem(BaseModel):
+    name: str
+    value: float
+    weight: float
+
+
+class RiskHistoryItem(BaseModel):
+    risk_score: int
+    health_score: int
+    recorded_at: datetime
+
+
+class HostRiskResponse(BaseModel):
+    host_id: str
+    host_name: str
+    score: int
+    health_score: int
+    factors: dict[str, float]
+    factor_breakdown: list[RiskFactorItem]
+    history: list[RiskHistoryItem]
+
+
+@router.get("/{host_id}/risk", response_model=HostRiskResponse)
+async def get_host_risk(host_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    host = (await db.execute(select(Host).where(Host.id == host_id))).scalar_one_or_none()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+    score_row = (
+        await db.execute(select(HostThreatScore).where(HostThreatScore.host_id == host_id))
+    ).scalar_one_or_none()
+    factors = dict(score_row.factors or {}) if score_row else {}
+    total = sum(factors.values()) or 1
+    breakdown = [
+        RiskFactorItem(name=k.replace("_", " ").title(), value=v, weight=round(v / total * 100, 1))
+        for k, v in sorted(factors.items(), key=lambda x: -x[1])
+    ]
+    history_rows = (
+        await db.execute(
+            select(HostRiskHistory)
+            .where(HostRiskHistory.host_id == host_id)
+            .order_by(HostRiskHistory.recorded_at.desc())
+            .limit(30)
+        )
+    ).scalars().all()
+    history = [
+        RiskHistoryItem(risk_score=h.risk_score, health_score=h.health_score, recorded_at=h.recorded_at)
+        for h in reversed(history_rows)
+    ]
+    return HostRiskResponse(
+        host_id=str(host.id),
+        host_name=host.name,
+        score=score_row.score if score_row else 0,
+        health_score=score_row.health_score if score_row else 100,
+        factors=factors,
+        factor_breakdown=breakdown,
+        history=history,
+    )
 
 
 @router.delete("/{host_id}")
@@ -126,9 +191,15 @@ async def create_enrollment_token(host_id: UUID, request: Request, db: AsyncSess
     token = generate_enrollment_token()
     expires = datetime.now(timezone.utc) + timedelta(hours=24)
     db.add(EnrollmentToken(host_id=host.id, token_hash=hash_token(token), expires_at=expires, created_by=user.id))
-    install_command = f"curl -s {settings.server_url}/install.sh | sudo bash -s -- --token {token} --server {settings.server_url}"
+    install_command = (
+        f"curl -fsSL {settings.server_url}/install.sh | sudo bash -s -- "
+        f"--token {token} --server {settings.server_url}"
+    )
     await log_audit(db, "enrollment_token_create", user_id=user.id, resource_type="host", resource_id=host_id, ip_address=client_ip(request))
-    return EnrollmentTokenResponse(token=token, expires_at=expires, install_command=install_command)
+    return EnrollmentTokenResponse(
+        token=token, expires_at=expires, install_command=install_command,
+        host_id=host.id, host_name=host.name,
+    )
 
 
 @router.get("/{host_id}/enrollment-tokens", response_model=list[TokenListItem])

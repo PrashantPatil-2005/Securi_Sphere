@@ -171,7 +171,7 @@ export function TopNav({ onMenuClick, showMenu }: TopNavProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex items-center gap-4 px-4 lg:px-6 h-14 bg-card/80 backdrop-blur-md border-b border-border-subtle shrink-0">
+    <header className="sticky top-0 z-40 flex items-center gap-4 px-4 lg:px-6 h-14 glass-nav border-b shrink-0">
       {showMenu && (
         <button onClick={onMenuClick} className="p-2 rounded-md text-muted hover:text-foreground lg:hidden" aria-label="Open menu">
           <Menu className="w-5 h-5" />

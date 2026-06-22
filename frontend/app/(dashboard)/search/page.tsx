@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
+import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { PageHeader, EmptyState, Panel } from "@/components/ui/Panel";
@@ -26,11 +27,24 @@ interface GlobalResult {
   users: { id: string; email: string; full_name: string | null }[];
 }
 
-const EXAMPLES = ["host:web01 severity:critical", "event_type:failed_login date:last_30_days", "username:root"];
+const FALLBACK_EXAMPLES = ["event_type:ssh_login_failure", "severity:critical", "username:root"];
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <SearchPageContent />
+    </Suspense>
+  );
+}
+
+function SearchPageContent() {
   const searchParams = useSearchParams();
   const { queryParams } = useTimeRange();
+  const { data: hosts = [] } = useHostsList();
+  const examples = hosts[0]
+    ? [`host:${hosts[0].name} severity:critical`, "event_type:ssh_login_failure", "username:root"]
+    : FALLBACK_EXAMPLES;
+  const siemHint = hosts[0] ? `host:${hosts[0].name} severity:critical` : "event_type:ssh_login_failure severity:critical";
   const [mode, setMode] = useState<"siem" | "global">("siem");
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
@@ -84,7 +98,7 @@ export default function SearchPage() {
     <div>
       <PageHeader
         title="Search"
-        subtitle={mode === "siem" ? "SIEM query language — host:web01 severity:critical" : "Global search across hosts, alerts, and events"}
+        subtitle={mode === "siem" ? `SIEM query language — e.g. ${siemHint}` : "Global search across hosts, alerts, and events"}
       />
       <TimeRangeBar />
       <div className="flex gap-2 mb-4">
@@ -95,14 +109,14 @@ export default function SearchPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={mode === "siem" ? "host:web01 severity:critical" : "Search keyword…"}
+          placeholder={mode === "siem" ? siemHint : "Search keyword…"}
           className="input-siem flex-1 font-mono"
         />
         <button type="submit" className="btn-primary">Run</button>
       </form>
       {mode === "siem" && (
         <div className="flex flex-wrap gap-2 mb-4">
-          {EXAMPLES.map((ex) => (
+          {examples.map((ex) => (
             <button key={ex} type="button" onClick={() => { setQ(ex); setSubmitted(ex); }} className="btn-ghost text-xs">{ex}</button>
           ))}
         </div>

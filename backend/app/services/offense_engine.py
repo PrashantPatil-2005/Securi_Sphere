@@ -92,6 +92,9 @@ async def find_or_create_offense(
     )
     db.add(offense)
     await db.flush()
+    if risk_level in ("critical", "high"):
+        from app.jobs.queue import job_queue
+        await job_queue.enqueue("notify_offense", {"offense_id": str(offense.id)})
     return offense
 
 

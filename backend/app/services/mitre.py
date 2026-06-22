@@ -16,6 +16,26 @@ MITRE_SEED = [
     {"technique_id": "T1548.003", "tactic": "Privilege Escalation", "name": "Sudo and Sudo Caching"},
     {"technique_id": "T1489", "tactic": "Impact", "name": "Service Stop"},
     {"technique_id": "T1569.002", "tactic": "Execution", "name": "System Services"},
+    {"technique_id": "T1021.004", "tactic": "Lateral Movement", "name": "SSH"},
+    {"technique_id": "T1059.004", "tactic": "Execution", "name": "Unix Shell"},
+    {"technique_id": "T1082", "tactic": "Discovery", "name": "System Information Discovery"},
+    {"technique_id": "T1046", "tactic": "Discovery", "name": "Network Service Discovery"},
+    {"technique_id": "T1018", "tactic": "Discovery", "name": "Remote System Discovery"},
+    {"technique_id": "T1036", "tactic": "Defense Evasion", "name": "Masquerading"},
+    {"technique_id": "T1070.004", "tactic": "Defense Evasion", "name": "Indicator Removal: File Deletion"},
+    {"technique_id": "T1053.003", "tactic": "Persistence", "name": "Cron"},
+    {"technique_id": "T1543.002", "tactic": "Persistence", "name": "Systemd Service"},
+    {"technique_id": "T1003.008", "tactic": "Credential Access", "name": "OS Credential Dumping: /etc/passwd"},
+    {"technique_id": "T1098", "tactic": "Persistence", "name": "Account Manipulation"},
+    {"technique_id": "T1136.001", "tactic": "Persistence", "name": "Create Account: Local Account"},
+    {"technique_id": "T1027", "tactic": "Defense Evasion", "name": "Obfuscated Files or Information"},
+    {"technique_id": "T1496", "tactic": "Impact", "name": "Resource Hijacking"},
+    {"technique_id": "T1498", "tactic": "Impact", "name": "Network Denial of Service"},
+    {"technique_id": "T1190", "tactic": "Initial Access", "name": "Exploit Public-Facing Application"},
+    {"technique_id": "T1133", "tactic": "Persistence", "name": "External Remote Services"},
+    {"technique_id": "T1040", "tactic": "Credential Access", "name": "Network Sniffing"},
+    {"technique_id": "T1204.002", "tactic": "Execution", "name": "User Execution: Malicious File"},
+    {"technique_id": "T1562.001", "tactic": "Defense Evasion", "name": "Disable or Modify Tools"},
 ]
 
 
@@ -25,10 +45,12 @@ async def seed_mitre(db) -> None:
     from app.models.mitre import MitreTechnique
     from app.models.siem import MitreMapping
 
-    if (await db.execute(select(func.count()).select_from(MitreTechnique))).scalar_one() > 0:
-        pass
-    else:
-        for m in MITRE_SEED:
+    existing_ids = {
+        t.technique_id
+        for t in (await db.execute(select(MitreTechnique.technique_id))).scalars().all()
+    }
+    for m in MITRE_SEED:
+        if m["technique_id"] not in existing_ids:
             db.add(MitreTechnique(**m, description=m["name"]))
 
     if (await db.execute(select(func.count()).select_from(MitreMapping))).scalar_one() == 0:

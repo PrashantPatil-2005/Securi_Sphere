@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { GlassPanel } from "@/components/ui/GlassPanel";
+import { PageHeader } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { CHART_THEME, axisProps } from "@/lib/design/chartTheme";
 
 interface Technique {
   technique_id: string;
@@ -19,58 +24,88 @@ const TACTIC_ORDER = [
   "Defense Evasion", "Discovery", "Lateral Movement", "Credential Access", "Impact",
 ];
 
+interface MatrixResponse {
+  tactics: Record<string, Technique[]>;
+  coverage_pct: number;
+  tactic_coverage: Record<string, number>;
+  total_techniques: number;
+}
+
 export default function MitrePage() {
   const { queryParams } = useTimeRange();
-  const [tactics, setTactics] = useState<Record<string, Technique[]>>({});
-  const [stats, setStats] = useState<{ tactic: string; technique_id: string; count: number }[]>([]);
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["mitre-matrix", queryParams],
+    queryFn: () => api<MatrixResponse>(`/api/v1/mitre/matrix${buildQuery({}, queryParams)}`),
+  });
 
-  useEffect(() => {
-    const q = buildQuery({}, queryParams);
-    api<{ tactics: Record<string, Technique[]> }>(`/api/v1/mitre/matrix${q}`).then((r) => setTactics(r.tactics)).catch(console.error);
-    api<{ techniques: { tactic: string; technique_id: string; count: number }[] }>(`/api/v1/siem/mitre${q}`).then((r) => setStats(r.techniques)).catch(console.error);
-  }, [queryParams]);
-
+  const tactics = data?.tactics ?? {};
   const tacticOrder = TACTIC_ORDER.filter((t) => tactics[t]).concat(
     Object.keys(tactics).filter((t) => !TACTIC_ORDER.includes(t)),
   );
-  const chartData = stats.slice(0, 15).map((t) => ({ name: t.technique_id, count: t.count }));
+  const chartData = Object.entries(data?.tactic_coverage ?? {}).map(([tactic, pct]) => ({
+    name: tactic.split(" ")[0],
+    coverage: pct,
+  }));
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-2">MITRE ATT&CK Dashboard</h1>
-      <p className="text-gray-500 text-sm mb-4">Map security events to MITRE ATT&CK tactics and techniques</p>
+    <div className="space-y-6">
+      <PageHeader title="MITRE ATT&CK" subtitle="Detection coverage heatmap across tactics and techniques" />
       <TimeRangeBar />
-
-      {chartData.length > 0 && (
-        <div className="p-4 mb-6 bg-[var(--card)] border border-[var(--border)] rounded-lg">
-          <h2 className="font-semibold mb-4">Top Techniques by Event Count</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} layout="vertical">
-              <XAxis type="number" stroke="#888" />
-              <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} stroke="#888" />
-              <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid #333" }} />
-              <Bar dataKey="count" fill="#60a5fa" isAnimationActive={false} />
-            </BarChart>
-          </ResponsiveContainer>
+      {isLoading && <TableSkeleton rows={6} />}
+      {isError && <QueryError onRetry={() => refetch()} />}
+      {data && (
+        <div className="grid md:grid-cols-3 gap-4">
+          <GlassPanel className="text-center">
+            <p className="text-3xl font-semibold tabular-nums text-accent">{data.coverage_pct}%</p>
+            <p className="text-caption normal-case text-muted">Overall coverage</p>
+          </GlassPanel>
+          <GlassPanel className="text-center md:col-span-2">
+            <p className="text-sm text-muted">{data.total_techniques} techniques seeded · heat intensity = event matches in range</p>
+          </GlassPanel>
         </div>
       )}
-
+      {chartData.length > 0 && (
+        <GlassPanel>
+          <h2 className="text-subheading mb-4">Coverage by tactic</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData}>
+              <XAxis dataKey="name" {...axisProps} tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} {...axisProps} />
+              <Tooltip {...CHART_THEME.tooltip} />
+              <Bar dataKey="coverage" fill={CHART_THEME.colors.primary} isAnimationActive={false} name="Coverage %" />
+            </BarChart>
+          </ResponsiveContainer>
+        </GlassPanel>
+      )}
       <div className="overflow-x-auto">
         <div className="flex gap-3 min-w-max pb-4">
-          {tacticOrder.map((tactic) => (
-            <div key={tactic} className="w-48 shrink-0">
-              <div className="bg-blue-900/40 text-blue-300 text-xs font-bold px-2 py-2 rounded-t border border-[var(--border)]">{tactic}</div>
-              <div className="border border-t-0 border-[var(--border)] rounded-b min-h-[120px] p-2 space-y-1">
-                {(tactics[tactic] || []).map((t) => (
-                  <div key={t.technique_id} className={`text-xs p-2 rounded border ${t.count > 0 ? "bg-red-900/30 border-red-800" : "bg-[var(--card)] border-[var(--border)]"}`} title={t.name}>
-                    <div className="font-mono text-gray-400">{t.technique_id}</div>
-                    <div className="truncate">{t.name}</div>
-                    {t.count > 0 && <div className="text-red-400 mt-1">{t.count} events</div>}
-                  </div>
-                ))}
+          {tacticOrder.map((tactic) => {
+            const items = tactics[tactic] || [];
+            const cov = data?.tactic_coverage?.[tactic] ?? 0;
+            return (
+              <div key={tactic} className="w-48 shrink-0">
+                <div className="glass-panel px-2 py-2 rounded-t text-xs font-semibold flex justify-between gap-1">
+                  <span className="truncate">{tactic}</span>
+                  <span className="text-accent tabular-nums">{cov}%</span>
+                </div>
+                <div className="border border-t-0 border-border-subtle rounded-b min-h-[120px] p-2 space-y-1 bg-glass/30">
+                  {items.map((t) => (
+                    <div
+                      key={t.technique_id}
+                      className={`text-xs p-2 rounded border ${
+                        t.count > 5 ? "bg-danger/20 border-danger/40" : t.count > 0 ? "bg-warning/15 border-warning/30" : "glass-panel border-border-subtle"
+                      }`}
+                      title={t.name}
+                    >
+                      <div className="font-mono text-muted">{t.technique_id}</div>
+                      <div className="truncate">{t.name}</div>
+                      {t.count > 0 && <div className="text-danger mt-1 tabular-nums">{t.count} events</div>}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

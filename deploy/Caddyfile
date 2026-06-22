@@ -1,0 +1,30 @@
+# Replace securi.example.com with your domain or use :80 for LAN-only HTTP.
+# Place TLS certs via Caddy automatic HTTPS, or use your own.
+
+{$SECURI_DOMAIN:localhost} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle /docs* {
+		reverse_proxy backend:8000
+	}
+
+	handle /openapi.json {
+		reverse_proxy backend:8000
+	}
+
+	handle /agent-bundle.tar.gz {
+		reverse_proxy backend:8000
+	}
+
+	handle /install.sh {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

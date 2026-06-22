@@ -10,6 +10,7 @@ from app.models.alert_rule import AlertRule
 from app.models.event import Event
 from app.models.host import Host
 from app.models.metric import Metric
+from app.services.maintenance import is_host_in_maintenance
 from app.services.notifications import notify_alert
 from app.websocket.manager import ws_manager
 
@@ -99,6 +100,7 @@ async def create_alert(
 
 
 async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
+    in_maint = await is_host_in_maintenance(db, host.id)
     rules_result = await db.execute(select(AlertRule).where(AlertRule.enabled.is_(True)))
     rules = {r.rule_type: r for r in rules_result.scalars().all()}
     now = datetime.now(timezone.utc)
@@ -138,18 +140,18 @@ async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
     )
     recent_metrics = list(metrics_result.scalars().all())
 
-    if recent_metrics and "high_cpu" in rules:
+    if recent_metrics and "high_cpu" in rules and not in_maint:
         rule = rules["high_cpu"]
         if len(recent_metrics) >= 3 and all(m.cpu_percent and m.cpu_percent > (rule.threshold or 90) for m in recent_metrics[:3]):
             await create_alert(db, host.id, "High CPU Usage", f"CPU above {rule.threshold}%", rule.severity, rule.id)
 
-    if recent_metrics and "high_memory" in rules:
+    if recent_metrics and "high_memory" in rules and not in_maint:
         rule = rules["high_memory"]
         latest = recent_metrics[0]
         if latest.memory_percent and latest.memory_percent > (rule.threshold or 90):
             await create_alert(db, host.id, "High Memory Usage", f"Memory at {latest.memory_percent:.1f}%", rule.severity, rule.id)
 
-    if recent_metrics and "high_disk" in rules:
+    if recent_metrics and "high_disk" in rules and not in_maint:
         rule = rules["high_disk"]
         latest = recent_metrics[0]
         if latest.disk_percent and latest.disk_percent > (rule.threshold or 85):
@@ -172,6 +174,17 @@ async def update_host_statuses(db: AsyncSession) -> None:
 
     for host in hosts:
         old_status = host.status
+
+        # Hosts awaiting agent install stay offline — no false critical/offline alerts.
+        if not host.api_key_hash:
+            if host.status != "offline":
+                host.status = "offline"
+                await ws_manager.broadcast({
+                    "type": "host_status",
+                    "data": {"id": str(host.id), "status": host.status, "name": host.name},
+                })
+            continue
+
         open_alerts = await db.execute(
             select(Alert).where(Alert.host_id == host.id, Alert.status == "open")
         )
@@ -179,7 +192,8 @@ async def update_host_statuses(db: AsyncSession) -> None:
         critical_alerts = [a for a in alerts if a.severity == "critical"]
         high_alerts = [a for a in alerts if a.severity in ("high", "medium")]
 
-        offline = not host.last_seen or (now - host.last_seen).total_seconds() > 90
+        stale = not host.last_seen or (now - host.last_seen).total_seconds() > 90
+        offline = stale
 
         if offline or critical_alerts:
             host.status = "critical" if critical_alerts or offline else "offline"
@@ -187,11 +201,12 @@ async def update_host_statuses(db: AsyncSession) -> None:
             offline_rule = rules_result.scalar_one_or_none()
             open_rule_ids = {a.rule_id for a in alerts if a.rule_id}
             if offline and offline_rule and offline_rule.id not in open_rule_ids:
-                await create_alert(
-                    db, host.id, "Agent Offline",
-                    f"Host {host.name} has not sent a heartbeat",
-                    offline_rule.severity, offline_rule.id,
-                )
+                if not await is_host_in_maintenance(db, host.id):
+                    await create_alert(
+                        db, host.id, "Agent Offline",
+                        f"Host {host.name} has not sent a heartbeat",
+                        offline_rule.severity, offline_rule.id,
+                    )
         elif high_alerts:
             host.status = "warning"
         else:

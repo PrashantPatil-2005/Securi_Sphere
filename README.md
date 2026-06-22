@@ -50,15 +50,28 @@ Dashboard: http://localhost:3000
 
 ### 5. Install Agent (Ubuntu VM)
 
+See **[docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md)** for the full guide (add host → enroll → install → verify).
+
+Quick install:
+
 ```bash
-curl -s http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROLL_TOKEN --server http://YOUR_SERVER_IP:8000
+curl -fsSL http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROLL_TOKEN --server http://YOUR_SERVER_IP:8000
 ```
 
 ## Documentation
 
 - docs/API.md - API reference
 - docs/SCHEMA.md - Database schema
-- docs/DEPLOYMENT.md - LAN and internet deployment
+- docs/DEPLOYMENT.md - **Linux hosting, HTTPS, agents, and demo walkthrough**
+- docs/AGENT_INSTALL.md - **Add hosts, install agents, how monitoring works**
+
+### Deploy on Linux (quick)
+
+```bash
+chmod +x scripts/deploy-linux.sh
+./scripts/deploy-linux.sh YOUR_SERVER_IP
+# Dashboard: http://YOUR_SERVER_IP:3000
+```
 
 
 ## Advanced Features

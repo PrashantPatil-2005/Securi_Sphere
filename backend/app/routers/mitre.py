@@ -43,7 +43,28 @@ async def get_matrix(
         q = q.where(clause)
     events = list((await db.execute(q.limit(10000))).scalars().all())
     techniques = get_matrix_summary(events)
+    all_techniques = list((await db.execute(select(MitreTechnique))).scalars().all())
+    for t in all_techniques:
+        if t.technique_id not in techniques:
+            techniques[t.technique_id] = {
+                "technique_id": t.technique_id,
+                "tactic": t.tactic,
+                "name": t.name,
+                "count": 0,
+            }
     tactics = {}
     for t in techniques.values():
         tactics.setdefault(t["tactic"], []).append(t)
-    return {"tactics": tactics, "techniques": list(techniques.values())}
+    detected = sum(1 for t in techniques.values() if t["count"] > 0)
+    coverage_pct = round(detected / max(len(all_techniques), 1) * 100, 1)
+    tactic_coverage = {}
+    for tactic, items in tactics.items():
+        with_events = sum(1 for i in items if i["count"] > 0)
+        tactic_coverage[tactic] = round(with_events / max(len(items), 1) * 100, 1)
+    return {
+        "tactics": tactics,
+        "techniques": list(techniques.values()),
+        "coverage_pct": coverage_pct,
+        "tactic_coverage": tactic_coverage,
+        "total_techniques": len(all_techniques),
+    }

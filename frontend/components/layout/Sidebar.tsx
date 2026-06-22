@@ -97,10 +97,12 @@ const NavLink = memo(function NavLink({
   icon: Icon,
   active,
   collapsed,
-}: NavItem & { active: boolean; collapsed: boolean }) {
+  onNavigate,
+}: NavItem & { active: boolean; collapsed: boolean; onNavigate?: () => void }) {
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       className={cn("nav-link", active ? "nav-link-active" : "nav-link-idle", collapsed && "justify-center px-2")}
       title={collapsed ? label : undefined}
     >
@@ -110,7 +112,13 @@ const NavLink = memo(function NavLink({
   );
 });
 
-export function Sidebar() {
+interface SidebarProps {
+  className?: string;
+  drawer?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const connected = useWsConnected();
@@ -120,7 +128,9 @@ export function Sidebar() {
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
-  const effectiveWidth = collapsed ? COLLAPSED_WIDTH : width;
+  const effectiveWidth = drawer ? DEFAULT_WIDTH : collapsed ? COLLAPSED_WIDTH : width;
+  const isCollapsed = drawer ? false : collapsed;
+  const handleNavigate = drawer ? onClose : undefined;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (collapsed) return;
@@ -171,20 +181,21 @@ export function Sidebar() {
     <aside
       style={{ width: effectiveWidth }}
       className={cn(
-        "relative flex flex-col shrink-0 bg-sidebar border-r border-border-subtle h-screen sticky top-0",
-        !isDragging && "transition-[width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "relative flex flex-col shrink-0 glass-nav border-r h-screen sticky top-0",
+        !isDragging && !drawer && "transition-[width] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        className,
       )}
     >
       {/* Brand */}
-      <div className={cn("px-4 py-3.5 border-b border-border-subtle", collapsed && "px-2")}>
-        <BrandLogo collapsed={collapsed} />
+      <div className={cn("px-4 py-3.5 border-b border-border-subtle", isCollapsed && "px-2")}>
+        <BrandLogo collapsed={isCollapsed} />
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-2 space-y-4 overflow-y-auto overflow-x-hidden">
         {filteredSections.map((section) => (
           <div key={section.title}>
-            {!collapsed && (
+            {!isCollapsed && (
               <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/70">
                 {section.title}
               </p>
@@ -195,24 +206,25 @@ export function Sidebar() {
                   key={item.href}
                   {...item}
                   active={pathname === item.href}
-                  collapsed={collapsed}
+                  collapsed={isCollapsed}
+                  onNavigate={handleNavigate}
                 />
               ))}
             </div>
           </div>
         ))}
-        {!collapsed && (
+        {!isCollapsed && (
           <div>
             <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/70">System</p>
-            <NavLink href="/settings" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} collapsed={false} />
-            <NavLink href="/profile" label="Profile" icon={User} active={pathname.startsWith("/profile")} collapsed={false} />
+            <NavLink href="/settings" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} collapsed={false} onNavigate={handleNavigate} />
+            <NavLink href="/profile" label="Profile" icon={User} active={pathname.startsWith("/profile")} collapsed={false} onNavigate={handleNavigate} />
           </div>
         )}
       </nav>
 
       {/* Bottom section */}
       <div className="p-2 border-t border-border-subtle space-y-1">
-        {!collapsed && (
+        {!isCollapsed && (
           <div className="px-3 py-2 text-[11px] text-muted flex items-center gap-2">
             <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", connected ? "bg-success" : "bg-danger")} />
             {connected ? "Live feed connected" : "Reconnecting…"}
@@ -220,33 +232,35 @@ export function Sidebar() {
         )}
         <button
           onClick={toggleTheme}
-          className={cn("nav-link nav-link-idle w-full", collapsed && "justify-center px-2")}
-          title={collapsed ? (theme === "dark" ? "Light mode" : "Dark mode") : undefined}
+          className={cn("nav-link nav-link-idle w-full", isCollapsed && "justify-center px-2")}
+          title={isCollapsed ? (theme === "dark" ? "Light mode" : "Dark mode") : undefined}
         >
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          {!collapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
+          {!isCollapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
         </button>
         <button
           onClick={logout}
-          className={cn("nav-link nav-link-idle w-full text-danger/80 hover:text-danger", collapsed && "justify-center px-2")}
-          title={collapsed ? "Sign out" : undefined}
+          className={cn("nav-link nav-link-idle w-full text-danger/80 hover:text-danger", isCollapsed && "justify-center px-2")}
+          title={isCollapsed ? "Sign out" : undefined}
         >
           <LogOut className="w-4 h-4" />
-          {!collapsed && <span>Sign out</span>}
+          {!isCollapsed && <span>Sign out</span>}
         </button>
       </div>
 
       {/* Collapse toggle */}
+      {!drawer && (
       <button
         onClick={() => setCollapsed((c) => !c)}
         className="absolute -right-3 top-16 w-6 h-6 rounded-full bg-card border border-border-subtle flex items-center justify-center text-muted hover:text-foreground hover:border-border transition-colors z-10 shadow-sm"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
-        {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+        {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
       </button>
+      )}
 
       {/* Resize handle */}
-      {!collapsed && (
+      {!isCollapsed && !drawer && (
         <div
           onMouseDown={handleMouseDown}
           className={cn(

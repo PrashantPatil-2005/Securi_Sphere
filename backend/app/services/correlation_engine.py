@@ -6,11 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.correlation import CorrelationResult, CorrelationRule
 from app.models.event import Event
 from app.services.correlation.framework import MATCHERS, CoOccurrenceMatcher, SequenceMatcher
-from app.services.correlation.rules import CO_OCCURRENCE_RULES, DEFAULT_CORRELATION_RULES
+from app.services.correlation.rules import CO_OCCURRENCE_RULES, CROSS_HOST_RULES, DEFAULT_CORRELATION_RULES
 
 
 def _matcher_for_rule(rule: CorrelationRule):
-    if rule.description and rule.description.startswith("[co_occurrence]"):
+    desc = rule.description or ""
+    if desc.startswith("[cross_host]"):
+        return MATCHERS["cross_host"]
+    if desc.startswith("[co_occurrence]"):
         return MATCHERS["co_occurrence"]
     if len(rule.event_sequence or []) >= 2 and not rule.min_occurrences:
         types = rule.event_sequence or []
@@ -23,8 +26,15 @@ async def seed_correlation_rules(db: AsyncSession) -> None:
     from sqlalchemy import func
 
     if (await db.execute(select(func.count()).select_from(CorrelationRule))).scalar_one() > 0:
+        existing_names = {
+            r.name
+            for r in (await db.execute(select(CorrelationRule.name))).scalars().all()
+        }
+        for rule in CROSS_HOST_RULES:
+            if rule["name"] not in existing_names:
+                db.add(CorrelationRule(**rule))
         return
-    for rule in DEFAULT_CORRELATION_RULES + CO_OCCURRENCE_RULES:
+    for rule in DEFAULT_CORRELATION_RULES + CO_OCCURRENCE_RULES + CROSS_HOST_RULES:
         db.add(CorrelationRule(**rule))
 
 
@@ -71,6 +81,66 @@ async def run_correlation_engine(db: AsyncSession, host_id) -> list[CorrelationR
         result = CorrelationResult(
             rule_id=rule.id,
             host_id=host_id,
+            event_ids=[str(e.id) for e in matched],
+            confidence=confidence,
+            alert_id=alert.id if alert else None,
+        )
+        db.add(result)
+        results.append(result)
+    return results
+
+
+async def run_cross_host_correlation(db: AsyncSession) -> list[CorrelationResult]:
+    """Evaluate cross-host rules against recent events cluster-wide."""
+    from app.services.detection import create_alert
+
+    results: list[CorrelationResult] = []
+    rules = (
+        await db.execute(
+            select(CorrelationRule).where(
+                CorrelationRule.enabled.is_(True),
+                CorrelationRule.description.like("[cross_host]%"),
+            )
+        )
+    ).scalars().all()
+    if not rules:
+        return results
+
+    max_window = max((r.window_minutes or 10 for r in rules), default=10)
+    since = datetime.now(timezone.utc) - timedelta(minutes=max_window)
+    events = (
+        await db.execute(select(Event).where(Event.timestamp >= since).order_by(Event.timestamp))
+    ).scalars().all()
+
+    for rule in rules:
+        matcher = MATCHERS["cross_host"]
+        matched = matcher.matches(list(events), rule)
+        if not matched:
+            continue
+        confidence = matcher.score(matched, rule)
+        primary_host = matched[0].host_id
+        existing = (
+            await db.execute(
+                select(CorrelationResult).where(
+                    CorrelationResult.rule_id == rule.id,
+                    CorrelationResult.detected_at >= since,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing:
+            continue
+        alert = await create_alert(
+            db,
+            primary_host,
+            rule.name,
+            rule.description or f"Cross-host correlation: {rule.name}",
+            rule.severity,
+            None,
+            confidence=confidence,
+        )
+        result = CorrelationResult(
+            rule_id=rule.id,
+            host_id=primary_host,
             event_ids=[str(e.id) for e in matched],
             confidence=confidence,
             alert_id=alert.id if alert else None,

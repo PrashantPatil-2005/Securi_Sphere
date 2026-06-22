@@ -11,7 +11,8 @@ import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
-import { PageHeader } from "@/components/ui/Panel";
+import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 
@@ -74,7 +75,7 @@ export default function EventsPage() {
   );
 
   const { data: hosts = [] } = useHostsList();
-  const { data, isLoading, isFetching } = usePaginatedResource<Event>({
+  const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Event>({
     endpoint: "/api/v1/events",
     queryKey: "events",
     page,
@@ -104,6 +105,10 @@ export default function EventsPage() {
       </div>
       {isLoading ? (
         <TableSkeleton />
+      ) : isError ? (
+        <QueryError onRetry={() => refetch()} />
+      ) : (data?.items ?? []).length === 0 ? (
+        <EmptyState title="No events" description="Adjust filters or enroll an agent to ingest events." />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
           <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />

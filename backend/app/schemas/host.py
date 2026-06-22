@@ -15,6 +15,7 @@ class HostResponse(BaseModel):
     ip_address: str | None
     os_info: str | None
     status: str
+    enrolled: bool = False
     last_seen: datetime | None
     created_at: datetime
     risk_score: int | None = None
@@ -34,3 +35,5 @@ class EnrollmentTokenResponse(BaseModel):
     token: str
     expires_at: datetime
     install_command: str
+    host_id: UUID
+    host_name: str

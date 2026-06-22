@@ -61,6 +61,9 @@ class LogTailer:
     def __init__(self) -> None:
         self.positions: dict[str, int] = {}
 
+    def _file_logs_available(self) -> bool:
+        return any(Path(p).exists() for p in LOG_PATHS)
+
     def read_new_lines(self) -> list[tuple[str, str]]:
         lines: list[tuple[str, str]] = []
         for path in LOG_PATHS:
@@ -76,12 +79,15 @@ class LogTailer:
                 lines.append((path, line))
         return lines
 
-    def read_journald(self, since: str = "2 minutes ago") -> list[tuple[str, str]]:
+    def read_journald(self) -> list[tuple[str, str]]:
+        # Avoid duplicate events when classic log files are present.
+        if self._file_logs_available():
+            return []
         try:
             out = subprocess.run(
-                ["journalctl", "--since", since, "--no-pager", "-q"],
+                ["journalctl", "--since", "15 seconds ago", "--no-pager", "-q"],
                 capture_output=True, text=True, timeout=30,
             )
-            return [("journald", line) for line in out.stdout.splitlines()]
+            return [("journald", line) for line in out.stdout.splitlines() if line.strip()]
         except (FileNotFoundError, subprocess.SubprocessError):
             return []

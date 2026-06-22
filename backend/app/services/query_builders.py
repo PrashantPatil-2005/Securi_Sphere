@@ -11,6 +11,7 @@ from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
 from app.utils.query import SEVERITY_ORDER, SortOrder, TimeRange, apply_time_range
+from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
 
 def _severity_case(column):
@@ -39,10 +40,13 @@ async def query_events(
     page: int = 1,
     page_size: int = 50,
     count_only: bool = False,
+    include_simulated: bool | None = None,
 ):
     query = select(Event)
     count_q = select(func.count()).select_from(Event)
-    clauses = apply_time_range(Event.timestamp, tr)
+    clauses = list(apply_time_range(Event.timestamp, tr))
+    if should_exclude_simulated(include_simulated):
+        clauses.append(real_events_only())
 
     if host_id:
         clauses.append(Event.host_id == host_id)

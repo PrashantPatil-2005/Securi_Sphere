@@ -3,13 +3,16 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete, select
 from app.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import require_roles
+from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
+from app.models.timeline import AttackTimeline
 from app.models.user import User
 from app.services.audit import log_audit
 from app.services.detection import run_detection_for_host
@@ -57,3 +60,42 @@ async def run_simulation(scenario: str, host_id: UUID, db: AsyncSession = Depend
     await build_timelines(db, host_id)
     await log_audit(db, "simulation_run", user_id=user.id, details={"scenario": scenario, "host_id": str(host_id)})
     return {"message": f"Simulation {scenario} completed", "events": len(SCENARIOS[scenario])}
+
+
+@router.delete("/purge")
+async def purge_simulated_data(db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin"))):
+    """Remove all synthetic simulation events and related demo artifacts."""
+    sim_host_ids = (
+        await db.execute(select(Event.host_id).where(Event.source == "simulation").distinct())
+    ).scalars().all()
+
+    events_deleted = (
+        await db.execute(delete(Event).where(Event.source == "simulation"))
+    ).rowcount or 0
+
+    timelines_deleted = 0
+    alerts_deleted = 0
+    if sim_host_ids:
+        timelines_deleted = (
+            await db.execute(delete(AttackTimeline).where(AttackTimeline.host_id.in_(sim_host_ids)))
+        ).rowcount or 0
+        alerts_deleted = (
+            await db.execute(
+                delete(Alert).where(
+                    Alert.host_id.in_(sim_host_ids),
+                    Alert.status.in_(["open", "investigating"]),
+                )
+            )
+        ).rowcount or 0
+
+    await log_audit(db, "simulation_purge", user_id=user.id, details={
+        "events_deleted": events_deleted,
+        "timelines_deleted": timelines_deleted,
+        "alerts_deleted": alerts_deleted,
+    })
+    return {
+        "message": "Simulated data removed",
+        "events_deleted": events_deleted,
+        "timelines_deleted": timelines_deleted,
+        "alerts_deleted": alerts_deleted,
+    }

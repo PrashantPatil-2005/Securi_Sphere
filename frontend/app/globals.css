@@ -24,6 +24,11 @@
   --input-bg: #0a0f16;
   --shadow-color: rgba(0, 0, 0, 0.4);
   --font-mono: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  --glass-bg: rgba(15, 20, 25, 0.55);
+  --glass-bg-solid: rgba(15, 20, 25, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+  --ambient-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.15), transparent 60%);
 }
 
 /* ─── Light theme ─── */
@@ -46,6 +51,11 @@
   --sidebar-active: rgba(37, 99, 235, 0.1);
   --input-bg: #ffffff;
   --shadow-color: rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-bg-solid: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-blur: 16px;
+  --ambient-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37, 99, 235, 0.08), transparent 60%);
 }
 
 * {
@@ -80,9 +90,33 @@ body {
     @apply text-sm text-muted mt-0.5;
   }
 
-  .panel {
-    @apply bg-card border border-border-subtle rounded-lg overflow-hidden;
+  .glass-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    @apply rounded-lg overflow-hidden;
     box-shadow: 0 1px 3px var(--shadow-color);
+  }
+  .glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+
+  .glass-nav {
+    background: var(--glass-bg-solid);
+    border-color: var(--glass-border);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .ambient-bg {
+    background: var(--background);
+    background-image: var(--ambient-gradient);
+    background-attachment: fixed;
+  }
+
+  .panel {
+    @apply glass-panel;
   }
   .panel-header {
     @apply flex items-start justify-between gap-3 px-4 py-3 border-b border-border-subtle bg-card-elevated;

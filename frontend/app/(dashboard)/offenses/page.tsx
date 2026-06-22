@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -10,6 +10,7 @@ import TimeRangeBar from "@/components/TimeRangeBar";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
 import { useToast } from "@/components/ui/Toast";
 
 interface Offense {
@@ -34,6 +35,14 @@ interface OffenseDetail extends Offense {
 }
 
 export default function OffensesPage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <OffensesPageContent />
+    </Suspense>
+  );
+}
+
+function OffensesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { queryParams } = useTimeRange();
@@ -46,7 +55,7 @@ export default function OffensesPage() {
     if (id) setSelectedId(id);
   }, [searchParams]);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["offenses", queryParams],
     queryFn: () => api<{ items: Offense[] }>(`/api/v1/offenses${buildQuery({}, queryParams)}`),
   });
@@ -97,6 +106,7 @@ export default function OffensesPage() {
       />
       <TimeRangeBar />
       {isLoading && <TableSkeleton rows={6} />}
+      {isError && <QueryError onRetry={() => refetch()} />}
       <div className="grid lg:grid-cols-2 gap-6">
         <Panel title="Offenses">
           <div className="space-y-2 max-h-[32rem] overflow-y-auto">
@@ -124,6 +134,19 @@ export default function OffensesPage() {
             <>
               <h2 className="font-semibold text-lg">{selected.title}</h2>
               <p className="text-sm text-muted mb-4">Host: {selected.host_name} · Risk: {selected.risk_level}</p>
+              {(selected.related_hosts?.length || selected.related_users?.length) ? (
+                <div className="mb-4 p-3 glass-panel">
+                  <p className="text-caption normal-case text-muted mb-2">Related entities</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selected.related_hosts?.map((h) => (
+                      <span key={h} className="text-xs px-2 py-1 rounded bg-accent/10 text-accent font-mono">host:{h.slice(0, 8)}</span>
+                    ))}
+                    {selected.related_users?.map((u) => (
+                      <span key={u} className="text-xs px-2 py-1 rounded bg-warning/10 text-warning">user:{u}</span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2 mb-4">
                 <button
                   type="button"
@@ -137,7 +160,7 @@ export default function OffensesPage() {
                     }
                   }}
                 >
-                  {selected.incident_id ? "View investigation" : "Open investigation"}
+                  {selected.incident_id ? "View investigation" : "Promote to incident"}
                 </button>
                 {(["open", "investigating", "resolved"] as const).map((s) => (
                   <button key={s} type="button" className="btn-ghost text-xs capitalize" onClick={() => statusMutation.mutate({ id: selected.id, status: s })}>

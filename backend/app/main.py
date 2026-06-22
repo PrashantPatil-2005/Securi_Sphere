@@ -1,12 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from jose import JWTError
 from sqlalchemy import select
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -22,8 +21,8 @@ from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import (
-    agent, alerts, analytics, audit, auth, alert_rules, events, hosts, incidents,
-    metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
+    agent, alerts, analytics, audit, auth, alert_rules, correlation_rules, events, hosts, incidents,
+    maintenance, metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
     simulation, threat_scores, timeline, settings as settings_router, system,
 )
 from app.dependencies import get_current_user
@@ -34,8 +33,11 @@ from app.services.detection import seed_alert_rules, update_host_statuses
 from app.services.migrate import migrate_schema
 from app.services.mitre import seed_mitre
 from app.services.retention import run_retention
+from app.services.saved_search_alerts import run_saved_search_alerts
+from app.services.threat_score import update_all_threat_scores
 from app.services.threat_score import update_all_threat_scores
 from app.services.analytics.aggregator import aggregate_daily_stats
+from app.utils.agent_bundle import resolve_agent_bundle, resolve_install_script
 from app.websocket.manager import ws_manager
 
 configure_logging()
@@ -51,6 +53,12 @@ async def init_db() -> None:
         await seed_alert_rules(db)
         await seed_mitre(db)
         await seed_correlation_rules(db)
+        await db.commit()
+
+
+async def saved_search_job() -> None:
+    async with async_session() as db:
+        await run_saved_search_alerts(db)
         await db.commit()
 
 
@@ -77,6 +85,7 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
         scheduler.add_job(run_retention, "cron", hour=2, id="retention")
         scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
+        scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts")
         scheduler.start()
     logger.info("SecuriSphere backend started", extra={"environment": settings.environment})
     yield
@@ -130,6 +139,8 @@ app.include_router(network.router, prefix=prefix)
 app.include_router(threat_scores.router, prefix=prefix)
 app.include_router(siem.router, prefix=prefix)
 app.include_router(offenses.router, prefix=prefix)
+app.include_router(correlation_rules.router, prefix=prefix)
+app.include_router(maintenance.router, prefix=prefix)
 app.include_router(saved_searches.router, prefix=prefix)
 app.include_router(settings_router.router, prefix=prefix)
 app.include_router(notifications.router, prefix=prefix)
@@ -201,7 +212,10 @@ async def ws_token(user: User = Depends(get_current_user)):
 
 @app.get("/install.sh")
 async def serve_install_script():
-    script = Path(__file__).resolve().parents[2] / "agent" / "install.sh"
-    if not script.exists():
-        script = Path(__file__).resolve().parents[1].parent / "agent" / "install.sh"
-    return FileResponse(script, media_type="text/plain")
+    return FileResponse(resolve_install_script(), media_type="text/x-shellscript", filename="install.sh")
+
+
+@app.get("/agent-bundle.tar.gz")
+async def serve_agent_bundle():
+    bundle = resolve_agent_bundle()
+    return FileResponse(bundle, media_type="application/gzip", filename="agent-bundle.tar.gz")
