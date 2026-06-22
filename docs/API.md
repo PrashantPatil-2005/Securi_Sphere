@@ -20,6 +20,7 @@ Base URL: `http://localhost:8000/api/v1`
 | POST | `/hosts` | admin, analyst | Create host |
 | GET | `/hosts` | all | List hosts |
 | GET | `/hosts/{id}` | all | Get host |
+| GET | `/hosts/{id}/risk` | all | Explainable threat score with factors and history |
 | DELETE | `/hosts/{id}` | admin | Delete host |
 | POST | `/hosts/{id}/enrollment-token` | admin, analyst | Generate enrollment token |
 
@@ -74,6 +75,8 @@ Static: `GET /install.sh` â€” agent installer script
 | GET | `/reports/summary` | all | Summary report (json/csv) |
 | GET | `/network/topology` | all | Host network map |
 | GET | `/threat-scores` | all | Ranked host threat scores |
+| GET | `/correlation-rules` | all | Read-only correlation rules |
+| GET/POST/DELETE | `/maintenance-windows` | analyst+ | Host maintenance windows (suppress routine alerts) |
 | GET | `/hosts/{id}/enrollment-tokens` | admin/analyst | List enrollment tokens |
 | DELETE | `/enrollment-tokens/{id}` | admin/analyst | Revoke token |
 

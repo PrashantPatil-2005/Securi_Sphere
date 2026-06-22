@@ -9,6 +9,8 @@ class AgentRegisterRequest(BaseModel):
     hostname: str
     ip_address: str | None = None
     os_info: str | None = None
+    agent_hash: str | None = None
+    agent_version: str | None = None
 
 
 class AgentRegisterResponse(BaseModel):

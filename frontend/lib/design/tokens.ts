@@ -53,3 +53,11 @@ export const animation = {
   slow: 300,
   easing: [0.4, 0, 0.2, 1] as const,
 } as const;
+
+export const glass = {
+  bg: "var(--glass-bg)",
+  bgSolid: "var(--glass-bg-solid)",
+  border: "var(--glass-border)",
+  blur: "var(--glass-blur)",
+  ambientGradient: "var(--ambient-gradient)",
+} as const;

@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useMemo, useState } from "react";
+import { Copy, Check } from "lucide-react";
 import { usePaginatedResource } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
@@ -13,17 +14,29 @@ import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { HostRiskDrawer } from "@/components/HostRiskDrawer";
+import { useToast } from "@/components/ui/Toast";
+import { Button } from "@/components/ui/Button";
 
 interface Host {
   id: string;
   name: string;
   hostname: string | null;
   status: string;
+  enrolled: boolean;
   os_info: string | null;
   last_seen: string | null;
   risk_score: number | null;
   alert_count: number | null;
+}
+
+interface EnrollmentModal {
+  token: string;
+  install_command: string;
+  expires_at: string;
+  host_name: string;
 }
 
 const statusTone: Record<string, string> = {
@@ -33,13 +46,41 @@ const statusTone: Record<string, string> = {
   critical: "text-[var(--danger)]",
 };
 
-const HostActions = memo(function HostActions({ host, onEnroll }: { host: Host; onEnroll: (h: Host) => void }) {
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast("success", "Copied", label);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast("error", "Copy failed", "Select and copy manually");
+    }
+  }
+
   return (
-    <button onClick={() => onEnroll(host)} className="btn-ghost text-xs">Enroll</button>
+    <button type="button" onClick={copy} className="btn-ghost text-xs shrink-0" aria-label={`Copy ${label}`}>
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
+const HostActions = memo(function HostActions({ host, onEnroll }: { host: Host; onEnroll: (h: Host) => void }) {
+  if (host.enrolled && host.status === "online") {
+    return <span className="text-xs text-muted">Enrolled</span>;
+  }
+  return (
+    <button onClick={() => onEnroll(host)} className="btn-ghost text-xs">
+      {host.enrolled ? "Re-enroll" : "Enroll"}
+    </button>
   );
 });
 
 export default function HostsPage() {
+  const { toast } = useToast();
   const { queryParams } = useTimeRange();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -55,10 +96,12 @@ export default function HostsPage() {
     }),
     [filters, debouncedHostname],
   );
-  const [enrollment, setEnrollment] = useState<{ token: string; install_command: string } | null>(null);
+  const [enrollment, setEnrollment] = useState<EnrollmentModal | null>(null);
+  const [enrolling, setEnrolling] = useState(false);
   const [newName, setNewName] = useState("");
+  const [riskHostId, setRiskHostId] = useState<string | null>(null);
 
-  const { data, isLoading, isFetching, refetch } = usePaginatedResource<Host>({
+  const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Host>({
     endpoint: "/api/v1/hosts",
     queryKey: "hosts",
     page,
@@ -68,35 +111,62 @@ export default function HostsPage() {
   });
 
   const enroll = useCallback(async (host: Host) => {
-    const token = await api<{ token: string; install_command: string }>(`/api/v1/hosts/${host.id}/enrollment-token`, { method: "POST" });
-    setEnrollment(token);
-  }, []);
+    setEnrolling(true);
+    try {
+      const token = await api<EnrollmentModal>(`/api/v1/hosts/${host.id}/enrollment-token`, { method: "POST" });
+      setEnrollment({ ...token, host_name: host.name });
+    } catch (e) {
+      toast("error", "Enrollment failed", e instanceof Error ? e.message : "Could not create token");
+    } finally {
+      setEnrolling(false);
+    }
+  }, [toast]);
 
   const columns: Column<Host>[] = useMemo(
     () => [
-      { key: "name", header: "Host", width: "140px", render: (h) => <span className="font-medium">{h.name}</span> },
+      { key: "name", header: "Host", width: "130px", render: (h) => (
+        <button type="button" className="font-medium text-left hover:text-accent" onClick={() => setRiskHostId(h.id)}>
+          {h.name}
+        </button>
+      ) },
+      {
+        key: "enrolled",
+        header: "Agent",
+        width: "90px",
+        render: (h) => (
+          <span className={`text-xs ${h.enrolled ? "text-[var(--success)]" : "text-muted"}`}>
+            {h.enrolled ? "Enrolled" : "Pending"}
+          </span>
+        ),
+      },
+      {
+        key: "hostname",
+        header: "Hostname",
+        width: "120px",
+        render: (h) => <span className="text-xs text-muted truncate">{h.hostname ?? "—"}</span>,
+      },
       {
         key: "status",
         header: "Status",
-        width: "90px",
+        width: "80px",
         render: (h) => <span className={`capitalize text-xs ${statusTone[h.status] || ""}`}>{h.status}</span>,
       },
       {
         key: "risk",
         header: "Risk",
-        width: "70px",
+        width: "60px",
         render: (h) => <span className="tabular-nums text-[var(--danger)]">{h.risk_score ?? "—"}</span>,
       },
       {
         key: "alerts",
         header: "Alerts",
-        width: "70px",
+        width: "60px",
         render: (h) => <span className="tabular-nums">{h.alert_count ?? 0}</span>,
       },
       {
         key: "seen",
         header: "Last seen",
-        width: "160px",
+        width: "150px",
         render: (h) => (
           <span className="text-[var(--muted)] text-xs tabular-nums">
             {h.last_seen ? new Date(h.last_seen).toLocaleString() : "—"}
@@ -106,7 +176,7 @@ export default function HostsPage() {
       {
         key: "actions",
         header: "",
-        width: "80px",
+        width: "90px",
         render: (h) => <HostActions host={h} onEnroll={enroll} />,
       },
     ],
@@ -115,14 +185,19 @@ export default function HostsPage() {
 
   async function addHost(e: React.FormEvent) {
     e.preventDefault();
-    await api("/api/v1/hosts", { method: "POST", body: JSON.stringify({ name: newName }) });
-    setNewName("");
-    refetch();
+    try {
+      await api("/api/v1/hosts", { method: "POST", body: JSON.stringify({ name: newName }) });
+      setNewName("");
+      refetch();
+      toast("success", "Host added", "Generate an enrollment token to install the agent.");
+    } catch (err) {
+      toast("error", "Failed to add host", err instanceof Error ? err.message : "Unknown error");
+    }
   }
 
   return (
     <div>
-      <PageHeader title="Hosts" subtitle="Managed endpoints and agent enrollment" action={<ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
+      <PageHeader title="Hosts" subtitle="Register endpoints, enroll agents, and monitor connectivity" action={<ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
       <TimeRangeBar />
       <form onSubmit={addHost} className="flex gap-2 mb-4">
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="input-siem max-w-xs" />
@@ -138,22 +213,52 @@ export default function HostsPage() {
       </div>
       {isLoading ? (
         <TableSkeleton />
+      ) : isError ? (
+        <QueryError onRetry={() => refetch()} />
       ) : (data?.items ?? []).length === 0 ? (
-        <EmptyState title="No hosts" description="Register a host and enroll an agent to begin monitoring." />
+        <EmptyState title="No hosts" description="Add a host, then click Enroll to get an install command for your Linux VM." />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
           <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
         </div>
       )}
       <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
+      <HostRiskDrawer hostId={riskHostId} onClose={() => setRiskHostId(null)} />
       {enrollment && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setEnrollment(null)}>
-          <div className="panel max-w-lg w-full p-5" onClick={(e) => e.stopPropagation()}>
-            <p className="text-sm font-medium mb-2">Enrollment token</p>
-            <code className="block text-xs break-all mb-3 font-mono text-[var(--muted)]">{enrollment.token}</code>
-            <code className="block text-xs break-all bg-[#0a1018] p-2 rounded font-mono">{enrollment.install_command}</code>
+          <div className="panel max-w-2xl w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <h2 className="text-subheading">Install agent on {enrollment.host_name}</h2>
+              <p className="text-caption normal-case text-muted mt-1">
+                Token expires {new Date(enrollment.expires_at).toLocaleString()}. Run this on the target Ubuntu/Debian host as root.
+              </p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="text-xs font-medium text-muted uppercase tracking-wide">Install command</p>
+                <CopyButton text={enrollment.install_command} label="Install command" />
+              </div>
+              <code className="block text-xs break-all bg-[var(--input-bg)] p-3 rounded font-mono border border-border-subtle">
+                {enrollment.install_command}
+              </code>
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="text-xs font-medium text-muted uppercase tracking-wide">Enrollment token</p>
+                <CopyButton text={enrollment.token} label="Enrollment token" />
+              </div>
+              <code className="block text-xs break-all font-mono text-muted">{enrollment.token}</code>
+            </div>
+            <p className="text-caption normal-case text-muted">
+              After install, the host should show <strong>Enrolled</strong> and status <strong>online</strong> within 30 seconds.
+              See <code className="text-xs">docs/AGENT_INSTALL.md</code> for troubleshooting.
+            </p>
+            <Button onClick={() => { setEnrollment(null); refetch(); }}>Done</Button>
           </div>
         </div>
+      )}
+      {enrolling && (
+        <div className="fixed inset-0 bg-black/30 z-40" aria-hidden />
       )}
     </div>
   );

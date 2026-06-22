@@ -41,6 +41,17 @@ COLUMN_MIGRATIONS = [
     "ALTER TABLE attack_timelines ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64)",
     "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS slack_enabled BOOLEAN DEFAULT FALSE",
     "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS slack_webhook_url VARCHAR(512)",
+    "ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS alert_enabled BOOLEAN DEFAULT FALSE",
+    "ALTER TABLE saved_searches ADD COLUMN IF NOT EXISTS interval_minutes INTEGER DEFAULT 5",
+    """CREATE TABLE IF NOT EXISTS maintenance_windows (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        host_id UUID NOT NULL REFERENCES hosts(id),
+        reason TEXT,
+        starts_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ends_at TIMESTAMPTZ NOT NULL,
+        created_by UUID REFERENCES users(id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS ix_maintenance_host_ends ON maintenance_windows (host_id, ends_at)",
 ]
 
 INDEX_MIGRATIONS = [

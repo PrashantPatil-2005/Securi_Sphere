@@ -34,6 +34,7 @@ async def list_events(
     sort: SortOrder = ListParams.sort(),
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
+    include_simulated: bool | None = Query(None),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     items, total = await query_events(
@@ -41,6 +42,7 @@ async def list_events(
         host_id=host_id, severity=severity, event_type=event_type,
         username=username, source_ip=source_ip, service_name=service_name, status=status,
         q=q, exact=exact, sort=sort, page=page, page_size=page_size,
+        include_simulated=include_simulated,
     )
     return EventListResponse(
         items=[EventResponse.model_validate(e) for e in items],

@@ -93,7 +93,44 @@ class CoOccurrenceMatcher(CorrelationRuleMatcher):
         return min(base, 100)
 
 
+class CrossHostMatcher(CorrelationRuleMatcher):
+    """Match events across hosts by source_ip or username within a time window."""
+
+    def matches(self, events: list[Event], rule: CorrelationRule) -> list[Event] | None:
+        window = timedelta(minutes=rule.window_minutes or 10)
+        now = datetime.now(timezone.utc)
+        recent = [e for e in events if e.timestamp >= now - window]
+        etype = (rule.event_sequence or ["ssh_login_failure"])[0]
+        min_hosts = (rule.min_occurrences or {}).get("hosts", 2)
+        min_count = (rule.min_occurrences or {}).get(etype, 2)
+
+        by_key: dict[str, list[Event]] = {}
+        for e in recent:
+            if e.event_type != etype:
+                continue
+            key = str(e.source_ip) if e.source_ip else (e.username or "")
+            if not key:
+                continue
+            by_key.setdefault(key, []).append(e)
+
+        for key, group in by_key.items():
+            hosts = {e.host_id for e in group}
+            if len(hosts) >= min_hosts and len(group) >= min_count:
+                return group
+        return None
+
+    def score(self, events: list[Event], rule: CorrelationRule) -> float:
+        base = (rule.confidence_base or 0.6) * 100
+        hosts = len({e.host_id for e in events})
+        if hosts >= 3:
+            base += 15
+        elif hosts >= 2:
+            base += 10
+        return min(base, 100)
+
+
 MATCHERS: dict[str, CorrelationRuleMatcher] = {
     "sequence": SequenceMatcher(),
     "co_occurrence": CoOccurrenceMatcher(),
+    "cross_host": CrossHostMatcher(),
 }

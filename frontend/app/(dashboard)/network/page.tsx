@@ -1,60 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { NetworkForceGraph } from "@/components/NetworkForceGraph";
+import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 
-interface Node { id: string; label: string; type: string; status: string; threat_score?: number; ip?: string; }
-interface Edge { from: string; to: string; }
+interface Node {
+  id: string;
+  label: string;
+  type: string;
+  status: string;
+  threat_score?: number;
+  ip?: string;
+}
+
+interface Edge {
+  from: string;
+  to: string;
+}
 
 export default function NetworkPage() {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ["network-topology"],
+    queryFn: () => api<{ nodes: Node[]; edges: Edge[] }>("/api/v1/network/topology"),
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    api<{ nodes: Node[]; edges: Edge[] }>("/api/v1/network/topology").then((r) => {
-      setNodes(r.nodes);
-      setEdges(r.edges);
-    }).catch(console.error);
-  }, []);
-
-  const hosts = nodes.filter((n) => n.type === "host");
-  const server = nodes.find((n) => n.type === "server");
-
-  function nodeColor(n: Node) {
-    if (n.type === "server") return "border-blue-500 bg-blue-900/30";
-    if (n.status === "critical" || (n.threat_score ?? 0) >= 70) return "border-red-500 bg-red-900/30";
-    if (n.status === "warning" || (n.threat_score ?? 0) >= 40) return "border-yellow-500 bg-yellow-900/20";
-    if (n.status === "online") return "border-green-500 bg-green-900/20";
-    return "border-gray-600 bg-gray-900/30";
-  }
+  const nodes = data?.nodes ?? [];
+  const edges = data?.edges ?? [];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Network Topology</h1>
-      <div className="relative p-8 bg-[var(--card)] border border-[var(--border)] rounded-lg min-h-[400px]">
-        {server && (
-          <div className="flex justify-center mb-12">
-            <div className={`px-6 py-4 rounded-lg border-2 text-center ${nodeColor(server)}`}>
-              <div className="font-bold">{server.label}</div>
-              <div className="text-xs text-gray-400">Central SIEM</div>
-            </div>
-          </div>
-        )}
-        <div className="flex flex-wrap justify-center gap-6">
-          {hosts.map((h) => (
-            <div key={h.id} className={`px-4 py-3 rounded-lg border-2 text-center min-w-[140px] ${nodeColor(h)}`}>
-              <div className="font-medium">{h.label}</div>
-              <div className="text-xs text-gray-400 capitalize">{h.status}</div>
-              {h.ip && <div className="text-xs text-gray-500">{h.ip}</div>}
-              {h.threat_score != null && h.threat_score > 0 && (
-                <div className="text-xs text-red-400 mt-1">Threat: {h.threat_score}</div>
-              )}
-            </div>
-          ))}
-        </div>
-        {hosts.length === 0 && <p className="text-center text-gray-500">No hosts enrolled yet.</p>}
-        <p className="text-xs text-gray-600 text-center mt-8">{edges.length} connection(s) to server</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Network Topology" subtitle="Force-directed view of hosts connected to the SIEM" />
+      {isLoading && <TableSkeleton rows={4} />}
+      {isError && <QueryError onRetry={() => refetch()} />}
+      {!isLoading && !isError && nodes.length === 0 && (
+        <EmptyState title="No hosts enrolled" description="Add hosts and enroll agents to see topology." />
+      )}
+      {nodes.length > 0 && <NetworkForceGraph nodes={nodes} edges={edges} />}
+      {nodes.length > 0 && (
+        <p className="text-xs text-muted text-center">{edges.length} connection(s) · colors reflect host status and threat score</p>
+      )}
     </div>
   );
 }

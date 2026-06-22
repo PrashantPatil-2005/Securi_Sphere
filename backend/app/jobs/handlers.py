@@ -5,7 +5,7 @@ from uuid import UUID
 
 from app.database import async_session
 from app.jobs.queue import job_queue
-from app.services.notifications import notify_alert
+from app.services.notifications import notify_alert, notify_offense
 from app.services.retention import run_retention
 from app.services.threat_score import calculate_host_scores, update_all_threat_scores
 
@@ -20,6 +20,17 @@ async def handle_notify_alert(alert_id: str) -> None:
         alert = (await db.execute(select(Alert).where(Alert.id == UUID(alert_id)))).scalar_one_or_none()
         if alert:
             await notify_alert(db, alert)
+            await db.commit()
+
+
+async def handle_notify_offense(offense_id: str) -> None:
+    from sqlalchemy import select
+    from app.models.siem import Offense
+
+    async with async_session() as db:
+        offense = (await db.execute(select(Offense).where(Offense.id == UUID(offense_id)))).scalar_one_or_none()
+        if offense:
+            await notify_offense(db, offense)
             await db.commit()
 
 
@@ -55,6 +66,7 @@ async def handle_correlation_pipeline(host_id: str) -> None:
 
 def register_job_handlers() -> None:
     job_queue.register("notify_alert", handle_notify_alert)
+    job_queue.register("notify_offense", handle_notify_offense)
     job_queue.register("threat_score", handle_threat_score)
     job_queue.register("threat_score_all", handle_threat_score_all)
     job_queue.register("retention", handle_retention)

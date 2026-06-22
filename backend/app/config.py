@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     idempotency_ttl_seconds: int = 86400
     allow_registration: bool = True
     enable_simulation: bool = True
+    exclude_simulated_from_dashboard: bool = True
     redis_url: str = ""
     trusted_proxy: bool = False
     testing: bool = False

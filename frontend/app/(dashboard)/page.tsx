@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Server, Activity, Shield } from "lucide-react";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
@@ -89,7 +90,7 @@ const SecurityTimeline = memo(function SecurityTimeline() {
   );
 });
 
-const RiskyHostsWidget = memo(function RiskyHostsWidget() {
+const RiskyHostsWidget = memo(function RiskyHostsWidget({ onSelect }: { onSelect: (id: string) => void }) {
   const { data = [], isLoading } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number }[]>("top-risky-hosts", {});
 
   if (isLoading) return <ChartSkeleton height={200} />;
@@ -109,7 +110,7 @@ const RiskyHostsWidget = memo(function RiskyHostsWidget() {
   return (
     <div className="space-y-3">
       {data.slice(0, 6).map((h) => (
-        <Link key={h.host_id} href="/hosts" className="flex items-center gap-3 group">
+        <button key={h.host_id} type="button" onClick={() => onSelect(h.host_id)} className="flex items-center gap-3 group w-full text-left">
           <span className="w-28 truncate text-body group-hover:text-accent transition-colors">{h.host_name}</span>
           <div className="flex-1 h-2 bg-[var(--input-bg)] rounded-full overflow-hidden">
             <div
@@ -121,7 +122,7 @@ const RiskyHostsWidget = memo(function RiskyHostsWidget() {
             />
           </div>
           <span className="w-8 tabular-nums text-caption normal-case text-right">{h.risk_score}</span>
-        </Link>
+        </button>
       ))}
     </div>
   );
@@ -166,6 +167,7 @@ const AttackTimelines = memo(function AttackTimelines() {
 });
 
 export default function ExecutiveDashboard() {
+  const [riskHostId, setRiskHostId] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <PageHeader
@@ -182,7 +184,7 @@ export default function ExecutiveDashboard() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Panel title="Host risk ranking" subtitle="Highest risk scores in your environment">
-          <RiskyHostsWidget />
+          <RiskyHostsWidget onSelect={setRiskHostId} />
         </Panel>
         <Panel title="Active attack timelines" subtitle="Correlated threat sequences">
           <AttackTimelines />
@@ -192,6 +194,7 @@ export default function ExecutiveDashboard() {
       <Panel title="Live security feed" subtitle="Real-time events via WebSocket">
         <LiveSecurityFeed initial={[]} />
       </Panel>
+      <HostRiskDrawer hostId={riskHostId} onClose={() => setRiskHostId(null)} />
     </div>
   );
 }

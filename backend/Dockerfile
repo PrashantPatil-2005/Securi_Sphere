@@ -15,6 +15,7 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini .
 COPY agent ./agent
+RUN tar -czf /app/agent/agent-bundle.tar.gz -C /app/agent agent requirements.txt
 
 USER securi
 EXPOSE 8000

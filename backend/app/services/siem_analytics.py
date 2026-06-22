@@ -13,6 +13,7 @@ from app.models.metric import Metric
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
 from app.utils.query import TimeRange, apply_time_range
+from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
 AUTH_TYPES = {"ssh_login_failure", "ssh_login_success", "root_login"}
 SERVICE_TYPES = {"service_failure", "service_start", "service_stop"}
@@ -33,6 +34,15 @@ EVENT_CATEGORIES = {
 }
 
 SEVERITY_LEVELS = ["critical", "high", "medium", "low", "info"]
+
+
+def _event_clauses(tr: TimeRange, host_id: UUID | None = None, include_simulated: bool | None = None) -> list:
+    clauses = list(apply_time_range(Event.timestamp, tr))
+    if host_id:
+        clauses.append(Event.host_id == host_id)
+    if should_exclude_simulated(include_simulated):
+        clauses.append(real_events_only())
+    return clauses
 
 
 def _granularity(tr: TimeRange) -> str:
@@ -72,9 +82,7 @@ async def events_trend(
     host_id: UUID | None = None,
 ) -> dict:
     bucket = _bucket_column(Event.timestamp, tr)
-    clauses = apply_time_range(Event.timestamp, tr)
-    if host_id:
-        clauses.append(Event.host_id == host_id)
+    clauses = _event_clauses(tr, host_id)
 
     async def run(extra_clauses: list):
         q = (
@@ -95,9 +103,7 @@ async def events_trend(
 
 
 async def failed_login_analytics(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = apply_time_range(Event.timestamp, tr) + [Event.event_type == "ssh_login_failure"]
-    if host_id:
-        clauses.append(Event.host_id == host_id)
+    clauses = _event_clauses(tr, host_id) + [Event.event_type == "ssh_login_failure"]
 
     bucket = _bucket_column(Event.timestamp, tr)
     over_time = await db.execute(
@@ -173,9 +179,7 @@ async def severity_distribution(
 
 
 async def event_type_distribution(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = apply_time_range(Event.timestamp, tr)
-    if host_id:
-        clauses.append(Event.host_id == host_id)
+    clauses = _event_clauses(tr, host_id)
 
     events = list((await db.execute(select(Event.event_type).where(*clauses))).scalars().all())
     category_counts: dict[str, int] = {k: 0 for k in EVENT_CATEGORIES}
@@ -317,7 +321,7 @@ async def host_health_monitoring(db: AsyncSession) -> dict:
 
 
 async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
-    event_clauses = apply_time_range(Event.timestamp, tr)
+    event_clauses = _event_clauses(tr)
     alert_clauses = apply_time_range(Alert.created_at, tr)
 
     total_hosts = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
@@ -363,9 +367,7 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
 
 
 async def mitre_stats(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = apply_time_range(Event.timestamp, tr)
-    if host_id:
-        clauses.append(Event.host_id == host_id)
+    clauses = _event_clauses(tr, host_id)
 
     rows = await db.execute(
         select(Event.mitre_tactic, Event.mitre_technique_id, func.count())
@@ -393,8 +395,11 @@ async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
     else:
         eb, ab = func.date_trunc("month", Event.timestamp), func.date_trunc("month", Alert.created_at)
 
+    hist_event_clauses = [Event.timestamp >= since]
+    if should_exclude_simulated():
+        hist_event_clauses.append(real_events_only())
     events = await db.execute(
-        select(eb.label("period"), func.count()).where(Event.timestamp >= since).group_by(eb).order_by(eb)
+        select(eb.label("period"), func.count()).where(*hist_event_clauses).group_by(eb).order_by(eb)
     )
     alerts = await db.execute(
         select(ab.label("period"), func.count()).where(Alert.created_at >= since).group_by(ab).order_by(ab)
@@ -402,7 +407,7 @@ async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
 
     host_trend = await db.execute(
         select(eb.label("period"), func.count(func.distinct(Event.host_id)))
-        .where(Event.timestamp >= since)
+        .where(*hist_event_clauses)
         .group_by(eb)
         .order_by(eb)
     )

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -25,6 +25,14 @@ interface IncidentDetail extends Incident {
 }
 
 export default function IncidentsPage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <IncidentsPageContent />
+    </Suspense>
+  );
+}
+
+function IncidentsPageContent() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
