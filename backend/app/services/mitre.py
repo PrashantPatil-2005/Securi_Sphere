@@ -45,10 +45,9 @@ async def seed_mitre(db) -> None:
     from app.models.mitre import MitreTechnique
     from app.models.siem import MitreMapping
 
-    existing_ids = {
-        t.technique_id
-        for t in (await db.execute(select(MitreTechnique.technique_id))).scalars().all()
-    }
+    existing_ids = set(
+        (await db.execute(select(MitreTechnique.technique_id))).scalars().all()
+    )
     for m in MITRE_SEED:
         if m["technique_id"] not in existing_ids:
             db.add(MitreTechnique(**m, description=m["name"]))

@@ -9,10 +9,9 @@ interface Props {
 
 export default function ExportMenu({ resource, query }: Props) {
   async function download(format: "csv" | "json" | "pdf") {
-    const token = localStorage.getItem("access_token");
     const sep = query.includes("?") ? "&" : "?";
     const url = `${API_URL}/api/v1/${resource}/export${query}${sep}format=${format}`;
-    const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const res = await fetch(url, { credentials: "include" });
     if (!res.ok) return;
     const blob = await res.blob();
     const a = document.createElement("a");
@@ -24,7 +23,7 @@ export default function ExportMenu({ resource, query }: Props) {
   return (
     <div className="flex gap-2">
       {(["csv", "json", "pdf"] as const).map((f) => (
-        <button key={f} onClick={() => download(f)} className="text-xs px-3 py-1.5 border border-[var(--border)] rounded hover:bg-white/5 uppercase">{f}</button>
+        <button key={f} type="button" onClick={() => download(f)} className="btn-ghost text-xs uppercase">{f}</button>
       ))}
     </div>
   );

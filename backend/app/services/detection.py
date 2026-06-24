@@ -175,13 +175,13 @@ async def update_host_statuses(db: AsyncSession) -> None:
     for host in hosts:
         old_status = host.status
 
-        # Hosts awaiting agent install stay offline — no false critical/offline alerts.
+        # Hosts awaiting agent install stay inactive — no false offline alerts.
         if not host.api_key_hash:
-            if host.status != "offline":
-                host.status = "offline"
+            if host.status != "inactive":
+                host.status = "inactive"
                 await ws_manager.broadcast({
                     "type": "host_status",
-                    "data": {"id": str(host.id), "status": host.status, "name": host.name},
+                    "data": {"id": str(host.id), "status": host.status, "name": host.name, "enrolled": False},
                 })
             continue
 
@@ -193,14 +193,15 @@ async def update_host_statuses(db: AsyncSession) -> None:
         high_alerts = [a for a in alerts if a.severity in ("high", "medium")]
 
         stale = not host.last_seen or (now - host.last_seen).total_seconds() > 90
-        offline = stale
 
-        if offline or critical_alerts:
-            host.status = "critical" if critical_alerts or offline else "offline"
+        if critical_alerts:
+            host.status = "critical"
+        elif stale:
+            host.status = "offline"
             rules_result = await db.execute(select(AlertRule).where(AlertRule.rule_type == "agent_offline"))
             offline_rule = rules_result.scalar_one_or_none()
             open_rule_ids = {a.rule_id for a in alerts if a.rule_id}
-            if offline and offline_rule and offline_rule.id not in open_rule_ids:
+            if offline_rule and offline_rule.id not in open_rule_ids:
                 if not await is_host_in_maintenance(db, host.id):
                     await create_alert(
                         db, host.id, "Agent Offline",

@@ -6,12 +6,10 @@ import { usePaginatedResource } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
-import { useTimeRange } from "@/lib/timeRange";
 import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
-import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
@@ -19,6 +17,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
+import { useUser } from "@/lib/hooks/useUser";
 
 interface Host {
   id: string;
@@ -41,6 +40,7 @@ interface EnrollmentModal {
 
 const statusTone: Record<string, string> = {
   online: "text-[var(--success)]",
+  inactive: "text-[var(--muted)]",
   offline: "text-[var(--muted)]",
   warning: "text-[var(--warning)]",
   critical: "text-[var(--danger)]",
@@ -81,7 +81,8 @@ const HostActions = memo(function HostActions({ host, onEnroll }: { host: Host; 
 
 export default function HostsPage() {
   const { toast } = useToast();
-  const { queryParams } = useTimeRange();
+  const { data: user } = useUser();
+  const canManageHosts = user?.role?.name === "admin" || user?.role?.name === "analyst";
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
@@ -108,6 +109,7 @@ export default function HostsPage() {
     pageSize,
     sort,
     filters: queryFilters,
+    includeTimeRange: false,
   });
 
   const enroll = useCallback(async (host: Host) => {
@@ -197,17 +199,27 @@ export default function HostsPage() {
 
   return (
     <div>
-      <PageHeader title="Hosts" subtitle="Register endpoints, enroll agents, and monitor connectivity" action={<ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
-      <TimeRangeBar />
+      <PageHeader title="Hosts" subtitle="Register endpoints, enroll agents, and monitor connectivity" action={canManageHosts ? <ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, {})} /> : undefined} />
+      {!canManageHosts && (
+        <div className="mb-4 px-4 py-3 rounded-lg border border-warning/30 bg-warning/10 text-body text-sm">
+          Your account is <strong className="capitalize">{user?.role?.name ?? "viewer"}</strong> — only <strong>admin</strong> or <strong>analyst</strong> can add hosts.
+          See <a href="/profile" className="text-accent underline">Profile</a> for your role.
+        </div>
+      )}
+      <ol className="text-caption normal-case text-muted mb-4 list-decimal list-inside space-y-1">
+        <li>Add a host (status: inactive)</li>
+        <li>Click Enroll → run install command on Ubuntu/Debian VM</li>
+        <li>Agent registers → status becomes online; heartbeats keep it live</li>
+      </ol>
       <form onSubmit={addHost} className="flex gap-2 mb-4">
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="input-siem max-w-xs" />
-        <button type="submit" className="btn-primary">Add host</button>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="input-siem max-w-xs" disabled={!canManageHosts} />
+        <button type="submit" className="btn-primary" disabled={!canManageHosts}>Add host</button>
       </form>
       <div className="filter-bar">
         <input placeholder="Hostname" value={filters.hostname} onChange={(e) => { setFilters({ ...filters, hostname: e.target.value }); setPage(1); }} className="input-siem" />
         <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">
           <option value="">All statuses</option>
-          {["online", "offline", "warning", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+          {["inactive", "online", "offline", "warning", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
       </div>

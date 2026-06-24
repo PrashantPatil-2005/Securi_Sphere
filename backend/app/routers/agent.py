@@ -18,6 +18,7 @@ from app.services.audit import log_audit
 from app.services.detection import run_detection_for_host
 from app.services.threat_score import calculate_host_scores
 from app.pipeline.ingestion import ingest_event_batch
+from app.services.host_notify import broadcast_host_update
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -74,6 +75,9 @@ async def register_agent(body: AgentRegisterRequest, db: AsyncSession = Depends(
 
     if body.agent_hash:
         await check_agent_integrity(db, host, body.agent_hash, body.agent_version)
+
+    await db.flush()
+    await broadcast_host_update(host, "host_enrolled" if not was_enrolled else "host_status")
 
     return AgentRegisterResponse(api_key=api_key, host_id=host.id)
 

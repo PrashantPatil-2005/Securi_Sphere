@@ -4,7 +4,7 @@ import { AppProviders } from "@/lib/providers";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AppShell } from "@/components/layout/AppShell";
-import { AuthSync } from "@/components/AuthSync";
+import { AuthGuard } from "@/components/AuthGuard";
 import { TimeRangeProvider } from "@/lib/timeRange";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -13,8 +13,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppProviders>
         <ToastProvider>
           <TimeRangeProvider>
-            <AuthSync />
-            <AppShell>{children}</AppShell>
+            <AuthGuard>
+              <AppShell>{children}</AppShell>
+            </AuthGuard>
           </TimeRangeProvider>
         </ToastProvider>
       </AppProviders>

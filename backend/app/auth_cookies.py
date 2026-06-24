@@ -11,7 +11,9 @@ REFRESH_COOKIE = "refresh_token"
 
 
 def _cookie_secure() -> bool:
-    return settings.environment != "development"
+    if settings.environment == "development" or settings.debug:
+        return False
+    return settings.server_url.startswith("https")
 
 
 def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
