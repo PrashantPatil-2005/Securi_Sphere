@@ -45,6 +45,13 @@ ROLE_PERMISSIONS = {
     "viewer": {"users": "read", "hosts": "read", "alerts": "read", "notifications": "read"},
 }
 
+DEV_USERS = {
+    "admin@test.local": "admin",
+    "analyst@test.local": "analyst",
+    "viewer@test.local": "viewer",
+}
+DEV_USER_PASSWORD = "testpass123"
+
 
 async def seed_roles(db: AsyncSession) -> None:
     result = await db.execute(select(func.count()).select_from(Role))
@@ -52,6 +59,36 @@ async def seed_roles(db: AsyncSession) -> None:
         return
     for name, perms in ROLE_PERMISSIONS.items():
         db.add(Role(name=name, description=f"{name.capitalize()} role", permissions=perms))
+
+
+async def seed_dev_users(db: AsyncSession) -> None:
+    if settings.testing or settings.environment != "development":
+        return
+    roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
+    if not roles:
+        return
+    for email, role_name in DEV_USERS.items():
+        role = roles.get(role_name)
+        if not role:
+            continue
+        existing = (
+            await db.execute(select(User).where(User.email == email))
+        ).scalar_one_or_none()
+        if existing:
+            existing.hashed_password = hash_password(DEV_USER_PASSWORD)
+            existing.role_id = role.id
+            existing.is_active = True
+            existing.failed_login_attempts = 0
+            existing.locked_until = None
+        else:
+            db.add(
+                User(
+                    email=email,
+                    hashed_password=hash_password(DEV_USER_PASSWORD),
+                    role_id=role.id,
+                    full_name=role_name.capitalize(),
+                )
+            )
 
 
 async def _issue_tokens(

@@ -26,10 +26,9 @@ async def seed_correlation_rules(db: AsyncSession) -> None:
     from sqlalchemy import func
 
     if (await db.execute(select(func.count()).select_from(CorrelationRule))).scalar_one() > 0:
-        existing_names = {
-            r.name
-            for r in (await db.execute(select(CorrelationRule.name))).scalars().all()
-        }
+        existing_names = set(
+            (await db.execute(select(CorrelationRule.name))).scalars().all()
+        )
         for rule in CROSS_HOST_RULES:
             if rule["name"] not in existing_names:
                 db.add(CorrelationRule(**rule))

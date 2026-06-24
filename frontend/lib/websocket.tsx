@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { API_URL, fetchWsToken } from "./api";
+import { WS_API_URL, fetchWsToken } from "./api";
 
 export type WSMessage = {
   type: string;
@@ -54,7 +54,7 @@ class WebSocketStore {
 
     void fetchWsToken().then((token) => {
       if (!token) return;
-      const wsUrl = API_URL.replace("http", "ws") + `/api/v1/ws?token=${token}`;
+      const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws?token=${token}`;
       const ws = new WebSocket(wsUrl);
       this.ws = ws;
 
@@ -94,6 +94,7 @@ const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
   new_alert: [["alerts"], ["siem"]],
   alert_resolved: [["alerts"], ["siem"]],
   host_status: [["hosts"], ["siem"]],
+  host_enrolled: [["hosts"], ["siem"]],
   // security_feed is handled by useSecurityFeedStore — no query invalidation
 };
 

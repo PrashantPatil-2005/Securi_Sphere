@@ -1,7 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+from app.schemas.validators import AuthEmail
 
 
 class RoleResponse(BaseModel):
@@ -26,12 +28,12 @@ class UserResponse(BaseModel):
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: AuthEmail
     password: str = Field(min_length=8)
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: AuthEmail
     password: str
 
 
@@ -46,7 +48,7 @@ class RefreshRequest(BaseModel):
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
+    email: AuthEmail
 
 
 class ResetPasswordRequest(BaseModel):

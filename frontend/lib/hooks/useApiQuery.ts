@@ -31,18 +31,30 @@ interface PaginatedParams {
   pageSize: number;
   sort: string;
   filters: Record<string, string | number | boolean | undefined | null>;
+  /** When false, omit global time-range params (e.g. host inventory). */
+  includeTimeRange?: boolean;
 }
 
-export function usePaginatedResource<T>({ endpoint, queryKey, page, pageSize, sort, filters }: PaginatedParams) {
+export function usePaginatedResource<T>({
+  endpoint,
+  queryKey,
+  page,
+  pageSize,
+  sort,
+  filters,
+  includeTimeRange = true,
+}: PaginatedParams) {
   const { queryParams } = useTimeRange();
+  const timeParams = includeTimeRange ? queryParams : {};
   return useQuery({
-    queryKey: [queryKey, queryParams, page, pageSize, sort, filters],
+    queryKey: [queryKey, timeParams, page, pageSize, sort, filters],
     queryFn: async () => {
-      const q = buildQuery({ page, page_size: pageSize, sort, ...filters }, queryParams);
+      const q = buildQuery({ page, page_size: pageSize, sort, ...filters }, timeParams);
       const r = await api<{ items?: T[]; total?: number } | T[]>(`${endpoint}${q}`);
       return parsePaginatedList(r);
     },
     placeholderData: (prev) => prev,
+    staleTime: includeTimeRange ? 0 : 15_000,
   });
 }
 

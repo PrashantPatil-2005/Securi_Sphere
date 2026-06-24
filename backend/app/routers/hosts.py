@@ -3,12 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import client_ip, get_current_user, require_roles
+from app.models.alert import Alert
 from app.models.enrollment import EnrollmentToken
 from app.models.host import Host
 from app.models.siem import HostRiskHistory
@@ -70,11 +71,11 @@ async def list_hosts(
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
 ):
-    tr = resolve_time_range(preset, from_time, to_time)
+    # Host inventory is not filtered by time range; preset/from/to are accepted but ignored.
     rows, total = await query_hosts(
         db, hostname=hostname, status=status, os_info=os_info,
         min_risk=min_risk, max_risk=max_risk,
-        last_seen_after=tr.from_time, last_seen_before=tr.to_time,
+        last_seen_after=None, last_seen_before=None,
         q=q, exact=exact, sort=sort, page=page, page_size=page_size,
     )
     items = [_host_row(h, score, ac) for h, score, ac in rows]
@@ -109,7 +110,12 @@ async def get_host(host_id: UUID, db: AsyncSession = Depends(get_db), user: User
     score_row = (
         await db.execute(select(HostThreatScore).where(HostThreatScore.host_id == host_id))
     ).scalar_one_or_none()
-    return _host_row(host, score_row.score if score_row else None, 0)
+    alert_count = (
+        await db.execute(
+            select(func.count()).select_from(Alert).where(Alert.host_id == host_id, Alert.status == "open")
+        )
+    ).scalar_one()
+    return _host_row(host, score_row.score if score_row else None, alert_count)
 
 
 class RiskFactorItem(BaseModel):

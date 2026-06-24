@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api, setTokens } from "@/lib/api";
+import { api, clearTokens, establishSession } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -17,17 +17,23 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    api("/api/v1/auth/me")
+      .then(() => establishSession().then(() => router.replace(next)))
+      .catch(() => clearTokens());
+  }, [router, next]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      const tokens = await api<{ access_token: string; refresh_token: string }>(
+      await api<{ access_token: string; refresh_token: string }>(
         "/api/v1/auth/login",
         { method: "POST", body: JSON.stringify({ email, password }) },
         false,
       );
-      setTokens(tokens);
+      await establishSession();
       router.push(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");

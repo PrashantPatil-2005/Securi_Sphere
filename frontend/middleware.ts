@@ -10,9 +10,6 @@ export function middleware(request: NextRequest) {
   const hasAuth = request.cookies.has(AUTH_COOKIE);
 
   if (isPublic) {
-    if (hasAuth && pathname === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
     return NextResponse.next();
   }
 
