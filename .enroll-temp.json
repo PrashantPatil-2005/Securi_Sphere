@@ -1,0 +1,7 @@
+﻿{
+    "token":  "enroll_UB3RNHdvy1BqrvuoXdLSANFLn4V0URg7JMqSXQqGI0w",
+    "expires_at":  "2026-06-26T16:17:07.239658Z",
+    "install_command":  "curl -fsSL http://localhost:8000/install.sh | sudo bash -s -- --token enroll_UB3RNHdvy1BqrvuoXdLSANFLn4V0URg7JMqSXQqGI0w --server http://localhost:8000",
+    "host_id":  "5adcdee6-4189-4633-bfa2-f0f426873e5f",
+    "host_name":  "test-vm"
+}
