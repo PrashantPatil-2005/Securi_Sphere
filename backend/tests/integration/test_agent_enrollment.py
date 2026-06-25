@@ -19,6 +19,17 @@ async def test_agent_bundle_served(client: AsyncClient):
     assert res.headers["content-type"].startswith("application/gzip")
     assert len(res.content) > 100
 
+    import io
+    import tarfile
+
+    from app.utils.agent_bundle import validate_bundle
+
+    tmp = io.BytesIO(res.content)
+    with tarfile.open(fileobj=tmp, mode="r:gz") as tar:
+        names = {m.name.lstrip("./").replace("\\", "/") for m in tar.getmembers() if m.isfile()}
+    assert "agent/main.py" in names
+    assert "requirements.txt" in names
+
 
 @pytest.mark.asyncio
 async def test_agent_enrollment_flow(admin_client: AsyncClient):

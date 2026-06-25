@@ -15,7 +15,8 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini .
 COPY agent ./agent
-RUN tar -czf /app/agent/agent-bundle.tar.gz -C /app/agent agent requirements.txt
+# Bundle must contain agent/main.py + requirements.txt (see app.utils.agent_bundle)
+RUN python -c "import sys; sys.path.insert(0, '/app'); from pathlib import Path; from app.utils.agent_bundle import build_agent_bundle; build_agent_bundle(Path('/app/agent/agent-bundle.tar.gz'))"
 
 USER securi
 EXPOSE 8000
