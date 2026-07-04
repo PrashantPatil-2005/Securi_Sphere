@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { useToast } from "@/components/ui/Toast";
 
@@ -46,12 +47,12 @@ function IncidentsPageContent() {
     if (id) setSelectedId(id);
   }, [searchParams]);
 
-  const { data: items = [], isLoading } = useQuery({
+  const { data: items = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["incidents"],
     queryFn: () => api<Incident[]>("/api/v1/incidents"),
   });
 
-  const { data: detail, isLoading: detailLoading } = useQuery({
+  const { data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail } = useQuery({
     queryKey: ["incidents", selectedId],
     queryFn: () => api<IncidentDetail>(`/api/v1/incidents/${selectedId}`),
     enabled: !!selectedId,
@@ -97,7 +98,8 @@ function IncidentsPageContent() {
     <div className="space-y-6">
       <PageHeader title="Investigations" subtitle="Incident tracking, notes, and resolution workflow" />
       <InvestigationTrail />
-      {isLoading && <TableSkeleton rows={4} />}
+      {isError && <QueryError onRetry={() => refetch()} />}
+      {isLoading && !isError && <TableSkeleton rows={4} />}
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -114,7 +116,7 @@ function IncidentsPageContent() {
       <div className="grid lg:grid-cols-2 gap-6">
         <Panel title="Incidents">
           <div className="space-y-2 max-h-[32rem] overflow-y-auto">
-            {items.map((i) => (
+            {!isError && items.map((i) => (
               <button
                 key={i.id}
                 type="button"
@@ -131,12 +133,13 @@ function IncidentsPageContent() {
                 </div>
               </button>
             ))}
-            {!isLoading && items.length === 0 && <EmptyState title="No incidents" description="Create an incident to begin an investigation." />}
+            {!isLoading && !isError && items.length === 0 && <EmptyState title="No incidents" description="Create an incident to begin an investigation." />}
           </div>
         </Panel>
         <Panel title="Investigation workspace">
-          {detailLoading && <TableSkeleton rows={4} />}
-          {detail && !detailLoading && (
+          {detailError && selectedId && <QueryError onRetry={() => refetchDetail()} />}
+          {detailLoading && !detailError && <TableSkeleton rows={4} />}
+          {detail && !detailLoading && !detailError && (
             <>
               <h2 className="font-semibold text-lg">{detail.title}</h2>
               <p className="text-sm text-muted mb-4 capitalize">{detail.status} · {detail.severity}</p>
@@ -193,7 +196,7 @@ function IncidentsPageContent() {
               </form>
             </>
           )}
-          {!selectedId && !detailLoading && <EmptyState title="Select an incident" description="Choose an incident to review notes and linked alerts." />}
+          {!selectedId && !detailLoading && !detailError && <EmptyState title="Select an incident" description="Choose an incident to review notes and linked alerts." />}
         </Panel>
       </div>
     </div>

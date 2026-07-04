@@ -11,6 +11,7 @@ import TimeRangeBar from "@/components/TimeRangeBar";
 import { LazyEventTrendChart, LazySeverityCharts, LazyAnalyticsCharts, LazyWidget } from "@/components/LazyWidget";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
 
 const LazyLiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), {
   loading: () => <ChartSkeleton height={280} />,
@@ -33,26 +34,26 @@ export default function AnalyticsPage() {
     return p;
   }, [hostFilter]);
 
-  const { data: trend, isLoading: trendLoading } = useSiemQuery<{
+  const { data: trend, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useSiemQuery<{
     total: { period: string; count: number }[];
     security: { period: string; count: number }[];
     authentication: { period: string; count: number }[];
     service: { period: string; count: number }[];
   }>("events-trend", extra);
 
-  const { data: severity, isLoading: sevLoading } = useSiemQuery<{ distribution: { severity: string; count: number; percentage: number }[] }>(
+  const { data: severity, isLoading: sevLoading, isError: sevError, refetch: refetchSev } = useSiemQuery<{ distribution: { severity: string; count: number; percentage: number }[] }>(
     "severity-distribution",
     extra,
   );
 
-  const { data: eventTypes, isLoading: typesLoading } = useSiemQuery<{
+  const { data: eventTypes, isLoading: typesLoading, isError: typesError, refetch: refetchTypes } = useSiemQuery<{
     categories: { category: string; count: number }[];
     trend: Record<string, unknown>[];
   }>("event-types", hostExtra);
 
-  const { data: failedLogins, isLoading: failLoading } = useSiemQuery<Record<string, unknown>>("failed-logins", hostExtra);
-  const { data: riskyHosts = [] } = useSiemQuery<{ host_name: string; risk_score: number; color: string; active_alerts: number }[]>("top-risky-hosts");
-  const { data: health } = useSiemQuery<{ hosts: { host_name: string; health_status: string; health_score: number }[] }>("host-health");
+  const { data: failedLogins, isLoading: failLoading, isError: failError, refetch: refetchFail } = useSiemQuery<Record<string, unknown>>("failed-logins", hostExtra);
+  const { data: riskyHosts = [], isError: riskyError, refetch: refetchRisky } = useSiemQuery<{ host_name: string; risk_score: number; color: string; active_alerts: number }[]>("top-risky-hosts");
+  const { data: health, isError: healthError, refetch: refetchHealth } = useSiemQuery<{ hosts: { host_name: string; health_status: string; health_score: number }[] }>("host-health");
 
   const { data: feedData } = useQuery({
     queryKey: ["events", "feed", queryParams],
@@ -91,7 +92,9 @@ export default function AnalyticsPage() {
       </div>
 
       <Panel title="Security events trend">
-        {trendLoading || !trend ? <ChartSkeleton /> : (
+        {trendError ? (
+          <QueryError onRetry={() => refetchTrend()} />
+        ) : trendLoading || !trend ? <ChartSkeleton /> : (
           <LazyWidget>
             <LazyEventTrendChart {...trend} />
           </LazyWidget>
@@ -99,14 +102,18 @@ export default function AnalyticsPage() {
       </Panel>
 
       <Panel title="Alert severity distribution">
-        {sevLoading || !severity ? <ChartSkeleton /> : (
+        {sevError ? (
+          <QueryError onRetry={() => refetchSev()} />
+        ) : sevLoading || !severity ? <ChartSkeleton /> : (
           <LazyWidget>
             <LazySeverityCharts distribution={severity.distribution} />
           </LazyWidget>
         )}
       </Panel>
 
-      {typesLoading || failLoading ? (
+      {typesError || failError ? (
+        <QueryError onRetry={() => { refetchTypes(); refetchFail(); }} />
+      ) : typesLoading || failLoading ? (
         <ChartSkeleton height={260} />
       ) : eventTypes && failedLogins ? (
         <LazyWidget minHeight={460}>
@@ -116,25 +123,33 @@ export default function AnalyticsPage() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <Panel title="Top risky hosts">
+          {riskyError ? (
+            <QueryError onRetry={() => refetchRisky()} />
+          ) : (
           <div className="space-y-2">
             {riskyHosts.map((h) => (
               <div key={h.host_name} className="flex items-center gap-2 text-sm">
                 <span className="w-28 truncate">{h.host_name}</span>
-                <div className="flex-1 h-2 bg-[#0a1018] rounded"><div className="h-full bg-[var(--danger)]" style={{ width: `${h.risk_score}%` }} /></div>
+                <div className="flex-1 h-2 bg-[var(--input-bg)] rounded"><div className="h-full bg-[var(--danger)]" style={{ width: `${h.risk_score}%` }} /></div>
                 <span className="w-8 tabular-nums text-xs">{h.risk_score}</span>
               </div>
             ))}
           </div>
+          )}
         </Panel>
         <Panel title="Host health">
-          {(health?.hosts || []).map((h) => (
+          {healthError ? (
+            <QueryError onRetry={() => refetchHealth()} />
+          ) : (
+          (health?.hosts || []).map((h) => (
             <div key={h.host_name} className="flex justify-between py-2 border-b border-[var(--border-subtle)] text-sm">
               <span>{h.host_name}</span>
               <span className={h.health_status === "critical" ? "text-[var(--danger)]" : h.health_status === "warning" ? "text-[var(--warning)]" : "text-[var(--success)]"}>
                 {h.health_status} ({h.health_score})
               </span>
             </div>
-          ))}
+          ))
+          )}
         </Panel>
       </div>
 

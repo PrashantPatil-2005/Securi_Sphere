@@ -1,5 +1,7 @@
 # SecuriSphere Frontend Redesign — Audit Report
 
+**Last updated:** July 2026 (post Sprint 1–2 stabilization)
+
 ## 1. UI Audit Report
 
 ### Before
@@ -48,10 +50,10 @@
 | Login | Loading spinner, error alerts, `next` param redirect, premium split layout |
 | Register | Password strength meter, confirm password validation |
 | Navigation | 4 grouped sections (Overview, Operations, Intelligence, Management) + Settings/Profile |
-| Settings | 8 categories with tab navigation and search |
-| Profile | Account details, password change, notification prefs, activity history |
-| Notifications | Toast system (4 types) + notification center with unread count |
-| Theme | Persistent dark/light toggle in sidebar and user menu |
+| Settings | 3 tabs (Appearance, Notifications, System) — theme, reduced motion, notification channels, read-only system info |
+| Profile | Display name edit + password change (`POST /auth/change-password`) |
+| Notifications | Toast system + notification center; delivery channels in Settings → Notifications |
+| Theme | Persistent dark/light + reduced motion in Settings; toggle also in user menu |
 
 ---
 
@@ -78,10 +80,10 @@
 | Framer Motion transitions (150–300ms) | GPU-accelerated, tasteful |
 
 ### Remaining opportunities
-- Migrate Tier B pages (offenses, metrics, MITRE, etc.) to TanStack Query
-- Add `next/dynamic` for Recharts on analytics page
-- Virtualize alerts list
-- Move auth tokens to httpOnly cookies (requires backend change)
+- Add `next/dynamic` for heavy Recharts bundles on analytics page
+- Full focus trap in dropdown menus (Escape + focus restore implemented)
+- Server-validated middleware session (cookie presence only today)
+- In-app notification history persistence (center is session-only)
 
 ---
 
@@ -144,11 +146,18 @@ frontend/
 ## 6. Accessibility Improvements
 
 - Focus-visible outlines on all interactive elements
+- **Skip to main content** link in `AppShell` (visible on keyboard focus)
 - ARIA labels on search, notifications, sidebar toggle
+- Dropdown menus: `aria-expanded`, `aria-haspopup`, `aria-controls`, `role="menu"`, **Escape to close**, focus first item on open
 - `role="alert"` on error messages and toasts
 - `aria-live="polite"` on toast container and password strength
 - Keyboard-accessible nav links and form controls
 - Semantic HTML (`nav`, `header`, `main`, `section`)
+- **Reduced motion** preference wired in Settings + `ThemeScript` (respects OS default)
+
+### Still open
+- Color-only severity in some legacy rows (add icons/patterns)
+- Full roving tabindex in notification list
 
 ---
 
@@ -164,11 +173,15 @@ frontend/
 - `app/(auth)/layout.tsx` + 4 auth pages
 - `app/(dashboard)/profile/page.tsx`, `settings/page.tsx`
 
-### Updated
-- `app/globals.css`, `tailwind.config.ts`, `app/layout.tsx`
-- `app/(dashboard)/layout.tsx`, `page.tsx`
-- `components/ui/Panel.tsx`, `Skeleton.tsx`
-- `lib/api.ts` — cookie sync on login/logout
+### Updated (Sprint 1–2)
+- All dashboard data pages use `QueryError` with retry
+- `metrics/page.tsx` uses `chartTheme.ts`
+- `profile/page.tsx` — password change panel
+- `settings/page.tsx` — no placeholder toggles; `NotificationSettingsPanel` explicit save
+- `hosts/page.tsx` — enrollment modal platform requirements
+- `lib/hooks/useDropdown.ts` — shared dropdown a11y behavior
+- `components/layout/TopNav.tsx`, `AppShell.tsx` — skip link + keyboard menus
+- Backend: `POST /api/v1/auth/change-password`
 
 ### Removed
 - `app/login/`, `app/register/`, `app/forgot-password/`, `app/reset-password/` (moved to `(auth)` group)

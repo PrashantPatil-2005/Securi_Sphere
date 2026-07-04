@@ -11,6 +11,8 @@ import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
+import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
 
 interface Metric {
   recorded_at: string;
@@ -21,14 +23,14 @@ interface Metric {
 
 export default function MetricsPage() {
   const { queryParams } = useTimeRange();
-  const { data: hosts = [], isLoading: hostsLoading } = useHostsList();
+  const { data: hosts = [], isLoading: hostsLoading, isError: hostsError, refetch: refetchHosts } = useHostsList();
   const [hostId, setHostId] = useState("");
 
   useEffect(() => {
     if (!hostId && hosts[0]) setHostId(hosts[0].id);
   }, [hosts, hostId]);
 
-  const { data: metrics = [], isLoading: metricsLoading } = useQuery({
+  const { data: metrics = [], isLoading: metricsLoading, isError: metricsError, refetch: refetchMetrics } = useQuery({
     queryKey: ["metrics", hostId, queryParams],
     queryFn: async () => {
       const q = buildQuery({ host_id: hostId, limit: 500 }, queryParams);
@@ -61,20 +63,24 @@ export default function MetricsPage() {
           </option>
         ))}
       </select>
-      {hostsLoading || metricsLoading ? (
+      {hostsError ? (
+        <QueryError onRetry={() => refetchHosts()} />
+      ) : metricsError ? (
+        <QueryError onRetry={() => refetchMetrics()} />
+      ) : hostsLoading || metricsLoading ? (
         <TableSkeleton rows={6} />
       ) : chartData.length > 0 ? (
         <Panel title="Utilization">
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <XAxis dataKey="time" stroke="#666" fontSize={11} />
-                <YAxis stroke="#666" domain={[0, 100]} fontSize={11} />
-                <Tooltip contentStyle={{ background: "#1a2332", border: "1px solid #2f3b4f" }} />
+                <XAxis dataKey="time" {...axisProps} />
+                <YAxis {...axisProps} domain={[0, 100]} width={36} />
+                <Tooltip {...CHART_THEME.tooltip} />
                 <Legend />
-                <Line type="monotone" dataKey="cpu" stroke="#3b82f6" dot={false} isAnimationActive={false} name="CPU %" />
-                <Line type="monotone" dataKey="memory" stroke="#22c55e" dot={false} isAnimationActive={false} name="Memory %" />
-                <Line type="monotone" dataKey="disk" stroke="#eab308" dot={false} isAnimationActive={false} name="Disk %" />
+                <Line type="monotone" dataKey="cpu" stroke={CHART_THEME.colors.primary} dot={false} isAnimationActive={false} name="CPU %" />
+                <Line type="monotone" dataKey="memory" stroke={CHART_THEME.colors.success} dot={false} isAnimationActive={false} name="Memory %" />
+                <Line type="monotone" dataKey="disk" stroke={CHART_THEME.colors.warning} dot={false} isAnimationActive={false} name="Disk %" />
               </LineChart>
             </ResponsiveContainer>
           </div>

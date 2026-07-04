@@ -10,6 +10,7 @@ from sqlalchemy import select
 # Must be set before app import so Settings and lifespan behave for tests.
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-minimum-length-required")
+os.environ.setdefault("ASYNC_EVENT_PIPELINE", "false")
 
 from app.database import async_session  # noqa: E402
 from app.main import app  # noqa: E402

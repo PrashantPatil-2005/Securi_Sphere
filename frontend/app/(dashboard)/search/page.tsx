@@ -11,6 +11,7 @@ import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { PageHeader, EmptyState, Panel } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
 
 interface SiemResult {
   events: { id: string; event_type: string; severity: string; description: string | null; timestamp: string }[];
@@ -59,7 +60,7 @@ function SearchPageContent() {
     }
   }, [searchParams]);
 
-  const { data: siem, isLoading: siemLoading, isFetching: siemFetching } = useQuery({
+  const { data: siem, isLoading: siemLoading, isFetching: siemFetching, isError: siemError, refetch: refetchSiem } = useQuery({
     queryKey: ["search", "siem", submitted, queryParams],
     queryFn: async () => {
       const query = buildQuery({ q: submitted }, queryParams);
@@ -69,7 +70,7 @@ function SearchPageContent() {
     staleTime: 60_000,
   });
 
-  const { data: global, isLoading: globalLoading, isFetching: globalFetching } = useQuery({
+  const { data: global, isLoading: globalLoading, isFetching: globalFetching, isError: globalError, refetch: refetchGlobal } = useQuery({
     queryKey: ["search", "global", submitted, queryParams],
     queryFn: async () => {
       const query = buildQuery({ q: submitted }, queryParams);
@@ -93,6 +94,8 @@ function SearchPageContent() {
 
   const isLoading = mode === "siem" ? siemLoading : globalLoading;
   const isFetching = mode === "siem" ? siemFetching : globalFetching;
+  const isError = mode === "siem" ? siemError : globalError;
+  const refetch = mode === "siem" ? refetchSiem : refetchGlobal;
 
   return (
     <div>
@@ -128,8 +131,9 @@ function SearchPageContent() {
           ))}
         </div>
       )}
-      {isLoading && <TableSkeleton rows={4} />}
-      {mode === "siem" && siem && (
+      {isLoading && submitted.length > 0 && <TableSkeleton rows={4} />}
+      {isError && submitted.length > 0 && <QueryError onRetry={() => refetch()} />}
+      {mode === "siem" && siem && !isError && (
         <div className={`space-y-2 ${isFetching ? "opacity-60" : ""}`}>
           <p className="text-sm text-muted">{siem.total_events} events · {siem.total_alerts} alerts</p>
           {siem.events.length === 0 && siem.alerts.length === 0 && (
@@ -143,7 +147,7 @@ function SearchPageContent() {
           ))}
         </div>
       )}
-      {mode === "global" && global && (
+      {mode === "global" && global && !isError && (
         <div className={`space-y-4 ${isFetching ? "opacity-60" : ""}`}>
           {global.hosts.length === 0 && global.alerts.length === 0 && global.events.length === 0 && (
             <EmptyState title="No results" description={`Nothing matched "${global.query}"`} />

@@ -4,12 +4,11 @@ import { memo, useMemo, useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader, Panel } from "@/components/ui/Panel";
-import { Button } from "@/components/ui/Button";
 import { useTheme } from "@/lib/theme/ThemeProvider";
-import { useToast } from "@/components/ui/Toast";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils/cn";
 import { NotificationSettingsPanel } from "@/components/NotificationSettingsPanel";
+import { QueryError } from "@/components/ui/QueryError";
 
 type Category = "appearance" | "notifications" | "system";
 
@@ -19,107 +18,72 @@ const categories: { id: Category; label: string }[] = [
   { id: "system", label: "System" },
 ];
 
-type Field = {
-  label: string;
-  desc: string;
-  type: "toggle" | "select" | "readonly";
-  options?: string[];
-  default?: boolean | string;
-  comingSoon?: boolean;
-  wired?: boolean;
-};
-
-const settingsContent: Record<Category, { title: string; fields: Field[] }> = {
-  appearance: {
-    title: "Appearance",
-    fields: [
-      { label: "Theme", desc: "Choose light or dark mode", type: "select", options: ["Dark", "Light"], default: "Dark", wired: true },
-      { label: "Reduced motion", desc: "Minimize animations", type: "toggle", default: false, comingSoon: true },
-      { label: "High contrast", desc: "Increase color contrast", type: "toggle", default: false, comingSoon: true },
-    ],
-  },
-  notifications: {
-    title: "Notification Settings",
-    fields: [
-      { label: "Email alerts", desc: "Send critical alerts via email", type: "toggle", default: false, wired: true },
-      { label: "Slack integration", desc: "Forward alerts to Slack", type: "toggle", default: false, wired: true },
-      { label: "Telegram", desc: "Forward alerts to Telegram", type: "toggle", default: false, wired: true },
-      { label: "Alert threshold", desc: "Minimum severity for notifications", type: "select", options: ["Critical", "High", "Medium", "Low"], default: "High", comingSoon: true },
-    ],
-  },
-  system: {
-    title: "System (read-only)",
-    fields: [
-      { label: "Environment", desc: "Deployment environment", type: "readonly" },
-      { label: "Data retention", desc: "Days to retain events and metrics", type: "readonly" },
-      { label: "Registration", desc: "Public user registration", type: "readonly" },
-    ],
-  },
-};
-
-const SettingsForm = memo(function SettingsForm({
-  category,
-  publicConfig,
-}: {
-  category: Category;
-  publicConfig?: { environment: string; retention_days: number; allow_registration: boolean };
-}) {
-  const content = settingsContent[category];
-  const { theme, setTheme } = useTheme();
-  const { toast } = useToast();
+const AppearanceSettings = memo(function AppearanceSettings() {
+  const { theme, setTheme, reducedMotion, setReducedMotion } = useTheme();
 
   return (
-    <Panel title={content.title}>
+    <Panel title="Appearance">
       <div className="space-y-4">
-        {content.fields.map((field) => (
-          <div key={field.label} className="flex items-start justify-between gap-4 py-3 border-b border-border-subtle/50 last:border-0">
-            <div className="flex-1 min-w-0">
-              <p className="text-body font-medium text-foreground flex items-center gap-2">
-                {field.label}
-                {field.comingSoon && (
-                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/20 text-muted">Coming soon</span>
-                )}
-              </p>
-              <p className="text-caption normal-case text-muted mt-0.5">{field.desc}</p>
-            </div>
-            {field.comingSoon && field.type === "toggle" && (
-              <input type="checkbox" disabled className="opacity-40" />
-            )}
-            {!field.comingSoon && field.type === "toggle" && category !== "system" && (
-              <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                <input type="checkbox" defaultChecked={field.default as boolean} className="sr-only peer" disabled={!field.wired} />
-                <div className="w-9 h-5 bg-border rounded-full peer-checked:bg-accent transition-colors opacity-80" />
-              </label>
-            )}
-            {field.type === "select" && field.label === "Theme" && (
-              <select
-                className="input-siem w-auto min-w-[140px] text-body py-1.5"
-                value={theme === "dark" ? "Dark" : "Light"}
-                onChange={(e) => setTheme(e.target.value === "Dark" ? "dark" : "light")}
-              >
-                <option value="Dark">Dark</option>
-                <option value="Light">Light</option>
-              </select>
-            )}
-            {field.type === "readonly" && publicConfig && (
-              <span className="text-body text-muted">
-                {field.label === "Environment" && publicConfig.environment}
-                {field.label === "Data retention" && `${publicConfig.retention_days} days`}
-                {field.label === "Registration" && (publicConfig.allow_registration ? "Enabled" : "Disabled")}
-              </span>
-            )}
+        <div className="flex items-start justify-between gap-4 py-3 border-b border-border-subtle/50">
+          <div className="flex-1 min-w-0">
+            <p className="text-body font-medium text-foreground">Theme</p>
+            <p className="text-caption normal-case text-muted mt-0.5">Choose light or dark mode. Saved automatically.</p>
+          </div>
+          <select
+            className="input-siem w-auto min-w-[140px] text-body py-1.5"
+            value={theme === "dark" ? "Dark" : "Light"}
+            onChange={(e) => setTheme(e.target.value === "Dark" ? "dark" : "light")}
+            aria-label="Theme"
+          >
+            <option value="Dark">Dark</option>
+            <option value="Light">Light</option>
+          </select>
+        </div>
+        <div className="flex items-start justify-between gap-4 py-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-body font-medium text-foreground">Reduced motion</p>
+            <p className="text-caption normal-case text-muted mt-0.5">Minimize animations across the dashboard.</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={reducedMotion}
+              onChange={(e) => setReducedMotion(e.target.checked)}
+              aria-label="Reduced motion"
+            />
+            <div className="w-9 h-5 bg-border rounded-full peer-checked:bg-accent transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent" />
+          </label>
+        </div>
+      </div>
+    </Panel>
+  );
+});
+
+const SystemSettings = memo(function SystemSettings({
+  publicConfig,
+}: {
+  publicConfig?: { environment: string; retention_days: number; allow_registration: boolean };
+}) {
+  const rows = [
+    { label: "Environment", value: publicConfig?.environment ?? "—" },
+    { label: "Data retention", value: publicConfig ? `${publicConfig.retention_days} days` : "—" },
+    {
+      label: "Registration",
+      value: publicConfig ? (publicConfig.allow_registration ? "Enabled" : "Disabled") : "—",
+    },
+  ];
+
+  return (
+    <Panel title="System">
+      <p className="text-caption normal-case text-muted mb-4">Deployment configuration (read-only).</p>
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-start justify-between gap-4 py-2 border-b border-border-subtle/50 last:border-0">
+            <span className="text-body font-medium text-foreground">{row.label}</span>
+            <span className="text-body text-muted capitalize">{row.value}</span>
           </div>
         ))}
-        {category === "notifications" && (
-          <p className="text-caption normal-case text-muted">Configure delivery channels in Profile → Notification preferences (API wired in Notifications tab).</p>
-        )}
-        {category !== "system" && (
-          <div className="pt-2">
-            <Button onClick={() => toast("success", "Settings saved", category === "appearance" ? "Theme updated" : "Preferences saved")}>
-              Save changes
-            </Button>
-          </div>
-        )}
       </div>
     </Panel>
   );
@@ -129,7 +93,7 @@ export default function SettingsPage() {
   const [active, setActive] = useState<Category>("appearance");
   const [search, setSearch] = useState("");
 
-  const { data: publicConfig } = useQuery({
+  const { data: publicConfig, isError, refetch } = useQuery({
     queryKey: ["settings", "public"],
     queryFn: () => api<{ environment: string; retention_days: number; allow_registration: boolean }>("/api/v1/settings/public"),
     staleTime: 300_000,
@@ -143,7 +107,7 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <PageHeader title="Settings" subtitle="Working preferences only — unimplemented options are marked Coming soon" />
+      <PageHeader title="Settings" subtitle="Appearance, notifications, and system configuration" />
       <div className="relative max-w-sm">
         <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
         <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search settings…" className="input-siem pl-9" />
@@ -166,7 +130,9 @@ export default function SettingsPage() {
           ))}
         </nav>
         <div className="flex-1 min-w-0">
-          {active === "notifications" ? <NotificationSettingsPanel /> : <SettingsForm category={active} publicConfig={publicConfig} />}
+          {active === "appearance" && <AppearanceSettings />}
+          {active === "notifications" && <NotificationSettingsPanel />}
+          {active === "system" && (isError ? <QueryError onRetry={() => refetch()} /> : <SystemSettings publicConfig={publicConfig} />)}
         </div>
       </div>
     </div>

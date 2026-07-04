@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     retention_days: int = 90
     async_event_pipeline: bool = True
+    cross_host_correlation_interval_seconds: int = 60
     agent_request_signing: bool = False
     account_lockout_attempts: int = 5
     account_lockout_minutes: int = 15

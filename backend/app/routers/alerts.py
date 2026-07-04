@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,8 +12,18 @@ from app.models.alert import Alert
 from app.models.alert_rule import AlertRule
 from app.models.event import Event
 from app.models.host import Host
+from app.models.threat_score import HostThreatScore
+from app.models.timeline import AttackTimeline
 from app.models.user import User
-from app.schemas.alert import AlertListResponse, AlertResponse, AlertStatusUpdate
+from app.schemas.alert import (
+    AlertInvestigationHost,
+    AlertInvestigationResponse,
+    AlertInvestigationTimeline,
+    AlertListResponse,
+    AlertResponse,
+    AlertStatusUpdate,
+)
+from app.schemas.event import EventResponse
 from app.services.audit import log_audit
 from app.services.detection import update_host_statuses
 from app.services.export_service import export_csv, export_json, export_pdf
@@ -102,6 +112,78 @@ async def get_alert(alert_id: UUID, db: AsyncSession = Depends(get_db), user: Us
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return _to_response(alert)
+
+
+@router.get("/{alert_id}/investigation", response_model=AlertInvestigationResponse)
+async def get_alert_investigation(
+    alert_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Alert).options(selectinload(Alert.host)).where(Alert.id == alert_id)
+    )
+    alert = result.scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    host = alert.host
+    if not host:
+        host = await db.get(Host, alert.host_id)
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    score_row = (
+        await db.execute(select(HostThreatScore).where(HostThreatScore.host_id == host.id))
+    ).scalar_one_or_none()
+
+    window_start = alert.created_at - timedelta(minutes=30)
+    window_end = alert.created_at + timedelta(minutes=5)
+    events = (
+        await db.execute(
+            select(Event)
+            .where(
+                Event.host_id == alert.host_id,
+                Event.timestamp >= window_start,
+                Event.timestamp <= window_end,
+            )
+            .order_by(Event.timestamp.desc())
+            .limit(25)
+        )
+    ).scalars().all()
+
+    timelines = (
+        await db.execute(
+            select(AttackTimeline)
+            .where(AttackTimeline.host_id == alert.host_id)
+            .order_by(AttackTimeline.started_at.desc())
+            .limit(5)
+        )
+    ).scalars().all()
+
+    return AlertInvestigationResponse(
+        alert=_to_response(alert),
+        host=AlertInvestigationHost(
+            id=host.id,
+            name=host.name,
+            hostname=host.hostname,
+            status=host.status,
+            ip_address=str(host.ip_address) if host.ip_address else None,
+            risk_score=int(score_row.score) if score_row else None,
+        ),
+        events=[EventResponse.model_validate(e) for e in events],
+        timelines=[
+            AlertInvestigationTimeline(
+                id=tl.id,
+                title=tl.title,
+                severity=tl.severity,
+                confidence=tl.confidence,
+                started_at=tl.started_at,
+                status=tl.status,
+            )
+            for tl in timelines
+        ],
+    )
 
 
 @router.patch("/{alert_id}/resolve", response_model=AlertResponse)

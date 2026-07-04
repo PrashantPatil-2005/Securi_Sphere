@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
@@ -56,6 +57,84 @@ export function usePaginatedResource<T>({
     placeholderData: (prev) => prev,
     staleTime: includeTimeRange ? 0 : 15_000,
   });
+}
+
+interface CursorPaginatedParams {
+  endpoint: string;
+  queryKey: string;
+  pageSize: number;
+  sort: string;
+  filters: Record<string, string | number | boolean | undefined | null>;
+  includeTimeRange?: boolean;
+}
+
+export function useCursorPaginatedResource<T>({
+  endpoint,
+  queryKey,
+  pageSize,
+  sort,
+  filters,
+  includeTimeRange = true,
+}: CursorPaginatedParams) {
+  const { queryParams } = useTimeRange();
+  const timeParams = includeTimeRange ? queryParams : {};
+  const [page, setPage] = useState(1);
+  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+
+  const resetKey = useMemo(
+    () => JSON.stringify({ timeParams, pageSize, sort, filters }),
+    [timeParams, pageSize, sort, filters],
+  );
+
+  useEffect(() => {
+    setPage(1);
+    setCursors([null]);
+  }, [resetKey]);
+
+  const activeCursor = cursors[page - 1] ?? null;
+
+  const query = useQuery({
+    queryKey: [queryKey, timeParams, page, pageSize, sort, filters, activeCursor],
+    queryFn: async () => {
+      const paging = activeCursor ? { cursor: activeCursor } : { page: 1 };
+      const q = buildQuery({ page_size: pageSize, sort, ...filters, ...paging }, timeParams);
+      const r = await api<{
+        items?: T[];
+        total?: number;
+        next_cursor?: string | null;
+        has_more?: boolean;
+      } | T[]>(`${endpoint}${q}`);
+      return parsePaginatedList(r);
+    },
+    placeholderData: (prev) => prev,
+    staleTime: includeTimeRange ? 0 : 15_000,
+  });
+
+  const goNext = useCallback(() => {
+    const next = query.data?.next_cursor;
+    if (!next || !query.data?.has_more) return;
+    setCursors((prev) => {
+      const copy = [...prev];
+      copy[page] = next;
+      return copy;
+    });
+    setPage((p) => p + 1);
+  }, [page, query.data]);
+
+  const goPrev = useCallback(() => {
+    setPage((p) => Math.max(1, p - 1));
+  }, []);
+
+  return {
+    ...query,
+    page,
+    pageSize,
+    goNext,
+    goPrev,
+    hasMore: query.data?.has_more ?? false,
+    total: query.data?.total ?? 0,
+    items: query.data?.items ?? [],
+  };
 }
 
 export function useSiemQuery<T>(path: string, extra: Record<string, string> = {}, enabled = true) {

@@ -26,7 +26,7 @@ async def ingest_event_batch(
     events: list[EventIngest],
     *,
     async_pipeline: bool = True,
-) -> tuple[list[Event], list[str]]:
+) -> tuple[list[Event], list[str], int]:
     validate_batch_size(len(events))
     ingested: list[Event] = []
     errors: list[str] = []

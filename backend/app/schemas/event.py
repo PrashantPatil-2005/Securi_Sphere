@@ -22,3 +22,5 @@ class EventListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    next_cursor: str | None = None
+    has_more: bool = False

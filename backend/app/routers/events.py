@@ -34,19 +34,24 @@ async def list_events(
     sort: SortOrder = ListParams.sort(),
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
+    cursor: str | None = Query(None, description="Keyset cursor from a previous response (next_cursor)"),
     include_simulated: bool | None = Query(None),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    items, total = await query_events(
+    items, total, next_cursor, has_more = await query_events(
         db, tr,
         host_id=host_id, severity=severity, event_type=event_type,
         username=username, source_ip=source_ip, service_name=service_name, status=status,
-        q=q, exact=exact, sort=sort, page=page, page_size=page_size,
+        q=q, exact=exact, sort=sort, page=page, page_size=page_size, cursor=cursor,
         include_simulated=include_simulated,
     )
     return EventListResponse(
         items=[EventResponse.model_validate(e) for e in items],
-        total=total, page=page, page_size=page_size,
+        total=total,
+        page=page,
+        page_size=page_size,
+        next_cursor=next_cursor,
+        has_more=has_more,
     )
 
 
@@ -78,7 +83,7 @@ async def export_events(
     page_size: int = Query(500, ge=1, le=500),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    items, _ = await query_events(
+    items, _, _, _ = await query_events(
         db, tr,
         host_id=host_id, severity=severity, event_type=event_type,
         username=username, source_ip=source_ip, service_name=service_name, status=status,

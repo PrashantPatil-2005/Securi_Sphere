@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { usePaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
+import { useCursorPaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/ExportMenu";
-import PaginationBar from "@/components/PaginationBar";
+import CursorPaginationBar from "@/components/CursorPaginationBar";
 import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
@@ -53,7 +53,6 @@ const columns: Column<Event>[] = [
 
 export default function EventsPage() {
   const { queryParams } = useTimeRange();
-  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
   const [filters, setFilters] = useState({
@@ -75,10 +74,20 @@ export default function EventsPage() {
   );
 
   const { data: hosts = [] } = useHostsList();
-  const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Event>({
+  const {
+    items,
+    total,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+    page,
+    hasMore,
+    goNext,
+    goPrev,
+  } = useCursorPaginatedResource<Event>({
     endpoint: "/api/v1/events",
     queryKey: "events",
-    page,
     pageSize,
     sort,
     filters: debouncedFilters,
@@ -88,33 +97,42 @@ export default function EventsPage() {
 
   return (
     <div>
-      <PageHeader title="Events" subtitle="Security event log with server-side pagination" action={<ExportMenu resource="events" query={exportQuery} />} />
+      <PageHeader title="Events" subtitle="Security event log with keyset pagination" action={<ExportMenu resource="events" query={exportQuery} />} />
       <TimeRangeBar />
       <div className="filter-bar grid md:grid-cols-4 gap-2">
-        <select value={filters.host_id} onChange={(e) => { setFilters({ ...filters, host_id: e.target.value }); setPage(1); }} className="input-siem">
+        <select value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className="input-siem">
           <option value="">All hosts</option>
           {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
         </select>
-        <select value={filters.severity} onChange={(e) => { setFilters({ ...filters, severity: e.target.value }); setPage(1); }} className="input-siem">
+        <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className="input-siem">
           <option value="">All severities</option>
           {["info", "low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <input placeholder="Event type" value={filters.event_type} onChange={(e) => { setFilters({ ...filters, event_type: e.target.value }); setPage(1); }} className="input-siem" />
-        <input placeholder="Keyword" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} className="input-siem" />
-        <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
+        <input placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} className="input-siem" />
+        <input placeholder="Keyword" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="input-siem" />
+        <SortSelect value={sort} onChange={setSort} />
       </div>
       {isLoading ? (
         <TableSkeleton />
       ) : isError ? (
         <QueryError onRetry={() => refetch()} />
-      ) : (data?.items ?? []).length === 0 ? (
+      ) : items.length === 0 ? (
         <EmptyState title="No events" description="Adjust filters or enroll an agent to ingest events." />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
+          <VirtualDataTable rows={items} columns={columns} rowKey={rowKeyById} />
         </div>
       )}
-      <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
+      <CursorPaginationBar
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        itemCount={items.length}
+        hasMore={hasMore}
+        onPrev={goPrev}
+        onNext={goNext}
+        onPageSize={setPageSize}
+      />
     </div>
   );
 }

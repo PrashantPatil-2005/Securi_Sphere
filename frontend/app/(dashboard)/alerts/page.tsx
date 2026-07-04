@@ -1,17 +1,20 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePaginatedResource, useHostsList, useAlertStatusMutation } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import { rowKeyById } from "@/lib/rowKey";
+import { cn } from "@/lib/utils/cn";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualList } from "@/components/VirtualList";
-import { InvestigationTrail } from "@/components/InvestigationTrail";
+import { AlertInvestigationPane } from "@/components/AlertInvestigationPane";
 import { PageHeader } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
@@ -20,6 +23,7 @@ import { EmptyState } from "@/components/ui/Panel";
 
 interface Alert {
   id: string;
+  host_id: string;
   title: string;
   severity: string;
   status: string;
@@ -32,13 +36,22 @@ const STATUSES = ["open", "investigating", "resolved", "closed"];
 
 const AlertRow = memo(function AlertRow({
   alert,
-  onStatus,
+  selected,
+  onSelect,
 }: {
   alert: Alert;
-  onStatus: (id: string, status: string) => void;
+  selected: boolean;
+  onSelect: (id: string) => void;
 }) {
   return (
-    <div className="alert-row">
+    <button
+      type="button"
+      onClick={() => onSelect(alert.id)}
+      className={cn(
+        "alert-row w-full text-left transition-colors",
+        selected && "ring-1 ring-accent/40 bg-accent/5",
+      )}
+    >
       <div className="flex justify-between items-start gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -52,30 +65,42 @@ const AlertRow = memo(function AlertRow({
           {alert.description && <p className="text-sm text-[var(--muted)] truncate">{alert.description}</p>}
           <p className="text-[11px] text-[var(--muted)] mt-1 tabular-nums">{new Date(alert.created_at).toLocaleString()}</p>
         </div>
-        {alert.status === "open" && (
-          <div className="flex gap-1 shrink-0">
-            <button onClick={() => onStatus(alert.id, "investigating")} className="btn-ghost text-[11px] text-yellow-300">Investigate</button>
-            <button onClick={() => onStatus(alert.id, "resolved")} className="btn-ghost text-[11px] text-green-300">Resolve</button>
-          </div>
-        )}
       </div>
-    </div>
+    </button>
   );
 });
 
 export default function AlertsPage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <AlertsPageContent />
+    </Suspense>
+  );
+}
+
+function AlertsPageContent() {
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const { queryParams } = useTimeRange();
   const listHeight = useMemo(
-    () => (typeof window !== "undefined" ? Math.min(720, Math.max(360, window.innerHeight - 280)) : 640),
+    () => (typeof window !== "undefined" ? Math.min(640, Math.max(320, window.innerHeight - 320)) : 480),
     [],
   );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("selected"));
   const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "" });
   const debouncedQ = useDebounce(filters.q, 400);
   const debouncedRule = useDebounce(filters.rule_name, 400);
   const queryFilters = { ...filters, q: debouncedQ, rule_name: debouncedRule };
+
+  useEffect(() => {
+    const id = searchParams.get("selected");
+    if (id) setSelectedId(id);
+    const q = searchParams.get("q");
+    if (q && !searchParams.get("selected")) setFilters((prev) => ({ ...prev, q }));
+  }, [searchParams]);
 
   const { data: hosts = [] } = useHostsList();
   const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Alert>({
@@ -86,7 +111,9 @@ export default function AlertsPage() {
     sort,
     filters: queryFilters,
   });
-  const statusMutation = useAlertStatusMutation();
+  const statusMutation = useAlertStatusMutation(() => {
+    queryClient.invalidateQueries({ queryKey: ["alerts", "investigation", selectedId] });
+  });
 
   const setStatus = useCallback(
     (id: string, status: string) => statusMutation.mutate({ id, status }),
@@ -94,14 +121,15 @@ export default function AlertsPage() {
   );
 
   const renderAlert = useCallback(
-    (alert: Alert) => <AlertRow alert={alert} onStatus={setStatus} />,
-    [setStatus],
+    (alert: Alert) => (
+      <AlertRow alert={alert} selected={selectedId === alert.id} onSelect={setSelectedId} />
+    ),
+    [selectedId],
   );
 
   return (
     <div>
-      <PageHeader title="Alerts" subtitle="Detection alerts with workflow status" action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
-      <InvestigationTrail />
+      <PageHeader title="Alerts" subtitle="Detection alerts with investigation workspace" action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
       <TimeRangeBar />
       <div className="filter-bar">
         <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">
@@ -120,27 +148,40 @@ export default function AlertsPage() {
         <input placeholder="Search" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} className="input-siem" />
         <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
       </div>
-      {isLoading ? (
-        <TableSkeleton rows={6} />
-      ) : isError ? (
-        <QueryError onRetry={() => refetch()} />
-      ) : (
-        <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          {(data?.items ?? []).length === 0 ? (
-            <EmptyState title="No alerts" description="Adjust filters or time range to see detection results." />
+
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
+        <div>
+          {isLoading ? (
+            <TableSkeleton rows={6} />
+          ) : isError ? (
+            <QueryError onRetry={() => refetch()} />
           ) : (
-            <VirtualList
-              items={data?.items ?? []}
-              rowKey={rowKeyById}
-              renderItem={renderAlert}
-              height={listHeight}
-              estimateSize={96}
-              emptyMessage="No alerts"
-            />
+            <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
+              {(data?.items ?? []).length === 0 ? (
+                <EmptyState title="No alerts" description="Adjust filters or time range to see detection results." />
+              ) : (
+                <VirtualList
+                  items={data?.items ?? []}
+                  rowKey={rowKeyById}
+                  renderItem={renderAlert}
+                  height={listHeight}
+                  estimateSize={88}
+                  emptyMessage="No alerts"
+                />
+              )}
+            </div>
           )}
+          <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
         </div>
-      )}
-      <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
+
+        <div className="lg:sticky lg:top-20">
+          <AlertInvestigationPane
+            alertId={selectedId}
+            onStatus={setStatus}
+            isUpdating={statusMutation.isPending}
+          />
+        </div>
+      </div>
     </div>
   );
 }

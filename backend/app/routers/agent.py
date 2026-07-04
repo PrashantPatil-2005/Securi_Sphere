@@ -108,8 +108,6 @@ async def ingest_events(
     host_id_var.set(str(host.id))
     body = EventsBatch.model_validate_json(auth.raw_body)
     ingested, errors, deduplicated = await ingest_event_batch(db, host, body.events)
-    if ingested:
-        await run_detection_for_host(db, host)
     return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
 
 

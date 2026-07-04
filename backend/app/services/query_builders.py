@@ -1,7 +1,7 @@
 """Build filtered queries for list and export endpoints."""
 from uuid import UUID
 
-from sqlalchemy import String, cast, desc, func, or_, select
+from sqlalchemy import String, and_, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
@@ -10,6 +10,7 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
+from app.utils.cursor import decode_event_cursor, encode_event_cursor
 from app.utils.query import SEVERITY_ORDER, SortOrder, TimeRange, apply_time_range
 from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
@@ -39,6 +40,7 @@ async def query_events(
     sort: SortOrder = SortOrder.newest,
     page: int = 1,
     page_size: int = 50,
+    cursor: str | None = None,
     count_only: bool = False,
     include_simulated: bool | None = None,
 ):
@@ -97,17 +99,68 @@ async def query_events(
 
     total = (await db.execute(count_q)).scalar_one()
     if count_only:
-        return [], total
+        return [], total, None, False
 
     if sort == SortOrder.oldest:
-        query = query.order_by(Event.timestamp.asc())
+        query = query.order_by(Event.timestamp.asc(), Event.id.asc())
     elif sort == SortOrder.severity:
-        query = query.order_by(_severity_case(Event.severity).desc(), Event.timestamp.desc())
+        query = query.order_by(_severity_case(Event.severity).desc(), Event.timestamp.desc(), Event.id.desc())
     else:
-        query = query.order_by(Event.timestamp.desc())
+        query = query.order_by(Event.timestamp.desc(), Event.id.desc())
 
-    result = await db.execute(query.offset((page - 1) * page_size).limit(page_size))
-    return list(result.scalars().all()), total
+    if cursor:
+        try:
+            cursor_ts, cursor_id, cursor_sev = decode_event_cursor(cursor)
+        except (ValueError, KeyError, TypeError):
+            return [], total, None, False
+        if sort == SortOrder.oldest:
+            query = query.where(
+                or_(
+                    Event.timestamp > cursor_ts,
+                    and_(Event.timestamp == cursor_ts, Event.id > cursor_id),
+                )
+            )
+        elif sort == SortOrder.severity and cursor_sev is not None:
+            sev = _severity_case(Event.severity)
+            query = query.where(
+                or_(
+                    sev < cursor_sev,
+                    and_(sev == cursor_sev, Event.timestamp < cursor_ts),
+                    and_(sev == cursor_sev, Event.timestamp == cursor_ts, Event.id < cursor_id),
+                )
+            )
+        else:
+            query = query.where(
+                or_(
+                    Event.timestamp < cursor_ts,
+                    and_(Event.timestamp == cursor_ts, Event.id < cursor_id),
+                )
+            )
+        fetch_limit = page_size + 1
+        result = await db.execute(query.limit(fetch_limit))
+    elif page > 1:
+        fetch_limit = page_size + 1
+        result = await db.execute(query.offset((page - 1) * page_size).limit(fetch_limit))
+    else:
+        fetch_limit = page_size + 1
+        result = await db.execute(query.limit(fetch_limit))
+
+    items = list(result.scalars().all())
+    has_more = len(items) > page_size
+    if has_more:
+        items = items[:page_size]
+
+    next_cursor = None
+    if items and has_more:
+        last = items[-1]
+        severity_rank = SEVERITY_ORDER.get(last.severity, 0) if sort == SortOrder.severity else None
+        next_cursor = encode_event_cursor(
+            timestamp=last.timestamp,
+            event_id=last.id,
+            severity_rank=severity_rank,
+        )
+
+    return items, total, next_cursor, has_more
 
 
 async def query_alerts(

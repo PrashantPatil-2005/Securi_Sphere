@@ -9,6 +9,7 @@ import TimeRangeBar from "@/components/TimeRangeBar";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
+import { QueryError } from "@/components/ui/QueryError";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -18,7 +19,7 @@ const LiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), 
 });
 
 const ExecutiveKpis = memo(function ExecutiveKpis() {
-  const { data, isLoading } = useSiemQuery<{
+  const { data, isLoading, isError, refetch } = useSiemQuery<{
     total_hosts: number;
     online_hosts: number;
     active_alerts: number;
@@ -33,6 +34,8 @@ const ExecutiveKpis = memo(function ExecutiveKpis() {
       </div>
     );
   }
+
+  if (isError) return <QueryError onRetry={() => refetch()} />;
 
   const healthPct = data?.total_hosts ? Math.round((data.online_hosts / data.total_hosts) * 100) : 0;
 
@@ -49,7 +52,7 @@ const ExecutiveKpis = memo(function ExecutiveKpis() {
 });
 
 const SecurityTimeline = memo(function SecurityTimeline() {
-  const { data, isLoading } = useSiemQuery<{ security_trend: { period: string; count: number }[] }>("executive");
+  const { data, isLoading, isError, refetch } = useSiemQuery<{ security_trend: { period: string; count: number }[] }>("executive");
   const trendData = useMemo(
     () => (data?.security_trend ?? []).slice(-48).map((p) => ({
       period: String(p.period).slice(5, 16),
@@ -59,6 +62,7 @@ const SecurityTimeline = memo(function SecurityTimeline() {
   );
 
   if (isLoading) return <ChartSkeleton height={240} />;
+  if (isError) return <QueryError onRetry={() => refetch()} />;
 
   if (!trendData.length) {
     return (
@@ -91,9 +95,10 @@ const SecurityTimeline = memo(function SecurityTimeline() {
 });
 
 const RiskyHostsWidget = memo(function RiskyHostsWidget({ onSelect }: { onSelect: (id: string) => void }) {
-  const { data = [], isLoading } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number }[]>("top-risky-hosts", {});
+  const { data = [], isLoading, isError, refetch } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number }[]>("top-risky-hosts", {});
 
   if (isLoading) return <ChartSkeleton height={200} />;
+  if (isError) return <QueryError onRetry={() => refetch()} />;
 
   if (!data.length) {
     return (
@@ -129,11 +134,12 @@ const RiskyHostsWidget = memo(function RiskyHostsWidget({ onSelect }: { onSelect
 });
 
 const AttackTimelines = memo(function AttackTimelines() {
-  const { data = [], isLoading } = useSiemQuery<
+  const { data = [], isLoading, isError, refetch } = useSiemQuery<
     { id: string; host_name: string; title: string; risk_level: string }[]
   >("attack-timelines");
 
   if (isLoading) return <ChartSkeleton height={200} />;
+  if (isError) return <QueryError onRetry={() => refetch()} />;
 
   if (!data.length) {
     return (

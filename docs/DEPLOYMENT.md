@@ -274,9 +274,74 @@ Set `EXCLUDE_SIMULATED_FROM_DASHBOARD=true` again for production.
 
 See `.env.example` for the full list.
 
+### Production checklist
+
+After the first admin account is created, update `.env` and restart the stack:
+
+```env
+ALLOW_REGISTRATION=false
+ENABLE_SIMULATION=false
+EXCLUDE_SIMULATED_FROM_DASHBOARD=true
+AGENT_REQUEST_SIGNING=true
+ENVIRONMENT=production
+DEBUG=false
+REDIS_URL=redis://redis:6379/0
+TRUSTED_PROXY=true
+```
+
+Also verify:
+
+- `JWT_SECRET` and `POSTGRES_PASSWORD` are long random values (not defaults)
+- `SERVER_URL` and `FRONTEND_URL` use `https://` when behind TLS
+- PostgreSQL and Redis are not exposed publicly (`docker-compose.prod.yml`)
+- SMTP or Slack/Telegram is configured if you need outbound alert delivery
+- Back up the `securi_pg_data` Docker volume on a schedule
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
 ---
 
-## Firewall
+## Local integration tests (developers)
+
+Backend unit tests run without a database. Integration tests need PostgreSQL (and benefit from Redis).
+
+### Windows / macOS / Linux
+
+1. Start dependencies:
+
+```bash
+docker compose up -d postgres redis
+```
+
+2. Create `backend/.env` (or export variables):
+
+```env
+DATABASE_URL=postgresql+asyncpg://securi:YOUR_PASSWORD@localhost:5432/securi
+JWT_SECRET=local-dev-secret-minimum-length
+REDIS_URL=redis://localhost:6379/0
+TESTING=false
+```
+
+Use the same `POSTGRES_PASSWORD` as in the project root `.env` (default user/db: `securi`).
+
+3. Run tests:
+
+```bash
+cd backend
+python -m venv venv
+# Windows: venv\Scripts\activate
+# Linux/macOS: source venv/bin/activate
+pip install -r requirements.txt
+pytest tests/ -v
+```
+
+Without Postgres running, integration tests are **skipped** (21 passed, 21 skipped is normal). With Postgres up, all 42 tests should pass.
+
+CI runs the full suite automatically on push (see `.github/workflows/ci.yml`).
+
+---
 
 ```bash
 # UFW example

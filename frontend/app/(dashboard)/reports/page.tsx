@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { downloadAuthenticated } from "@/lib/download";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
 import { useToast } from "@/components/ui/Toast";
 
 interface Summary {
@@ -18,7 +19,7 @@ export default function ReportsPage() {
   const { toast } = useToast();
   const [reportType, setReportType] = useState<"daily" | "weekly" | "monthly">("daily");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["reports", "summary"],
     queryFn: () => api<Summary>("/api/v1/reports/summary"),
     staleTime: 60_000,
@@ -41,7 +42,9 @@ export default function ReportsPage() {
         title="Security Reports"
         subtitle="Daily, weekly, and monthly reports with events, alerts, risk scores, and MITRE mapping"
       />
-      {isLoading ? (
+      {isError ? (
+        <QueryError onRetry={() => refetch()} />
+      ) : isLoading ? (
         <TableSkeleton rows={4} />
       ) : data ? (
         <div className="grid md:grid-cols-3 gap-4">

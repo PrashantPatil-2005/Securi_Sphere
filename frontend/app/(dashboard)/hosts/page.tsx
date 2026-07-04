@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useMemo, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Info } from "lucide-react";
 import { usePaginatedResource } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
@@ -228,7 +228,7 @@ export default function HostsPage() {
       ) : isError ? (
         <QueryError onRetry={() => refetch()} />
       ) : (data?.items ?? []).length === 0 ? (
-        <EmptyState title="No hosts" description="Add a host, then click Enroll to get an install command for your Linux VM." />
+        <EmptyState title="No hosts" description="Add a host, then enroll a Debian or Ubuntu VM with the install command below." />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
           <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
@@ -242,8 +242,23 @@ export default function HostsPage() {
             <div>
               <h2 className="text-subheading">Install agent on {enrollment.host_name}</h2>
               <p className="text-caption normal-case text-muted mt-1">
-                Token expires {new Date(enrollment.expires_at).toLocaleString()}. Run this on the target Ubuntu/Debian host as root.
+                Token expires {new Date(enrollment.expires_at).toLocaleString()}.
               </p>
+            </div>
+            <div className="rounded-lg border border-accent/25 bg-accent/5 p-4 space-y-3">
+              <div className="flex items-start gap-2">
+                <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" aria-hidden />
+                <div className="space-y-2 text-caption normal-case text-muted">
+                  <p className="text-body font-medium text-foreground">Platform requirements</p>
+                  <ul className="list-disc pl-4 space-y-1">
+                    <li><strong className="text-foreground font-medium">Supported:</strong> Ubuntu, Debian, or Kali Linux (apt-based)</li>
+                    <li><strong className="text-foreground font-medium">Run as:</strong> root (<code className="text-xs">sudo</code>)</li>
+                    <li><strong className="text-foreground font-medium">Needs:</strong> Python 3, systemd, outbound access to this server</li>
+                    <li><strong className="text-foreground font-medium">Not supported:</strong> Windows, macOS, RHEL/CentOS (no apt)</li>
+                  </ul>
+                  <p>Collects <code className="text-xs">/var/log/auth.log</code>, syslog, and host metrics (CPU, memory, disk).</p>
+                </div>
+              </div>
             </div>
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
@@ -262,7 +277,7 @@ export default function HostsPage() {
               <code className="block text-xs break-all font-mono text-muted">{enrollment.token}</code>
             </div>
             <p className="text-caption normal-case text-muted">
-              After install, the host should show <strong>Enrolled</strong> and status <strong>online</strong> within 30 seconds.
+              Run the install command on the target VM. Within ~30 seconds the host should show <strong>Enrolled</strong> and status <strong>online</strong>.
               See <code className="text-xs">docs/AGENT_INSTALL.md</code> for troubleshooting.
             </p>
             <Button onClick={() => { setEnrollment(null); refetch(); }}>Done</Button>

@@ -15,6 +15,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.auth import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     LogoutRequest,
@@ -323,3 +324,21 @@ async def update_me(
         select(User).options(selectinload(User.role)).where(User.id == user.id)
     )
     return result.scalar_one()
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not verify_password(body.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="New password must differ from current password")
+    user.hashed_password = hash_password(body.new_password)
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    await log_audit(db, "password_change", user_id=user.id, ip_address=client_ip(request))
+    return {"message": "Password updated"}

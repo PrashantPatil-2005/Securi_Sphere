@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { QueryError } from "@/components/ui/QueryError";
 import { api } from "@/lib/api";
 
 interface Health {
@@ -24,18 +25,27 @@ interface Stats {
 }
 
 export default function SystemHealthPage() {
-  const { data: health, isLoading: h1 } = useQuery({
+  const { data: health, isLoading: h1, isError: healthError, refetch: refetchHealth } = useQuery({
     queryKey: ["system", "health"],
     queryFn: () => api<Health>("/api/v1/system/health"),
     refetchInterval: 30_000,
   });
-  const { data: stats, isLoading: h2 } = useQuery({
+  const { data: stats, isLoading: h2, isError: statsError, refetch: refetchStats } = useQuery({
     queryKey: ["system", "stats"],
     queryFn: () => api<Stats>("/api/v1/system/stats"),
     refetchInterval: 30_000,
   });
 
   if (h1 || h2) return <TableSkeleton rows={6} />;
+
+  if (healthError || statsError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="System Health" subtitle="Platform readiness and operational metrics (admin)" />
+        <QueryError onRetry={() => { refetchHealth(); refetchStats(); }} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

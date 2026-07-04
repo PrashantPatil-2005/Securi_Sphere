@@ -9,6 +9,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen ambient-bg">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:rounded-md focus:bg-card focus:border focus:border-border focus:text-foreground focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       <Sidebar className="hidden lg:flex" />
       {mobileOpen && (
         <>
@@ -27,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       )}
       <div className="flex-1 flex flex-col min-w-0">
         <TopNav showMenu onMenuClick={() => setMobileOpen(true)} />
-        <main className="flex-1 p-4 lg:p-6 overflow-auto space-y-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-4 lg:p-6 overflow-auto space-y-8 outline-none">
           {children}
         </main>
       </div>

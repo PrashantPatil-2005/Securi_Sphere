@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.event import EventResponse
+
 
 class AlertResponse(BaseModel):
     id: UUID
@@ -32,3 +34,28 @@ class AlertListResponse(BaseModel):
 class AlertStatusUpdate(BaseModel):
     status: str
     assigned_to: UUID | None = None
+
+
+class AlertInvestigationHost(BaseModel):
+    id: UUID
+    name: str
+    hostname: str | None
+    status: str
+    ip_address: str | None
+    risk_score: int | None = None
+
+
+class AlertInvestigationTimeline(BaseModel):
+    id: UUID
+    title: str
+    severity: str
+    confidence: float
+    started_at: datetime
+    status: str
+
+
+class AlertInvestigationResponse(BaseModel):
+    alert: AlertResponse
+    host: AlertInvestigationHost
+    events: list[EventResponse]
+    timelines: list[AlertInvestigationTimeline]

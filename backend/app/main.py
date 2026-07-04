@@ -28,13 +28,12 @@ from app.routers import (
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.security import create_ws_ticket, decode_token as jwt_decode
-from app.services.correlation_engine import seed_correlation_rules
+from app.services.correlation_engine import run_cross_host_correlation, seed_correlation_rules
 from app.services.detection import seed_alert_rules, update_host_statuses
 from app.services.migrate import migrate_schema
 from app.services.mitre import seed_mitre
 from app.services.retention import run_retention
 from app.services.saved_search_alerts import run_saved_search_alerts
-from app.services.threat_score import update_all_threat_scores
 from app.services.threat_score import update_all_threat_scores
 from app.services.analytics.aggregator import aggregate_daily_stats
 from app.utils.agent_bundle import resolve_agent_bundle, resolve_install_script
@@ -76,6 +75,12 @@ async def analytics_job() -> None:
         await db.commit()
 
 
+async def cross_host_correlation_job() -> None:
+    async with async_session() as db:
+        await run_cross_host_correlation(db)
+        await db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     register_job_handlers()
@@ -84,6 +89,12 @@ async def lifespan(app: FastAPI):
     await init_db()
     if not settings.testing:
         scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
+        scheduler.add_job(
+            cross_host_correlation_job,
+            "interval",
+            seconds=settings.cross_host_correlation_interval_seconds,
+            id="cross_host_correlation",
+        )
         scheduler.add_job(run_retention, "cron", hour=2, id="retention")
         scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
         scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts")
