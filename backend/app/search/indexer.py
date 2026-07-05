@@ -25,12 +25,14 @@ async def index_event(event: Event, host_name: str) -> None:
     await index_event_doc(event_to_doc(event, host_name))
 
 
-async def index_alert(alert: Alert) -> None:
+async def index_alert(alert: Alert, host_name: str = "") -> None:
     await index_document(
         "securi-alerts",
         str(alert.id),
         {
             "id": str(alert.id),
+            "host_id": str(alert.host_id),
+            "host_name": host_name,
             "title": alert.title,
             "description": alert.description,
             "severity": alert.severity,

@@ -29,6 +29,26 @@ services:
       timeout: 3s
       retries: 5
 
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: securi-worker
+    command: ["python", "-m", "app.jobs.worker"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-securi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-securi}
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_BACKEND: redis
+      JOB_QUEUE_RUN_WORKERS: "true"
+      JOB_QUEUE_WORKERS: "2"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   backend:
     build:
       context: .
@@ -39,6 +59,9 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-securi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-securi}
       REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_BACKEND: ${JOB_QUEUE_BACKEND:-redis}
+      JOB_QUEUE_RUN_WORKERS: ${JOB_QUEUE_RUN_WORKERS:-false}
+      WS_PUBSUB_BACKEND: ${WS_PUBSUB_BACKEND:-redis}
       SERVER_URL: ${SERVER_URL:-http://localhost:8000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}

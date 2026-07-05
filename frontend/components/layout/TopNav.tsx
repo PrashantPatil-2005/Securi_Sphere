@@ -3,36 +3,36 @@
 import { memo, useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Bell, Moon, Sun, User, Settings, LogOut, Menu } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { useDropdown } from "@/lib/hooks/useDropdown";
+import {
+  useNotificationHistory,
+  useNotificationMutations,
+  useUnreadNotificationCount,
+  notificationHref,
+} from "@/lib/hooks/useNotifications";
 import { useWsMessages } from "@/lib/websocket";
 import { cn } from "@/lib/utils/cn";
 
-interface Notification {
-  id: string;
-  title: string;
-  time: string;
-  read: boolean;
-}
-
 function NotificationCenter() {
+  const queryClient = useQueryClient();
   const { open, toggle, close, containerRef, triggerRef, panelRef, panelId } = useDropdown();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const { data: unreadData } = useUnreadNotificationCount();
+  const { data: history } = useNotificationHistory(1, 10);
+  const { markRead, markAllRead } = useNotificationMutations();
 
-  useWsMessages(["new_alert"], (msg) => {
-    const title = String(msg.data.title || "New security alert");
-    setNotifications((prev) => [
-      { id: crypto.randomUUID(), title, time: new Date().toLocaleTimeString(), read: false },
-      ...prev.slice(0, 19),
-    ]);
-  });
+  const refresh = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  }, [queryClient]);
 
-  const unread = notifications.filter((n) => !n.read).length;
+  useWsMessages(["new_alert"], refresh);
 
-  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const notifications = history?.items ?? [];
+  const unread = unreadData?.unread_count ?? 0;
 
   return (
     <div ref={containerRef} className="relative">
@@ -69,7 +69,12 @@ function NotificationCenter() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
               <span className="text-body font-semibold">Notifications</span>
               {unread > 0 && (
-                <button type="button" onClick={markAllRead} className="text-caption normal-case text-accent hover:underline">
+                <button
+                  type="button"
+                  onClick={() => markAllRead.mutate()}
+                  disabled={markAllRead.isPending}
+                  className="text-caption normal-case text-accent hover:underline"
+                >
                   Mark all read
                 </button>
               )}
@@ -78,20 +83,57 @@ function NotificationCenter() {
               {notifications.length === 0 ? (
                 <p className="px-4 py-8 text-body text-muted text-center">No notifications</p>
               ) : (
-                notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    role="menuitem"
-                    className={cn(
-                      "px-4 py-3 border-b border-border-subtle/50 hover:bg-[var(--sidebar-hover)] transition-colors",
-                      !n.read && "bg-accent/5",
-                    )}
-                  >
-                    <p className="text-body font-medium">{n.title}</p>
-                    <p className="text-caption normal-case text-muted mt-0.5">{n.time}</p>
-                  </div>
-                ))
+                notifications.map((n) => {
+                  const href = notificationHref(n);
+                  const row = (
+                    <div
+                      className={cn(
+                        "px-4 py-3 border-b border-border-subtle/50 hover:bg-[var(--sidebar-hover)] transition-colors",
+                        !n.read && "bg-accent/5",
+                      )}
+                    >
+                      <p className="text-body font-medium">{n.title}</p>
+                      <p className="text-caption normal-case text-muted mt-0.5">
+                        {new Date(n.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  );
+
+                  if (href) {
+                    return (
+                      <Link
+                        key={n.id}
+                        href={href}
+                        role="menuitem"
+                        onClick={() => {
+                          if (!n.read) markRead.mutate(n.id);
+                          close();
+                        }}
+                      >
+                        {row}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (!n.read) markRead.mutate(n.id);
+                      }}
+                      className="w-full text-left"
+                    >
+                      {row}
+                    </button>
+                  );
+                })
               )}
+            </div>
+            <div className="px-4 py-2 border-t border-border-subtle text-center">
+              <Link href="/notifications" onClick={close} className="text-caption normal-case text-accent hover:underline">
+                View all history
+              </Link>
             </div>
           </motion.div>
         )}

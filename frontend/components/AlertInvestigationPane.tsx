@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
+import { IocLookupPanel } from "@/components/IocLookupPanel";
 import { Panel, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
@@ -160,6 +161,8 @@ export function AlertInvestigationPane({
           )}
         </div>
       </Panel>
+
+      <IocLookupPanel value={host.ip_address} />
 
       <Panel title={`Related events (${events.length})`} subtitle="±30 minutes around alert time">
         {events.length === 0 ? (

@@ -1,6 +1,6 @@
 """System health and operational metrics for admin dashboard."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -11,8 +11,11 @@ from app.database import get_db
 from app.dependencies import require_roles
 from app.jobs.queue import job_queue
 from app.models.alert import Alert
+from app.models.event import Event
 from app.models.host import Host
 from app.models.user import User
+from app.search.opensearch_client import opensearch_enabled
+from app.websocket.manager import ws_manager
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -20,13 +23,96 @@ router = APIRouter(prefix="/system", tags=["system"])
 @router.get("/health")
 async def system_health(user: User = Depends(require_roles("admin"))):
     ready = await readiness()
+    pending = await job_queue.pending_count()
     return {
         **ready,
         "environment": settings.environment,
+        "job_queue_backend": job_queue.backend_name,
         "job_queue_running": job_queue.is_running,
+        "job_queue_pending": pending,
+        "job_queue_run_workers": settings.job_queue_run_workers,
+        "ws_pubsub_backend": ws_manager.backend_name,
         "redis_configured": bool(settings.redis_url),
         "simulation_enabled": settings.enable_simulation,
         "registration_enabled": settings.allow_registration,
+    }
+
+
+@router.get("/pipeline")
+async def pipeline_status(db=Depends(get_db), user: User = Depends(require_roles("admin"))):
+    """QRadar-style 3-layer pipeline map for SecuriSphere."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    events_24h = (
+        await db.execute(select(func.count()).select_from(Event).where(Event.timestamp >= since))
+    ).scalar_one()
+    flow_events_24h = (
+        await db.execute(
+            select(func.count()).select_from(Event).where(
+                Event.timestamp >= since, Event.event_type == "network_flow"
+            )
+        )
+    ).scalar_one()
+    alerts_open = (
+        await db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open"))
+    ).scalar_one()
+    pending_jobs = await job_queue.pending_count()
+
+    search_backend = "opensearch" if opensearch_enabled() else "postgres"
+    broker_ok = job_queue.backend_name == "memory" or bool(settings.redis_url)
+
+    return {
+        "model": "ibm_qradar_3_layer",
+        "description": "Event/flow collection → processing/rules → search → console",
+        "layers": [
+            {
+                "layer": 1,
+                "name": "Data Collection",
+                "qradar_equivalent": "Event Collector + Flow Collector",
+                "status": "ok",
+                "components": [
+                    {"id": "event_collector", "name": "Event Collector", "endpoint": "POST /api/v1/agent/events"},
+                    {"id": "flow_collector", "name": "Flow Collector", "endpoint": "POST /api/v1/agent/flows"},
+                    {"id": "windows_collector", "name": "Windows Event Forwarder", "endpoint": "POST /api/v1/agent/windows-events"},
+                    {"id": "metrics_collector", "name": "Metrics Collector", "endpoint": "POST /api/v1/agent/metrics"},
+                ],
+                "functions": ["parsing", "normalization", "deduplication"],
+                "stats": {"events_24h": events_24h, "flow_events_24h": flow_events_24h},
+            },
+            {
+                "layer": 2,
+                "name": "Data Processing",
+                "qradar_equivalent": "Event Processor + Flow Processor",
+                "status": "ok" if broker_ok else "degraded",
+                "components": [
+                    {"id": "detection", "name": "Detection rules", "path": "app.services.detection"},
+                    {"id": "correlation", "name": "Correlation engine", "path": "app.services.correlation_engine"},
+                    {"id": "offenses", "name": "Offense grouping", "path": "app.services.offense_engine"},
+                    {"id": "job_queue", "name": "Job queue", "backend": job_queue.backend_name},
+                    {"id": "ws_pubsub", "name": "WebSocket pub/sub", "backend": ws_manager.backend_name},
+                ],
+                "functions": ["storage", "custom_rules", "offense_grouping", "threat_scoring"],
+                "stats": {"open_alerts": alerts_open, "pending_jobs": pending_jobs},
+            },
+            {
+                "layer": 3,
+                "name": "Data Search",
+                "qradar_equivalent": "Search / Ariel (simplified)",
+                "status": "ok",
+                "components": [
+                    {"id": "siem_search", "name": "SIEM query language", "endpoint": "GET /api/v1/search/siem"},
+                    {"id": "global_search", "name": "Global search", "endpoint": "GET /api/v1/search"},
+                    {"id": "events_api", "name": "Events API", "endpoint": "GET /api/v1/events"},
+                ],
+                "functions": ["full_text_search", "field_queries", "time_range_filters"],
+                "stats": {"search_backend": search_backend},
+            },
+        ],
+        "console": {
+            "name": "SecuriSphere Console",
+            "qradar_equivalent": "QRadar Console",
+            "features": ["graphs", "reports", "alerts", "offenses", "investigations", "mitre"],
+            "ui_routes": ["/", "/alerts", "/offenses", "/search", "/reports"],
+        },
     }
 
 

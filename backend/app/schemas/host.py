@@ -37,3 +37,8 @@ class EnrollmentTokenResponse(BaseModel):
     install_command: str
     host_id: UUID
     host_name: str
+    mtls_note: str | None = None
+
+
+class AgentCertRegister(BaseModel):
+    cert_fingerprint: str = Field(min_length=40, max_length=64)

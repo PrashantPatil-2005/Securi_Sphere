@@ -1,4 +1,6 @@
-"""Baseline schema — use alembic stamp head on existing DBs created via migrate.py."""
+"""Baseline schema from SQLAlchemy models."""
+
+from alembic import op
 
 revision = "001_baseline"
 down_revision = None
@@ -7,10 +9,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Schema is managed by app.services.migrate on startup for greenfield installs.
-    # This revision establishes Alembic history for CI and future autogenerate.
-    pass
+    import app.models  # noqa: F401 — register models
+    from app.database import Base
+
+    bind = op.get_bind()
+    Base.metadata.create_all(bind)
 
 
 def downgrade() -> None:
-    pass
+    import app.models  # noqa: F401
+    from app.database import Base
+
+    bind = op.get_bind()
+    Base.metadata.drop_all(bind)

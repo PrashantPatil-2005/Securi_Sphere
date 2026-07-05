@@ -6,8 +6,10 @@ from app.models.enrollment import EnrollmentToken
 from app.models.event import Event
 from app.models.host import Host
 from app.models.incident import Incident, IncidentAlert, IncidentNote
+from app.models.in_app_notification import InAppNotification, InAppNotificationRead
 from app.models.metric import Metric
 from app.models.mitre import MitreTechnique
+from app.models.notification import NotificationSettings
 from app.models.ingest_dedup import IngestDedup
 from app.models.password_reset import PasswordResetToken
 from app.models.refresh_token import RefreshToken
@@ -34,4 +36,5 @@ __all__ = [
     "AttackTimeline", "HostThreatScore", "Incident", "IncidentNote", "IncidentAlert",
     "Offense", "OffenseEvent", "HostRiskHistory", "MitreMapping", "SavedSearch", "GeneratedReport",
     "UserSession", "AgentRequestNonce", "AnalyticsDailyStat", "IngestDedup",
+    "InAppNotification", "InAppNotificationRead",
 ]

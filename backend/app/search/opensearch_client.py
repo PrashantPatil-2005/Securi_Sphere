@@ -180,3 +180,62 @@ async def global_search_opensearch(
     except Exception as exc:
         logger.warning("OpenSearch search failed, caller should fallback: %s", exc)
         return None
+
+
+async def siem_search_opensearch(
+    parsed: dict,
+    tr,
+    *,
+    limit: int = 50,
+) -> dict | None:
+    if not opensearch_enabled():
+        return None
+
+    client = _get_sync_client()
+    if not client:
+        return None
+
+    from app.search.mappings import ALERTS_INDEX, EVENTS_INDEX
+    from app.search.siem_opensearch import build_siem_index_query
+
+    def _search() -> dict:
+        _ensure_indices(client)
+        events_body = build_siem_index_query(parsed, tr, index_kind="events", limit=limit)
+        alerts_body = build_siem_index_query(parsed, tr, index_kind="alerts", limit=limit)
+
+        events_hits = client.search(index=EVENTS_INDEX, body=events_body)
+        alerts_hits = client.search(index=ALERTS_INDEX, body=alerts_body)
+
+        events = [
+            {
+                "id": h["_source"]["id"],
+                "event_type": h["_source"].get("event_type"),
+                "severity": h["_source"].get("severity"),
+                "description": h["_source"].get("description"),
+                "timestamp": h["_source"].get("timestamp"),
+                "host_id": h["_source"].get("host_id"),
+            }
+            for h in events_hits["hits"]["hits"]
+        ]
+        alerts = [
+            {
+                "id": h["_source"]["id"],
+                "title": h["_source"].get("title"),
+                "severity": h["_source"].get("severity"),
+                "status": h["_source"].get("status"),
+                "created_at": h["_source"].get("created_at"),
+            }
+            for h in alerts_hits["hits"]["hits"]
+        ]
+        return {
+            "events": events,
+            "alerts": alerts,
+            "total_events": len(events),
+            "total_alerts": len(alerts),
+        }
+
+    try:
+        return await asyncio.to_thread(_search)
+    except Exception as exc:
+        logger.warning("OpenSearch SIEM search failed, caller should fallback: %s", exc)
+        return None

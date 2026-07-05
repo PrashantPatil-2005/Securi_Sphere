@@ -22,7 +22,7 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import (
     agent, alerts, analytics, audit, auth, alert_rules, correlation_rules, events, hosts, incidents,
-    maintenance, metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
+    ioc, maintenance, metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
     simulation, threat_scores, timeline, settings as settings_router, system,
 )
 from app.dependencies import get_current_user
@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
     register_job_handlers()
     if not settings.testing:
         job_queue.start()
+        await ws_manager.start()
     await init_db()
     if not settings.testing:
         scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
@@ -104,6 +105,7 @@ async def lifespan(app: FastAPI):
     if not settings.testing:
         scheduler.shutdown()
         await job_queue.stop()
+        await ws_manager.stop()
     await engine.dispose()
     logger.info("SecuriSphere backend shutdown complete")
 
@@ -162,6 +164,7 @@ app.include_router(maintenance.router, prefix=prefix)
 app.include_router(saved_searches.router, prefix=prefix)
 app.include_router(settings_router.router, prefix=prefix)
 app.include_router(notifications.router, prefix=prefix)
+app.include_router(ioc.router, prefix=prefix)
 app.include_router(system.router, prefix=prefix)
 
 

@@ -28,6 +28,11 @@ SCENARIOS = {
         ("ssh_login_success", 120), ("sudo_usage", 150),
     ],
     "brute_force_only": [("ssh_login_failure", i * 20) for i in range(6)],
+    "multi_stage_attack": [
+        ("ssh_login_failure", 0), ("ssh_login_failure", 25), ("ssh_login_failure", 50),
+        ("ssh_login_failure", 75), ("ssh_login_success", 120),
+        ("sudo_usage", 180), ("network_flow", 240), ("service_failure", 300),
+    ],
     "service_crash": [("service_failure", 0)],
 }
 
@@ -46,11 +51,22 @@ async def run_simulation(scenario: str, host_id: UUID, db: AsyncSession = Depend
     host = (await db.execute(__import__("sqlalchemy").select(Host).where(Host.id == host_id))).scalar_one()
     now = datetime.now(timezone.utc)
     for etype, offset in SCENARIOS[scenario]:
+        metadata = {"simulated": True}
+        description = f"[SIMULATED] {etype}"
+        if etype == "network_flow":
+            metadata.update({
+                "src_ip": "10.0.0.50",
+                "dst_ip": "203.0.113.10",
+                "dst_port": 443,
+                "protocol": "tcp",
+            })
+            description = "[SIMULATED] TCP 10.0.0.50 → 203.0.113.10:443"
         event = Event(
             host_id=host_id, event_type=etype, severity="medium" if "failure" in etype else "high",
-            description=f"[SIMULATED] {etype}", source="simulation",
+            description=description, source="simulation",
             timestamp=now + timedelta(seconds=offset),
-            metadata_={"simulated": True},
+            metadata_=metadata,
+            source_ip=metadata.get("src_ip") if etype == "network_flow" else None,
         )
         enrich_event(event)
         db.add(event)

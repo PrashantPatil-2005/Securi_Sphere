@@ -35,6 +35,7 @@ async def test_siem_search_finds_ingested_event(analyst_client: AsyncClient):
     )
     assert res.status_code == 200, res.text
     body = res.json()
+    assert body["backend"] == "postgres"
     assert body["total_events"] >= 1
     assert any(e["event_type"] == unique_type for e in body["events"])
 

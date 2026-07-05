@@ -16,6 +16,8 @@ from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
 from app.models.user import User
 from app.schemas.alert import (
+    AlertBulkUpdate,
+    AlertBulkUpdateResponse,
     AlertInvestigationHost,
     AlertInvestigationResponse,
     AlertInvestigationTimeline,
@@ -103,6 +105,58 @@ async def export_alerts(
     if format == "pdf":
         return export_pdf(rows, "SecuriSphere Alerts Export", "alerts.pdf")
     return export_csv(rows, "alerts.csv")
+
+
+@router.patch("/bulk", response_model=AlertBulkUpdateResponse)
+async def bulk_update_alerts(
+    body: AlertBulkUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    if not body.alert_ids:
+        raise HTTPException(status_code=400, detail="alert_ids must not be empty")
+    if len(body.alert_ids) > 500:
+        raise HTTPException(status_code=400, detail="Cannot update more than 500 alerts at once")
+    if body.status is None and body.assigned_to is None:
+        raise HTTPException(status_code=400, detail="Provide status and/or assigned_to")
+    if body.status is not None and body.status not in VALID_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status must be one of {VALID_STATUSES}")
+
+    result = await db.execute(select(Alert).where(Alert.id.in_(body.alert_ids)))
+    alerts = result.scalars().all()
+    found_ids = {a.id for a in alerts}
+    not_found = [aid for aid in body.alert_ids if aid not in found_ids]
+
+    now = datetime.now(timezone.utc)
+    for alert in alerts:
+        if body.status is not None:
+            alert.status = body.status
+            if body.status in ("resolved", "closed"):
+                alert.resolved_at = now
+                alert.resolved_by = user.id
+        if body.assigned_to is not None:
+            alert.assigned_to = body.assigned_to
+
+    if alerts:
+        await update_host_statuses(db)
+        await log_audit(
+            db,
+            "alert_bulk_update",
+            user_id=user.id,
+            resource_type="alert",
+            details={
+                "count": len(alerts),
+                "status": body.status,
+                "assigned_to": str(body.assigned_to) if body.assigned_to else None,
+            },
+        )
+        if body.status in ("resolved", "closed"):
+            for alert in alerts:
+                await ws_manager.broadcast(
+                    {"type": "alert_resolved", "data": {"id": str(alert.id)}}
+                )
+
+    return AlertBulkUpdateResponse(updated=len(alerts), not_found=not_found)
 
 
 @router.get("/{alert_id}", response_model=AlertResponse)

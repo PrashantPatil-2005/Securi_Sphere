@@ -14,6 +14,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 
 interface SiemResult {
+  backend?: string;
   events: { id: string; event_type: string; severity: string; description: string | null; timestamp: string }[];
   alerts: { id: string; title: string; severity: string; status: string }[];
   total_events: number;
@@ -135,7 +136,10 @@ function SearchPageContent() {
       {isError && submitted.length > 0 && <QueryError onRetry={() => refetch()} />}
       {mode === "siem" && siem && !isError && (
         <div className={`space-y-2 ${isFetching ? "opacity-60" : ""}`}>
-          <p className="text-sm text-muted">{siem.total_events} events · {siem.total_alerts} alerts</p>
+          <p className="text-sm text-muted">
+            {siem.total_events} events · {siem.total_alerts} alerts
+            {siem.backend && <> · <span className="font-mono text-xs">{siem.backend}</span></>}
+          </p>
           {siem.events.length === 0 && siem.alerts.length === 0 && (
             <EmptyState title="No results" description="Try broadening your query or time range." />
           )}

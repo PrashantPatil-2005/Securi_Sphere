@@ -15,7 +15,7 @@ from app.models.host import Host
 from app.models.siem import HostRiskHistory
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
-from app.schemas.host import EnrollmentTokenResponse, HostCreate, HostListResponse, HostResponse
+from app.schemas.host import AgentCertRegister, EnrollmentTokenResponse, HostCreate, HostListResponse, HostResponse
 from app.security import generate_enrollment_token, hash_token
 from app.services.audit import log_audit
 from app.services.export_service import export_csv, export_json, export_pdf
@@ -202,10 +202,37 @@ async def create_enrollment_token(host_id: UUID, request: Request, db: AsyncSess
         f"--token {token} --server {settings.server_url}"
     )
     await log_audit(db, "enrollment_token_create", user_id=user.id, resource_type="host", resource_id=host_id, ip_address=client_ip(request))
+    mtls_note = None
+    if settings.agent_mtls_enabled:
+        mtls_note = f"Generate client cert, then POST fingerprint to /api/v1/hosts/{host_id}/agent-cert"
     return EnrollmentTokenResponse(
         token=token, expires_at=expires, install_command=install_command,
-        host_id=host.id, host_name=host.name,
+        host_id=host.id, host_name=host.name, mtls_note=mtls_note,
     )
+
+
+@router.post("/{host_id}/agent-cert")
+async def register_agent_cert(
+    host_id: UUID,
+    body: AgentCertRegister,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    """Register agent TLS certificate fingerprint for mTLS verification."""
+    host = (await db.execute(select(Host).where(Host.id == host_id))).scalar_one_or_none()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+    host.agent_cert_fingerprint = body.cert_fingerprint.lower()
+    await log_audit(
+        db,
+        "agent_cert_register",
+        user_id=user.id,
+        resource_type="host",
+        resource_id=host_id,
+        ip_address=client_ip(request),
+    )
+    return {"host_id": str(host_id), "agent_cert_fingerprint": host.agent_cert_fingerprint, "ok": True}
 
 
 @router.get("/{host_id}/enrollment-tokens", response_model=list[TokenListItem])

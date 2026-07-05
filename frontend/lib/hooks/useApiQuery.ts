@@ -161,3 +161,18 @@ export function useAlertStatusMutation(onSuccess?: () => void) {
     },
   });
 }
+
+export function useAlertBulkMutation(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { alert_ids: string[]; status?: string; assigned_to?: string }) =>
+      api<{ updated: number; not_found: string[] }>("/api/v1/alerts/bulk", {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      onSuccess?.();
+    },
+  });
+}

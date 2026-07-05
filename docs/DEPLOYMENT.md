@@ -341,6 +341,56 @@ Without Postgres running, integration tests are **skipped** (21 passed, 21 skipp
 
 CI runs the full suite automatically on push (see `.github/workflows/ci.yml`).
 
+### Alembic migrations
+
+Schema revisions live in `backend/alembic/versions/`. Startup runs `alembic upgrade head`.
+
+```bash
+cd backend
+alembic upgrade head    # manual apply
+alembic current         # show revision
+alembic stamp head      # mark existing DB as current without DDL
+```
+
+Requires `psycopg2-binary` (in `requirements.txt`). Uses sync Postgres driver; `DATABASE_URL` may stay `postgresql+asyncpg://...`.
+
+### k6 smoke load test
+
+CI also runs a short k6 smoke test (`load-smoke` job) against a live API instance. To run locally:
+
+```bash
+k6 run loadtests/smoke.js
+```
+
+See `loadtests/README.md` for prerequisites and env vars.
+
+### Redis job worker (production)
+
+When `JOB_QUEUE_BACKEND=redis` and `REDIS_URL` is set:
+
+- **API** enqueues jobs to Redis (`JOB_QUEUE_RUN_WORKERS=false` in production)
+- **Worker** process consumes jobs: `python -m app.jobs.worker`
+
+Docker Compose starts a `worker` service automatically. Local dev without Docker can keep `JOB_QUEUE_BACKEND=memory` (default).
+
+```env
+REDIS_URL=redis://localhost:6379/0
+JOB_QUEUE_BACKEND=redis
+JOB_QUEUE_RUN_WORKERS=false   # API only
+JOB_QUEUE_WORKERS=2           # worker container
+```
+
+### Redis WebSocket pub/sub (multi-instance API)
+
+For multiple API replicas, broadcast alerts and host updates to every connected dashboard:
+
+```env
+WS_PUBSUB_BACKEND=redis
+REDIS_URL=redis://localhost:6379/0
+```
+
+Channel: `securi:ws:broadcast`. Docker Compose enables this on the `backend` service by default.
+
 ---
 
 ```bash

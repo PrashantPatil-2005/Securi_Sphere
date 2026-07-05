@@ -11,13 +11,15 @@ from app.dependencies_agent import AuthenticatedAgent, get_authenticated_agent
 from app.models.enrollment import EnrollmentToken
 from app.models.host import Host
 from app.models.metric import Metric
-from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, EventsBatch, MetricsBatch
+from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, EventsBatch, FlowsBatch, MetricsBatch, WindowsEventsBatch
 from app.security import generate_api_key, hash_token
 from app.services.agent_integrity import check_agent_integrity
 from app.services.audit import log_audit
 from app.services.detection import run_detection_for_host
 from app.services.threat_score import calculate_host_scores
 from app.pipeline.ingestion import ingest_event_batch
+from app.pipeline.flow_collector import flows_to_events
+from app.pipeline.windows_collector import windows_events_to_ingest
 from app.services.host_notify import broadcast_host_update
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -108,6 +110,34 @@ async def ingest_events(
     host_id_var.set(str(host.id))
     body = EventsBatch.model_validate_json(auth.raw_body)
     ingested, errors, deduplicated = await ingest_event_batch(db, host, body.events)
+    return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
+
+
+@router.post("/flows", response_model=EventsIngestResponse)
+async def ingest_flows(
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """Layer 1 flow collector — network flows normalized into searchable events."""
+    host = auth.host
+    host_id_var.set(str(host.id))
+    body = FlowsBatch.model_validate_json(auth.raw_body)
+    events = flows_to_events(body.flows)
+    ingested, errors, deduplicated = await ingest_event_batch(db, host, events)
+    return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
+
+
+@router.post("/windows-events", response_model=EventsIngestResponse)
+async def ingest_windows_events(
+    auth: AuthenticatedAgent = Depends(get_authenticated_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """Windows Event Log / Sysmon forwarder (spike)."""
+    host = auth.host
+    host_id_var.set(str(host.id))
+    body = WindowsEventsBatch.model_validate_json(auth.raw_body)
+    events = windows_events_to_ingest(body.events)
+    ingested, errors, deduplicated = await ingest_event_batch(db, host, events)
     return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
 
 

@@ -23,6 +23,8 @@ INDEX_MAPPINGS = {
         "mappings": {
             "properties": {
                 "id": {"type": "keyword"},
+                "host_id": {"type": "keyword"},
+                "host_name": {"type": "keyword"},
                 "title": {"type": "text"},
                 "description": {"type": "text"},
                 "severity": {"type": "keyword"},

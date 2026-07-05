@@ -36,6 +36,17 @@ class AlertStatusUpdate(BaseModel):
     assigned_to: UUID | None = None
 
 
+class AlertBulkUpdate(BaseModel):
+    alert_ids: list[UUID]
+    status: str | None = None
+    assigned_to: UUID | None = None
+
+
+class AlertBulkUpdateResponse(BaseModel):
+    updated: int
+    not_found: list[UUID]
+
+
 class AlertInvestigationHost(BaseModel):
     id: UUID
     name: str

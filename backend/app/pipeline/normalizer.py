@@ -16,6 +16,7 @@ EVENT_CATEGORIES: dict[str, str] = {
     "network_connection": "network",
     "process_start": "execution",
     "firewall_block": "network",
+    "network_flow": "network",
 }
 
 SEVERITY_ALIASES = {
@@ -79,6 +80,8 @@ def build_normalized_event(
 
     if normalized_type in ("ssh_login_failure", "ssh_login_success", "sudo_usage", "root_login"):
         normalized["tags"].append("auth")
+    if normalized_type == "network_flow":
+        normalized["tags"].append("flow")
     if severity in ("high", "critical"):
         normalized["tags"].append("security")
 

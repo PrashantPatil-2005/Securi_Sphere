@@ -63,7 +63,13 @@ curl -fsSL http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROL
 - docs/API.md - API reference
 - docs/SCHEMA.md - Database schema
 - docs/DEPLOYMENT.md - **Linux hosting, HTTPS, agents, and demo walkthrough**
+- docs/SIEM_PIPELINE_ARCHITECTURE.md - **QRadar-style 3-layer pipeline map**
+- docs/SOC_LAB_SCENARIO.md - **Multi-stage attack lab for portfolio**
+- docs/PRODUCTION_SECURITY.md - **Production env checklist**
 - docs/AGENT_INSTALL.md - **Add hosts, install agents, how monitoring works**
+- docs/AGENT_MTLS.md - **Agent mTLS enrollment and cert fingerprints**
+- docs/WRAP_UP.md - **Implementation complete — feature checklist and demo script**
+- docs/ROADMAP_STATUS.md - **100% in-scope completion scorecard**
 
 ### Deploy on Linux (quick)
 
@@ -82,6 +88,8 @@ chmod +x scripts/deploy-linux.sh
 - Host threat scores and network topology
 - Incident management, audit log, attack simulation
 - Agent integrity monitoring (hash change detection)
+- Windows event forwarder API, VirusTotal IOC lookup, bulk alert actions
+- Redis job queue/worker, event partitioning, RS256 JWT, Playwright E2E
 
 ## Dashboard Pages
 
@@ -89,11 +97,12 @@ Overview, Hosts, Events, Alerts, Metrics, MITRE, Timeline, Incidents, Network, R
 
 ## Database Migration
 
-If upgrading from an earlier version, run:
+Schema is managed by **Alembic**. On startup the backend runs `alembic upgrade head` automatically.
 
 ```powershell
 cd backend
-.\venv\Scripts\python -m app.services.migrate
+.\venv\Scripts\pip install -r requirements.txt
+.\venv\Scripts\alembic upgrade head
 ```
 
-Or restart the backend — migrations run automatically on startup.
+See `backend/alembic/README.md` for revision chain and stamping existing databases.

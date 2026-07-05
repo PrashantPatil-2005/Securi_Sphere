@@ -7,6 +7,9 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_private_key_path: str = ""
+    jwt_public_key_path: str = ""
     jwt_access_expire_minutes: int = 15
     jwt_refresh_expire_days: int = 7
     server_url: str = "http://localhost:8000"
@@ -30,6 +33,14 @@ class Settings(BaseSettings):
     enable_simulation: bool = True
     exclude_simulated_from_dashboard: bool = True
     redis_url: str = ""
+    job_queue_backend: str = "memory"
+    job_queue_workers: int = 2
+    job_queue_run_workers: bool = True
+    ws_pubsub_backend: str = "memory"
+    event_partitioning_enabled: bool = False
+    virustotal_api_key: str = ""
+    agent_mtls_enabled: bool = False
+    agent_mtls_ca_cert_path: str = ""
     trusted_proxy: bool = False
     testing: bool = False
     opensearch_url: str = ""
@@ -47,8 +58,12 @@ class Settings(BaseSettings):
     def require_secrets(self) -> "Settings":
         if not self.database_url:
             raise ValueError("DATABASE_URL must be set in .env")
-        if not self.jwt_secret:
-            raise ValueError("JWT_SECRET must be set in .env")
+        if self.jwt_algorithm.upper() == "HS256" and not self.jwt_secret:
+            raise ValueError("JWT_SECRET must be set in .env for HS256")
+        if self.jwt_algorithm.upper() == "RS256" and (
+            not self.jwt_private_key_path or not self.jwt_public_key_path
+        ):
+            raise ValueError("JWT key paths required for RS256")
         return self
 
     @property

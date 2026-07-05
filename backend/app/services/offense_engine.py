@@ -92,6 +92,17 @@ async def find_or_create_offense(
     )
     db.add(offense)
     await db.flush()
+    from app.services.in_app_notifications import record_in_app_notification
+
+    await record_in_app_notification(
+        db,
+        kind="offense",
+        title=f"Offense #{offense.offense_number}: {title}",
+        body=offense.description,
+        severity=risk_level,
+        resource_type="offense",
+        resource_id=offense.id,
+    )
     if risk_level in ("critical", "high"):
         from app.jobs.queue import job_queue
         await job_queue.enqueue("notify_offense", {"offense_id": str(offense.id)})

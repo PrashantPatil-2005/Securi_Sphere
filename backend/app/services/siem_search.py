@@ -81,6 +81,20 @@ async def execute_siem_search(
     parsed = parse_siem_query(query)
     tr = resolve_time_range(parsed.get("preset") or preset, from_time, to_time)
 
+    from app.search.opensearch_client import siem_search_opensearch
+
+    os_hits = await siem_search_opensearch(parsed, tr, limit=limit)
+    if os_hits is not None:
+        return {
+            "parsed": parsed,
+            "time_range": {
+                "from": tr.from_time.isoformat() if tr.from_time else None,
+                "to": tr.to_time.isoformat() if tr.to_time else None,
+            },
+            "backend": "opensearch",
+            **os_hits,
+        }
+
     host_name = parsed["filters"].get("host")
     host_id = None
     if host_name:
@@ -162,6 +176,7 @@ async def execute_siem_search(
             "from": tr.from_time.isoformat() if tr.from_time else None,
             "to": tr.to_time.isoformat() if tr.to_time else None,
         },
+        "backend": "postgres",
         "events": [
             {
                 "id": str(e.id),

@@ -81,6 +81,21 @@ async def create_alert(
     )
     db.add(alert)
     await db.flush()
+    host = await db.get(Host, host_id)
+    from app.search.indexer import index_alert
+
+    await index_alert(alert, host.name if host else "")
+    from app.services.in_app_notifications import record_in_app_notification
+
+    await record_in_app_notification(
+        db,
+        kind="alert",
+        title=title,
+        body=description,
+        severity=severity,
+        resource_type="alert",
+        resource_id=alert.id,
+    )
     from app.services.offense_engine import process_new_alert
     await process_new_alert(db, alert)
     from app.jobs.queue import job_queue

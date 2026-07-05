@@ -3,7 +3,8 @@
 import { memo, useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePaginatedResource, useHostsList, useAlertStatusMutation } from "@/lib/hooks/useApiQuery";
+import { usePaginatedResource, useHostsList, useAlertStatusMutation, useAlertBulkMutation } from "@/lib/hooks/useApiQuery";
+import { useUser } from "@/lib/hooks/useUser";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
@@ -37,36 +38,52 @@ const STATUSES = ["open", "investigating", "resolved", "closed"];
 const AlertRow = memo(function AlertRow({
   alert,
   selected,
+  checked,
+  showCheckbox,
   onSelect,
+  onToggle,
 }: {
   alert: Alert;
   selected: boolean;
+  checked: boolean;
+  showCheckbox: boolean;
   onSelect: (id: string) => void;
+  onToggle: (id: string, next: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(alert.id)}
+    <div
       className={cn(
-        "alert-row w-full text-left transition-colors",
+        "alert-row w-full text-left transition-colors flex gap-3 items-start",
         selected && "ring-1 ring-accent/40 bg-accent/5",
       )}
     >
-      <div className="flex justify-between items-start gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            <SeverityBadge severity={alert.severity} />
-            <span className="font-medium text-sm">{alert.title}</span>
-            <span className="text-[11px] text-[var(--muted)] capitalize">{alert.status}</span>
-            {alert.confidence != null && (
-              <span className="text-[11px] text-[var(--muted)]">{alert.confidence.toFixed(0)}% conf</span>
-            )}
+      {showCheckbox && (
+        <input
+          type="checkbox"
+          checked={checked}
+          aria-label={`Select alert ${alert.title}`}
+          onChange={(e) => onToggle(alert.id, e.target.checked)}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 shrink-0"
+        />
+      )}
+      <button type="button" onClick={() => onSelect(alert.id)} className="flex-1 min-w-0 text-left">
+        <div className="flex justify-between items-start gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <SeverityBadge severity={alert.severity} />
+              <span className="font-medium text-sm">{alert.title}</span>
+              <span className="text-[11px] text-[var(--muted)] capitalize">{alert.status}</span>
+              {alert.confidence != null && (
+                <span className="text-[11px] text-[var(--muted)]">{alert.confidence.toFixed(0)}% conf</span>
+              )}
+            </div>
+            {alert.description && <p className="text-sm text-[var(--muted)] truncate">{alert.description}</p>}
+            <p className="text-[11px] text-[var(--muted)] mt-1 tabular-nums">{new Date(alert.created_at).toLocaleString()}</p>
           </div>
-          {alert.description && <p className="text-sm text-[var(--muted)] truncate">{alert.description}</p>}
-          <p className="text-[11px] text-[var(--muted)] mt-1 tabular-nums">{new Date(alert.created_at).toLocaleString()}</p>
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 });
 
@@ -90,6 +107,7 @@ function AlertsPageContent() {
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("selected"));
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "" });
   const debouncedQ = useDebounce(filters.q, 400);
   const debouncedRule = useDebounce(filters.rule_name, 400);
@@ -103,6 +121,8 @@ function AlertsPageContent() {
   }, [searchParams]);
 
   const { data: hosts = [] } = useHostsList();
+  const { data: user } = useUser();
+  const canMutate = user?.role.name === "admin" || user?.role.name === "analyst";
   const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Alert>({
     endpoint: "/api/v1/alerts",
     queryKey: "alerts",
@@ -114,6 +134,44 @@ function AlertsPageContent() {
   const statusMutation = useAlertStatusMutation(() => {
     queryClient.invalidateQueries({ queryKey: ["alerts", "investigation", selectedId] });
   });
+  const bulkMutation = useAlertBulkMutation(() => {
+    setCheckedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ["alerts", "investigation", selectedId] });
+  });
+
+  const pageItems = data?.items ?? [];
+  const allOnPageSelected = pageItems.length > 0 && pageItems.every((a) => checkedIds.has(a.id));
+  const someOnPageSelected = pageItems.some((a) => checkedIds.has(a.id));
+
+  const toggleChecked = useCallback((id: string, next: boolean) => {
+    setCheckedIds((prev) => {
+      const copy = new Set(prev);
+      if (next) copy.add(id);
+      else copy.delete(id);
+      return copy;
+    });
+  }, []);
+
+  const toggleAllOnPage = useCallback(() => {
+    setCheckedIds((prev) => {
+      const copy = new Set(prev);
+      if (allOnPageSelected) {
+        pageItems.forEach((a) => copy.delete(a.id));
+      } else {
+        pageItems.forEach((a) => copy.add(a.id));
+      }
+      return copy;
+    });
+  }, [allOnPageSelected, pageItems]);
+
+  const runBulk = useCallback(
+    (payload: { status?: string; assigned_to?: string }) => {
+      const ids = Array.from(checkedIds);
+      if (!ids.length) return;
+      bulkMutation.mutate({ alert_ids: ids, ...payload });
+    },
+    [bulkMutation, checkedIds],
+  );
 
   const setStatus = useCallback(
     (id: string, status: string) => statusMutation.mutate({ id, status }),
@@ -122,9 +180,16 @@ function AlertsPageContent() {
 
   const renderAlert = useCallback(
     (alert: Alert) => (
-      <AlertRow alert={alert} selected={selectedId === alert.id} onSelect={setSelectedId} />
+      <AlertRow
+        alert={alert}
+        selected={selectedId === alert.id}
+        checked={checkedIds.has(alert.id)}
+        showCheckbox={!!canMutate}
+        onSelect={setSelectedId}
+        onToggle={toggleChecked}
+      />
     ),
-    [selectedId],
+    [selectedId, checkedIds, toggleChecked, canMutate],
   );
 
   return (
@@ -151,6 +216,51 @@ function AlertsPageContent() {
 
       <div className="grid lg:grid-cols-2 gap-6 items-start">
         <div>
+          {canMutate && checkedIds.size > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border-subtle bg-[var(--sidebar-hover)]">
+              <span className="text-sm text-[var(--muted)]">{checkedIds.size} selected</span>
+              <button
+                type="button"
+                disabled={bulkMutation.isPending}
+                onClick={() => runBulk({ status: "investigating", assigned_to: user?.id })}
+                className="btn-ghost text-xs"
+              >
+                Assign to me
+              </button>
+              <button
+                type="button"
+                disabled={bulkMutation.isPending}
+                onClick={() => runBulk({ status: "resolved" })}
+                className="btn-ghost text-xs text-success"
+              >
+                Resolve
+              </button>
+              <button
+                type="button"
+                disabled={bulkMutation.isPending}
+                onClick={() => runBulk({ status: "closed" })}
+                className="btn-ghost text-xs"
+              >
+                Close
+              </button>
+              <button type="button" onClick={() => setCheckedIds(new Set())} className="btn-ghost text-xs ml-auto">
+                Clear
+              </button>
+            </div>
+          )}
+          {canMutate && pageItems.length > 0 && (
+            <label className="flex items-center gap-2 mb-2 text-xs text-[var(--muted)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allOnPageSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = someOnPageSelected && !allOnPageSelected;
+                }}
+                onChange={toggleAllOnPage}
+              />
+              Select all on page
+            </label>
+          )}
           {isLoading ? (
             <TableSkeleton rows={6} />
           ) : isError ? (
