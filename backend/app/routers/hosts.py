@@ -46,7 +46,7 @@ def _host_row(host, score, alert_count) -> HostResponse:
 
 @router.post("", response_model=HostResponse)
 async def create_host(body: HostCreate, request: Request, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
-    host = Host(name=body.name, created_by=user.id, status="offline")
+    host = Host(name=body.name, created_by=user.id, status="inactive")
     db.add(host)
     await db.flush()
     await log_audit(db, "host_create", user_id=user.id, resource_type="host", resource_id=host.id, ip_address=client_ip(request))

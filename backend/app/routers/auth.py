@@ -132,7 +132,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    role_name = "admin" if is_first_user else "viewer"
+    role_name = "admin" if is_first_user else "analyst"
     role_result = await db.execute(select(Role).where(Role.name == role_name))
     role = role_result.scalar_one()
 

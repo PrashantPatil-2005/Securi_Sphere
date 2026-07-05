@@ -55,7 +55,7 @@ export default function SystemHealthPage() {
     queryFn: () => api<Stats>("/api/v1/system/stats"),
     refetchInterval: 30_000,
   });
-  const { data: pipeline, isLoading: h3 } = useQuery({
+  const { data: pipeline, isLoading: h3, isError: pipelineError, refetch: refetchPipeline } = useQuery({
     queryKey: ["system", "pipeline"],
     queryFn: () => api<Pipeline>("/api/v1/system/pipeline"),
     refetchInterval: 60_000,
@@ -63,11 +63,11 @@ export default function SystemHealthPage() {
 
   if (h1 || h2 || h3) return <TableSkeleton rows={6} />;
 
-  if (healthError || statsError) {
+  if (healthError || statsError || pipelineError) {
     return (
       <div className="space-y-6">
         <PageHeader title="System Health" subtitle="Platform readiness and operational metrics (admin)" />
-        <QueryError onRetry={() => { refetchHealth(); refetchStats(); }} />
+        <QueryError onRetry={() => { refetchHealth(); refetchStats(); refetchPipeline(); }} />
       </div>
     );
   }

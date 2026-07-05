@@ -23,16 +23,18 @@ from app.services.timeline import build_timelines
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 SCENARIOS = {
-    "brute_force": [
-        ("ssh_login_failure", 0), ("ssh_login_failure", 30), ("ssh_login_failure", 60),
-        ("ssh_login_success", 120), ("sudo_usage", 150),
-    ],
-    "brute_force_only": [("ssh_login_failure", i * 20) for i in range(6)],
     "multi_stage_attack": [
         ("ssh_login_failure", 0), ("ssh_login_failure", 25), ("ssh_login_failure", 50),
-        ("ssh_login_failure", 75), ("ssh_login_success", 120),
+        ("ssh_login_failure", 75), ("ssh_login_failure", 100),
+        ("ssh_login_success", 120),
         ("sudo_usage", 180), ("network_flow", 240), ("service_failure", 300),
     ],
+    "brute_force": [
+        ("ssh_login_failure", 0), ("ssh_login_failure", 30), ("ssh_login_failure", 60),
+        ("ssh_login_failure", 90), ("ssh_login_failure", 120),
+        ("ssh_login_success", 150), ("sudo_usage", 180),
+    ],
+    "brute_force_only": [("ssh_login_failure", i * 20) for i in range(6)],
     "service_crash": [("service_failure", 0)],
 }
 
@@ -47,8 +49,10 @@ async def run_simulation(scenario: str, host_id: UUID, db: AsyncSession = Depend
     if not settings.enable_simulation:
         raise HTTPException(status_code=403, detail="Simulation disabled in this environment")
     if scenario not in SCENARIOS:
-        return {"error": "unknown scenario"}
-    host = (await db.execute(__import__("sqlalchemy").select(Host).where(Host.id == host_id))).scalar_one()
+        raise HTTPException(status_code=404, detail="Unknown scenario")
+    host = (await db.execute(select(Host).where(Host.id == host_id))).scalar_one_or_none()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
     now = datetime.now(timezone.utc)
     for etype, offset in SCENARIOS[scenario]:
         metadata = {"simulated": True}

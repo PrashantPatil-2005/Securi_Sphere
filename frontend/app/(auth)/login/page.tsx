@@ -16,6 +16,18 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [allowRegistration, setAllowRegistration] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/v1/settings/public")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (cfg && typeof cfg.allow_registration === "boolean") {
+          setAllowRegistration(cfg.allow_registration);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     api("/api/v1/auth/me")
@@ -93,12 +105,14 @@ function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-6 text-body text-muted text-center">
-        Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-accent hover:underline font-medium">
-          Create account
-        </Link>
-      </p>
+      {allowRegistration && (
+        <p className="mt-6 text-body text-muted text-center">
+          Don&apos;t have an account?{" "}
+          <Link href="/register" className="text-accent hover:underline font-medium">
+            Create account
+          </Link>
+        </p>
+      )}
     </motion.div>
   );
 }

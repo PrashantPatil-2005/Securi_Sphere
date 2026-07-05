@@ -280,4 +280,5 @@ async def update_alert_status(
         alert.resolved_by = user.id
     await update_host_statuses(db)
     await log_audit(db, "alert_status_update", user_id=user.id, resource_type="alert", resource_id=alert_id, details={"status": body.status})
+    await ws_manager.broadcast({"type": "alert_updated", "data": {"id": str(alert.id), "status": body.status}})
     return _to_response(alert)

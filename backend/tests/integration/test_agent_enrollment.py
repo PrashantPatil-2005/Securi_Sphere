@@ -37,7 +37,7 @@ async def test_agent_enrollment_flow(admin_client: AsyncClient):
     assert host_res.status_code == 200
     host = host_res.json()
     assert host["enrolled"] is False
-    assert host["status"] == "offline"
+    assert host["status"] == "inactive"
 
     token_res = await admin_client.post(f"/api/v1/hosts/{host['id']}/enrollment-token")
     assert token_res.status_code == 200
@@ -81,5 +81,5 @@ async def test_unenrolled_host_stays_offline_not_critical(admin_client: AsyncCli
 
     host_check = await admin_client.get(f"/api/v1/hosts/{host_id}")
     data = host_check.json()
-    assert data["status"] == "offline"
+    assert data["status"] == "inactive"
     assert data["enrolled"] is False

@@ -157,6 +157,7 @@ export default function SimulationPage() {
                 <p className="text-2xl font-semibold tabular-nums text-accent">{lastResult.events} events injected</p>
                 <div className="flex flex-wrap gap-2">
                   <a href="/events" className="btn-ghost text-sm">View events</a>
+                  <a href="/alerts" className="btn-ghost text-sm">View alerts</a>
                   <a href="/offenses" className="btn-ghost text-sm">View offenses</a>
                   <a href="/timeline" className="btn-ghost text-sm">Attack timeline</a>
                   <button type="button" className="btn-primary text-sm" onClick={() => { setStep(0); setLastResult(null); }}>

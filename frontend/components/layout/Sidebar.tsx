@@ -27,6 +27,7 @@ import {
   ScrollText,
   Shield,
   Gauge,
+  Inbox,
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
@@ -66,6 +67,7 @@ const navSections: NavSection[] = [
       { href: "/hosts", label: "Hosts", icon: Server },
       { href: "/events", label: "Events", icon: Activity },
       { href: "/alerts", label: "Alerts", icon: Bell },
+      { href: "/notifications", label: "Notifications", icon: Inbox },
       { href: "/offenses", label: "Offenses", icon: ShieldAlert },
       { href: "/incidents", label: "Investigations", icon: AlertTriangle },
     ],
