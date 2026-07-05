@@ -27,7 +27,7 @@ export const Panel = memo(function Panel({ title, subtitle, action, children, cl
   );
 });
 
-export const PageHeader = memo(function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
+export const PageHeader = memo(function PageHeader({ title, subtitle, action }: { title: ReactNode; subtitle?: string; action?: ReactNode }) {
   return (
     <header className="page-header">
       <div>

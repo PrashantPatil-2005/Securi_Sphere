@@ -2,6 +2,7 @@
 
 import { AppProviders } from "@/lib/providers";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
+import { AssistantProvider } from "@/lib/assistant/AssistantProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -14,7 +15,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <ToastProvider>
           <TimeRangeProvider>
             <AuthGuard>
-              <AppShell>{children}</AppShell>
+              <AssistantProvider>
+                <AppShell>{children}</AppShell>
+              </AssistantProvider>
             </AuthGuard>
           </TimeRangeProvider>
         </ToastProvider>

@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAssistant } from "@/lib/assistant/AssistantProvider";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { IocLookupPanel } from "@/components/IocLookupPanel";
 import { Panel, EmptyState } from "@/components/ui/Panel";
@@ -56,10 +58,23 @@ export function AlertInvestigationPane({
   onStatus: (id: string, status: string) => void;
   isUpdating?: boolean;
 }) {
+  const { openWithContext } = useAssistant();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["alerts", "investigation", alertId],
     queryFn: () => api<InvestigationData>(`/api/v1/alerts/${alertId}/investigation`),
     enabled: !!alertId,
+  });
+
+  const { data: aiSummary } = useQuery({
+    queryKey: ["alerts", "ai-summary", alertId],
+    queryFn: () =>
+      api<{
+        summary: string;
+        investigation_steps: string[];
+        recommended_actions: string[];
+      }>(`/api/v1/alerts/${alertId}/ai-summary`),
+    enabled: !!alertId,
+    staleTime: 120_000,
   });
 
   if (!alertId) {
@@ -131,9 +146,35 @@ export function AlertInvestigationPane({
             <Link href={`/timeline?host=${host.id}`} className="btn-ghost text-xs">
               Full timeline
             </Link>
+            <button
+              type="button"
+              className="btn-ghost text-xs text-accent flex items-center gap-1"
+              onClick={() =>
+                openWithContext({
+                  alertId: alert.id,
+                  prefill: "Explain this alert and suggest investigation steps",
+                })
+              }
+            >
+              <Sparkles className="w-3 h-3" />
+              Ask AI about this alert
+            </button>
           </div>
         </div>
       </Panel>
+
+      {aiSummary && (
+        <Panel title="AI investigation summary" subtitle="Auto-generated triage brief">
+          <p className="text-body text-muted mb-3">{aiSummary.summary.replace(/\*\*/g, "")}</p>
+          {aiSummary.investigation_steps.length > 0 && (
+            <ol className="list-decimal list-inside space-y-1 text-sm text-muted">
+              {aiSummary.investigation_steps.map((step, i) => (
+                <li key={i}>{step.replace(/\*\*/g, "")}</li>
+              ))}
+            </ol>
+          )}
+        </Panel>
+      )}
 
       <Panel title="Affected host">
         <div className="grid sm:grid-cols-2 gap-3 text-body">

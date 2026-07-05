@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     testing: bool = False
     opensearch_url: str = ""
     search_backend: str = "postgres"
+    ai_assistant_enabled: bool = True
+    ai_provider: str = "local"
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
 
     @model_validator(mode="after")
     def apply_testing_env(self) -> "Settings":

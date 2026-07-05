@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
+import { AIAssistantPanel } from "@/components/AIAssistantPanel";
+import { CommandPalette } from "@/components/CommandPalette";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -37,6 +39,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+      <CommandPalette />
+      <AIAssistantPanel />
     </div>
   );
 }

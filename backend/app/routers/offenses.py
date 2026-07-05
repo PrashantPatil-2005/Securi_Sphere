@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,9 @@ from app.dependencies import client_ip, get_current_user, require_roles
 from app.models.host import Host
 from app.models.siem import Offense, OffenseEvent
 from app.models.user import User
+from app.config import settings
+from app.schemas.assistant import OffenseAIBriefResponse
+from app.services.ai.summaries import generate_offense_brief
 from app.utils.query import ListParams, resolve_time_range
 from app.services.incident_promotion import promote_offense_to_incident
 
@@ -84,6 +87,20 @@ async def list_offenses(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.get("/{offense_id}/ai-brief", response_model=OffenseAIBriefResponse)
+async def get_offense_ai_brief(
+    offense_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not settings.ai_assistant_enabled:
+        raise HTTPException(status_code=503, detail="AI assistant is disabled")
+    result = await generate_offense_brief(db, offense_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Offense not found")
+    return OffenseAIBriefResponse(**result)
 
 
 @router.get("/{offense_id}")

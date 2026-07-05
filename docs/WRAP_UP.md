@@ -61,6 +61,16 @@ See [SIEM_PIPELINE_ARCHITECTURE.md](SIEM_PIPELINE_ARCHITECTURE.md) for the full 
 - [x] Playwright SOC lab flow (register → host → simulation → alerts)
 - [x] k6 API load smoke
 
+### AI Security Assistant (local-first)
+- [x] Floating AI copilot panel — explain alerts, SIEM syntax, SOC workflow
+- [x] **Ask AI about this alert** from investigation pane + auto investigation summary
+- [x] Natural language → SIEM query on Search page
+- [x] Offense AI brief on offense detail panel
+- [x] Command palette (`Ctrl+K`), onboarding checklist, contextual help tooltips
+- [x] Optional LLM enrichment via `AI_PROVIDER` + API keys (defaults to rule-based local mode)
+
+See [AI_AND_UX_ROADMAP.md](AI_AND_UX_ROADMAP.md) for post-pilot items (RAG, playbooks, etc.).
+
 ---
 
 ## Quick start (local)
@@ -144,8 +154,9 @@ npx playwright test e2e/lab-flow.spec.ts
 1. **Collect** — enroll a Linux VM; show live events
 2. **Detect** — run `brute_force` or `multi_stage_attack` simulation
 3. **Correlate** — open offense, promote to incident
-4. **Investigate** — alert pane, timeline, VirusTotal IOC (if key set)
+4. **Investigate** — alert pane, AI summary, Ask AI copilot, timeline, VirusTotal IOC (if key set)
 5. **Operate** — System Health pipeline view, bulk alert triage, notification history
+6. **Search** — natural language → SIEM query; `Ctrl+K` for quick navigation
 
 ---
 
@@ -160,6 +171,7 @@ npx playwright test e2e/lab-flow.spec.ts
 | [AGENT_MTLS.md](AGENT_MTLS.md) | mTLS agent hardening |
 | [SOC_LAB_SCENARIO.md](SOC_LAB_SCENARIO.md) | Attack lab script |
 | [ROADMAP_STATUS.md](ROADMAP_STATUS.md) | Completion scorecard |
+| [AI_AND_UX_ROADMAP.md](AI_AND_UX_ROADMAP.md) | AI copilot and UX feature plan |
 
 ---
 

@@ -66,6 +66,18 @@ function OffensesPageContent() {
     enabled: !!selectedId,
   });
 
+  const { data: aiBrief } = useQuery({
+    queryKey: ["offenses", "ai-brief", selectedId],
+    queryFn: () =>
+      api<{
+        brief: string;
+        key_findings: string[];
+        recommended_actions: string[];
+      }>(`/api/v1/offenses/${selectedId}/ai-brief`),
+    enabled: !!selectedId,
+    staleTime: 120_000,
+  });
+
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api(`/api/v1/offenses/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
@@ -134,6 +146,19 @@ function OffensesPageContent() {
             <>
               <h2 className="font-semibold text-lg">{selected.title}</h2>
               <p className="text-sm text-muted mb-4">Host: {selected.host_name} · Risk: {selected.risk_level}</p>
+              {aiBrief && (
+                <div className="mb-4 p-3 rounded-lg border border-border-subtle bg-[var(--input-bg)]">
+                  <p className="text-caption normal-case text-muted mb-1">AI threat brief</p>
+                  <p className="text-sm text-muted mb-2">{aiBrief.brief}</p>
+                  {aiBrief.key_findings.length > 0 && (
+                    <ul className="text-xs text-muted list-disc list-inside space-y-0.5">
+                      {aiBrief.key_findings.map((f, i) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               {(selected.related_hosts?.length || selected.related_users?.length) ? (
                 <div className="mb-4 p-3 glass-panel">
                   <p className="text-caption normal-case text-muted mb-2">Related entities</p>

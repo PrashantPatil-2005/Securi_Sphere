@@ -17,6 +17,7 @@ import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualList } from "@/components/VirtualList";
 import { AlertInvestigationPane } from "@/components/AlertInvestigationPane";
 import { PageHeader } from "@/components/ui/Panel";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -194,7 +195,16 @@ function AlertsPageContent() {
 
   return (
     <div>
-      <PageHeader title="Alerts" subtitle="Detection alerts with investigation workspace" action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />} />
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            Alerts
+            <HelpTooltip content="Select an alert to open the investigation pane. Use bulk actions or Ask AI for triage guidance and auto-generated summaries." />
+          </span>
+        }
+        subtitle="Detection alerts with investigation workspace"
+        action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />}
+      />
       <TimeRangeBar />
       <div className="filter-bar">
         <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">

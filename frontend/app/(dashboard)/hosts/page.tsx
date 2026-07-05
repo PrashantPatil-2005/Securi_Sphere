@@ -12,6 +12,7 @@ import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
@@ -199,7 +200,16 @@ export default function HostsPage() {
 
   return (
     <div>
-      <PageHeader title="Hosts" subtitle="Register endpoints, enroll agents, and monitor connectivity" action={canManageHosts ? <ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, {})} /> : undefined} />
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            Hosts
+            <HelpTooltip content="Add a host to get an enrollment token, then install the Linux agent on your VM. Agents send events and metrics to the SIEM pipeline." />
+          </span>
+        }
+        subtitle="Register endpoints, enroll agents, and monitor connectivity"
+        action={canManageHosts ? <ExportMenu resource="hosts" query={buildQuery({ sort, ...queryFilters }, {})} /> : undefined}
+      />
       {!canManageHosts && (
         <div className="mb-4 px-4 py-3 rounded-lg border border-warning/30 bg-warning/10 text-body text-sm">
           Your account is <strong className="capitalize">{user?.role?.name ?? "viewer"}</strong> — only <strong>admin</strong> or <strong>analyst</strong> can add hosts.

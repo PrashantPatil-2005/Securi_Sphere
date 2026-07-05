@@ -21,7 +21,7 @@ from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_context import RequestContextMiddleware
 from app.routers import (
-    agent, alerts, analytics, audit, auth, alert_rules, correlation_rules, events, hosts, incidents,
+    agent, alerts, analytics, audit, auth, alert_rules, assistant, correlation_rules, events, hosts, incidents,
     ioc, maintenance, metrics, mitre, network, notifications, offenses, reports, saved_searches, search, siem,
     simulation, threat_scores, timeline, settings as settings_router, system,
 )
@@ -165,6 +165,7 @@ app.include_router(saved_searches.router, prefix=prefix)
 app.include_router(settings_router.router, prefix=prefix)
 app.include_router(notifications.router, prefix=prefix)
 app.include_router(ioc.router, prefix=prefix)
+app.include_router(assistant.router, prefix=prefix)
 app.include_router(system.router, prefix=prefix)
 
 

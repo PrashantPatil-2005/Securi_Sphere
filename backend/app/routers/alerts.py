@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
+from app.config import settings
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,6 +17,7 @@ from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
 from app.models.user import User
+from app.schemas.assistant import AlertAISummaryResponse
 from app.schemas.alert import (
     AlertBulkUpdate,
     AlertBulkUpdateResponse,
@@ -26,6 +29,7 @@ from app.schemas.alert import (
     AlertStatusUpdate,
 )
 from app.schemas.event import EventResponse
+from app.services.ai.summaries import generate_alert_summary
 from app.services.audit import log_audit
 from app.services.detection import update_host_statuses
 from app.services.export_service import export_csv, export_json, export_pdf
@@ -166,6 +170,20 @@ async def get_alert(alert_id: UUID, db: AsyncSession = Depends(get_db), user: Us
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     return _to_response(alert)
+
+
+@router.get("/{alert_id}/ai-summary", response_model=AlertAISummaryResponse)
+async def get_alert_ai_summary(
+    alert_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not settings.ai_assistant_enabled:
+        raise HTTPException(status_code=503, detail="AI assistant is disabled")
+    result = await generate_alert_summary(db, alert_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return AlertAISummaryResponse(**result)
 
 
 @router.get("/{alert_id}/investigation", response_model=AlertInvestigationResponse)

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String
@@ -14,6 +14,9 @@ from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
 from app.models.user import User
+from app.config import settings
+from app.schemas.assistant import NLSearchRequest, NLSearchResponse
+from app.services.ai.nl_search import nl_to_siem_query
 from app.utils.query import resolve_time_range
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -116,6 +119,17 @@ async def global_search(
         "events": [{"id": str(e.id), "event_type": e.event_type, "description": e.description, "severity": e.severity} for e in events],
         "users": [{"id": str(u.id), "email": u.email, "full_name": u.full_name} for u in users],
     }
+
+
+@router.post("/nl", response_model=NLSearchResponse)
+async def nl_search(
+    body: NLSearchRequest,
+    user: User = Depends(get_current_user),
+):
+    if not settings.ai_assistant_enabled:
+        raise HTTPException(status_code=503, detail="AI assistant is disabled")
+    result = await nl_to_siem_query(body.query)
+    return NLSearchResponse(**result)
 
 
 @router.get("/siem")

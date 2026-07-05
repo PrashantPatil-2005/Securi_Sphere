@@ -91,6 +91,30 @@ chmod +x scripts/deploy-linux.sh
 - Windows event forwarder API, VirusTotal IOC lookup, bulk alert actions
 - Redis job queue/worker, event partitioning, RS256 JWT, Playwright E2E
 
+## AI Security Assistant
+
+SecuriSphere includes a **local-first AI copilot** — no API key required for core features.
+
+- **Floating assistant** (bottom-right) — explain alerts, suggest investigation steps, SIEM syntax help
+- **Ask AI about this alert** — in the investigation pane, pre-fills alert context
+- **Auto investigation summary** — `GET /api/v1/alerts/{id}/ai-summary`
+- **Natural language search** — Search page converts plain English to SIEM queries
+- **Offense AI brief** — plain-English narrative on the Offenses detail panel
+- **Command palette** — `Ctrl+K` / `⌘K` for quick navigation and actions
+
+### Configuration
+
+```env
+AI_ASSISTANT_ENABLED=true
+AI_PROVIDER=local          # local | openai | anthropic
+OPENAI_API_KEY=          # optional — richer answers when set
+ANTHROPIC_API_KEY=       # optional alternative LLM
+```
+
+Without an API key, rule-based templates handle chat, NL search, and summaries. Set `AI_PROVIDER=openai` and `OPENAI_API_KEY` for LLM-enhanced responses (falls back to local on failure).
+
+See [docs/AI_AND_UX_ROADMAP.md](docs/AI_AND_UX_ROADMAP.md) for the full feature plan.
+
 ## Dashboard Pages
 
 Overview, Hosts, Events, Alerts, Metrics, MITRE, Timeline, Incidents, Network, Rules, Audit, Simulation, Reports, Search

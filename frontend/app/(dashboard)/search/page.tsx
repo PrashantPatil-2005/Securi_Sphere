@@ -2,7 +2,7 @@
 
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
@@ -50,6 +50,7 @@ function SearchPageContent() {
   const [mode, setMode] = useState<"siem" | "global">("siem");
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
+  const [nlQuery, setNlQuery] = useState("");
   const debouncedQ = useDebounce(q, 400);
 
   useEffect(() => {
@@ -87,6 +88,19 @@ function SearchPageContent() {
     staleTime: 120_000,
   });
 
+  const nlMutation = useMutation({
+    mutationFn: (query: string) =>
+      api<{ siem_query: string; explanation: string; provider: string; confidence: string }>(
+        "/api/v1/search/nl",
+        { method: "POST", body: JSON.stringify({ query }) },
+      ),
+    onSuccess: (data) => {
+      setMode("siem");
+      setQ(data.siem_query);
+      setSubmitted(data.siem_query);
+    },
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!debouncedQ.trim()) return;
@@ -105,6 +119,35 @@ function SearchPageContent() {
         subtitle={mode === "siem" ? `SIEM query language — e.g. ${siemHint}` : "Global search across hosts, alerts, and events"}
       />
       <TimeRangeBar />
+      <Panel title="Natural language search" subtitle='Plain English → SIEM query, e.g. "Show failed logins from last hour"'>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!nlQuery.trim()) return;
+            nlMutation.mutate(nlQuery.trim());
+          }}
+        >
+          <input
+            value={nlQuery}
+            onChange={(e) => setNlQuery(e.target.value)}
+            placeholder="Show failed logins from last hour"
+            className="input-siem flex-1"
+          />
+          <button type="submit" className="btn-primary" disabled={!nlQuery.trim() || nlMutation.isPending}>
+            {nlMutation.isPending ? "Converting…" : "Convert"}
+          </button>
+        </form>
+        {nlMutation.data && (
+          <p className="text-xs text-muted mt-2">
+            → <code className="font-mono">{nlMutation.data.siem_query}</code>
+            {" "}({nlMutation.data.explanation})
+          </p>
+        )}
+        {nlMutation.isError && (
+          <p className="text-xs text-danger mt-2">{nlMutation.error.message}</p>
+        )}
+      </Panel>
       <div className="flex gap-2 mb-4">
         <button type="button" onClick={() => setMode("siem")} className={mode === "siem" ? "btn-primary" : "btn-ghost"}>SIEM</button>
         <button type="button" onClick={() => setMode("global")} className={mode === "global" ? "btn-primary" : "btn-ghost"}>Global</button>

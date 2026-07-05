@@ -30,6 +30,16 @@ All planned pilot features are implemented. Enterprise-only items remain documen
 - Offense → incident promotion (API + UI)
 - `docs/WRAP_UP.md` — final handoff guide
 
+### AI & UX (local-first copilot)
+- AI Security Assistant chat (backend + floating panel; optional OpenAI/Anthropic)
+- Smart Investigation Copilot — Ask AI from alert pane + auto investigation summary
+- Natural language → SIEM query (Search page + `/api/v1/search/nl`)
+- Offense AI brief on offense detail panel
+- Command palette (`Ctrl+K` / `⌘K`) for navigation and common actions
+- Onboarding checklist on dashboard (host → simulation → triage)
+- Contextual help tooltips (hosts, simulation, alerts)
+- `docs/AI_AND_UX_ROADMAP.md` — feature plan and env toggles
+
 ## Optional toggles (enable in production)
 
 | Env | Purpose |
@@ -41,6 +51,8 @@ All planned pilot features are implemented. Enterprise-only items remain documen
 | `ALLOW_REGISTRATION=false` | Lock down signups |
 | `JOB_QUEUE_BACKEND=redis` | Durable background jobs |
 | `WS_PUBSUB_BACKEND=redis` | Multi-instance WebSockets |
+| `AI_ASSISTANT_ENABLED=true` | AI assistant endpoints (default on) |
+| `AI_PROVIDER=openai` + `OPENAI_API_KEY` | LLM-enriched chat and NL search (falls back to local) |
 
 ## Not implemented (true enterprise / out of scope)
 

@@ -7,6 +7,7 @@ import { Server, Activity, Shield } from "lucide-react";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
@@ -183,6 +184,8 @@ export default function ExecutiveDashboard() {
       />
 
       <ExecutiveKpis />
+
+      <OnboardingChecklist />
 
       <Panel title="Security timeline" subtitle="Event volume over selected period">
         <SecurityTimeline />

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -73,7 +74,12 @@ export default function SimulationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Attack Simulation"
+        title={
+          <span className="inline-flex items-center gap-2">
+            Attack Simulation
+            <HelpTooltip content="Generate realistic attack events on an enrolled host. Try brute_force or multi_stage_attack, then triage alerts and offenses." />
+          </span>
+        }
         subtitle="Inject synthetic events for demos. Dashboard charts hide simulated data by default — use Purge when done."
         action={
           <button
