@@ -157,33 +157,37 @@ export default function RulesPage() {
       </div>
       {tab === "detection" && (
         <>
-          {isLoading && <TableSkeleton rows={4} />}
-          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="panel grid md:grid-cols-6 gap-3 items-end p-4">
-            <Input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} label="Name" />
-            <Select label="Type" value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}>
-              {ruleTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-            </Select>
-            <Input type="number" label="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} />
-            <Input type="number" label="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} />
-            <Select label="Severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-              {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-            </Select>
-            <Button type="submit" loading={createMutation.isPending}>Add rule</Button>
-          </form>
-          <div className="space-y-2">
-            {rules.map((r) => (
-              <div key={r.id} className="flex items-center justify-between p-3 glass-panel">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{r.name}</span>
-                  <span className="text-muted text-sm">{r.rule_type}</span>
-                  <SeverityBadge severity={r.severity} />
+          <Panel title="Create detection rule" subtitle="Threshold-based alert rules">
+            <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="grid md:grid-cols-6 gap-3 items-end">
+              <Input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} label="Name" />
+              <Select label="Type" value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}>
+                {ruleTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+              <Input type="number" label="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} />
+              <Input type="number" label="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} />
+              <Select label="Severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+                {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
+              </Select>
+              <Button type="submit" loading={createMutation.isPending}>Add rule</Button>
+            </form>
+          </Panel>
+          <Panel title="Detection rules" subtitle={isLoading ? "Loading…" : `${rules.length} rule${rules.length === 1 ? "" : "s"}`}>
+            {isLoading && <TableSkeleton rows={4} />}
+            <div className="space-y-2">
+              {rules.map((r) => (
+                <div key={r.id} className="flex items-center justify-between p-3 glass-panel">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{r.name}</span>
+                    <span className="text-muted text-sm">{r.rule_type}</span>
+                    <SeverityBadge severity={r.severity} />
+                  </div>
+                  <button type="button" onClick={() => toggleMutation.mutate({ id: r.id, enabled: r.enabled })} className={cn("text-sm px-3 py-1 rounded", r.enabled ? "bg-success/20 text-success" : "bg-muted/20 text-muted")}>
+                    {r.enabled ? "Enabled" : "Disabled"}
+                  </button>
                 </div>
-                <button type="button" onClick={() => toggleMutation.mutate({ id: r.id, enabled: r.enabled })} className={cn("text-sm px-3 py-1 rounded", r.enabled ? "bg-success/20 text-success" : "bg-muted/20 text-muted")}>
-                  {r.enabled ? "Enabled" : "Disabled"}
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </Panel>
         </>
       )}
       {tab === "correlation" && (
@@ -195,7 +199,7 @@ export default function RulesPage() {
               e.preventDefault();
               corrCreateMutation.mutate();
             }}
-            className="panel grid md:grid-cols-2 lg:grid-cols-4 gap-3 items-end p-4 mb-4"
+            className="grid md:grid-cols-2 lg:grid-cols-4 gap-3 items-end mb-4"
           >
             <Input required label="Rule name" value={corrForm.name} onChange={(e) => setCorrForm({ ...corrForm, name: e.target.value })} />
             <Select label="Type" value={corrForm.rule_type} onChange={(e) => setCorrForm({ ...corrForm, rule_type: e.target.value as typeof corrForm.rule_type })}>

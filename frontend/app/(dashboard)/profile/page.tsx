@@ -103,6 +103,7 @@ export default function ProfilePage() {
           <Panel title="Account details">
             <div className="space-y-4">
               <Input
+                id="display-name"
                 label="Display name"
                 value={name || user?.full_name || ""}
                 onChange={(e) => setName(e.target.value)}
@@ -115,8 +116,9 @@ export default function ProfilePage() {
                 </div>
               </div>
               <Button
+                type="button"
+                loading={saveMutation.isPending}
                 onClick={() => saveMutation.mutate(name || user?.full_name || "")}
-                disabled={saveMutation.isPending}
               >
                 Save changes
               </Button>
@@ -159,7 +161,7 @@ export default function ProfilePage() {
                 autoComplete="new-password"
                 error={confirmPassword && newPassword !== confirmPassword ? "Passwords do not match" : undefined}
               />
-              <Button type="submit" disabled={passwordMutation.isPending}>
+              <Button type="submit" loading={passwordMutation.isPending}>
                 Update password
               </Button>
             </form>

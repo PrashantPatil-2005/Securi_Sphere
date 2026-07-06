@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { PageHeader, Panel } from "@/components/ui/Panel";
+import { PageHeader, Panel, StatCard } from "@/components/ui/Panel";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
+import { cn } from "@/lib/utils/cn";
 import { api } from "@/lib/api";
 
 interface Health {
@@ -75,61 +76,89 @@ export default function SystemHealthPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="System Health" subtitle="QRadar-style pipeline status and platform metrics (admin)" />
+      <div className="grid md:grid-cols-4 gap-4">
+        <StatCard label="Hosts online" value={`${stats?.hosts_online ?? 0}/${stats?.hosts_total ?? 0}`} tone="success" href="/hosts" />
+        <StatCard label="Open alerts" value={stats?.alerts_open} tone="warning" href="/alerts" />
+        <StatCard label="Critical alerts" value={stats?.alerts_critical} tone="danger" href="/alerts" />
+        <StatCard label="Retention" value={`${stats?.retention_days ?? 0} days`} />
+      </div>
       <div className="grid md:grid-cols-2 gap-6">
-        <Panel title="SIEM pipeline (3 layers)" className="md:col-span-2">
-          <p className="text-sm text-muted mb-4">{pipeline?.description}</p>
+        <Panel title="SIEM pipeline" subtitle={pipeline?.model ?? "3-layer model"} className="md:col-span-2">
+          <p className="text-caption normal-case text-muted mb-4">{pipeline?.description}</p>
           <div className="grid md:grid-cols-3 gap-4">
             {pipeline?.layers.map((layer) => (
-              <div key={layer.layer} className="p-4 rounded-lg border border-border-subtle">
+              <div key={layer.layer} className="glass-panel p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-muted">Layer {layer.layer}</span>
-                  <span className={layer.status === "ok" ? "text-success text-xs" : "text-warning text-xs"}>{layer.status}</span>
+                  <span className="text-caption normal-case font-semibold uppercase tracking-wide text-muted">Layer {layer.layer}</span>
+                  <span className={cn("text-caption normal-case capitalize", layer.status === "ok" ? "text-success" : "text-warning")}>
+                    {layer.status}
+                  </span>
                 </div>
-                <p className="font-medium text-sm mb-1">{layer.name}</p>
-                <p className="text-xs text-muted mb-3">≈ {layer.qradar_equivalent}</p>
-                <ul className="text-xs space-y-1 text-muted">
+                <p className="text-body font-medium mb-1">{layer.name}</p>
+                <p className="text-caption normal-case text-muted mb-3">≈ {layer.qradar_equivalent}</p>
+                <ul className="text-caption normal-case space-y-1 text-muted">
                   {layer.components.map((c) => (
                     <li key={c.id}>• {c.name}{c.endpoint ? ` (${c.endpoint})` : ""}</li>
                   ))}
                 </ul>
-                <p className="text-xs text-muted mt-3">
-                  {Object.entries(layer.stats).map(([k, v]) => `${k}: ${v}`).join(" · ")}
-                </p>
+                {Object.keys(layer.stats).length > 0 && (
+                  <p className="text-caption normal-case text-muted mt-3 pt-3 border-t border-border-subtle/50">
+                    {Object.entries(layer.stats).map(([k, v]) => `${k}: ${v}`).join(" · ")}
+                  </p>
+                )}
               </div>
             ))}
           </div>
           {pipeline?.console && (
-            <p className="text-sm text-muted mt-4">
-              <span className="font-medium text-foreground">{pipeline.console.name}</span>
-              {" "}— {pipeline.console.features.join(", ")}
-            </p>
+            <div className="mt-4 p-4 rounded-lg border border-border-subtle bg-[var(--input-bg)]">
+              <p className="text-body font-medium text-foreground">{pipeline.console.name}</p>
+              <p className="text-caption normal-case text-muted mt-1">{pipeline.console.features.join(", ")}</p>
+            </div>
           )}
         </Panel>
-        <Panel title="Readiness">
-          <p className="text-body capitalize mb-2">Status: <span className={health?.status === "ready" ? "text-success" : "text-warning"}>{health?.status}</span></p>
-          <ul className="space-y-1 text-sm text-muted">
+        <Panel title="Readiness" subtitle={`Environment: ${health?.environment ?? "—"}`}>
+          <p className="text-body capitalize mb-3">
+            Status:{" "}
+            <span className={health?.status === "ready" ? "text-success font-medium" : "text-warning font-medium"}>
+              {health?.status}
+            </span>
+          </p>
+          <ul className="space-y-2">
             {health && Object.entries(health.checks).map(([k, v]) => (
-              <li key={k}>{k}: {v}</li>
+              <li key={k} className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 last:border-0 text-body">
+                <span className="text-muted capitalize">{k.replace(/_/g, " ")}</span>
+                <span className="capitalize">{v}</span>
+              </li>
             ))}
           </ul>
         </Panel>
-        <Panel title="Configuration">
-          <ul className="space-y-1 text-sm">
-            <li>Environment: {health?.environment}</li>
-            <li>Job queue: {health?.job_queue_running ? "running" : "stopped"}
-              {health?.job_queue_backend ? ` (${health.job_queue_backend})` : ""}
-              {health?.job_queue_pending != null ? ` · ${health.job_queue_pending} pending` : ""}
+        <Panel title="Configuration" subtitle="Runtime services and feature flags">
+          <ul className="space-y-2">
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">Job queue</span>
+              <span>
+                {health?.job_queue_running ? "running" : "stopped"}
+                {health?.job_queue_backend ? ` (${health.job_queue_backend})` : ""}
+                {health?.job_queue_pending != null ? ` · ${health.job_queue_pending} pending` : ""}
+              </span>
             </li>
-            <li>WebSocket pub/sub: {health?.ws_pubsub_backend ?? "memory"}</li>
-            <li>Redis: {health?.redis_configured ? "configured" : "not configured"}</li>
-            <li>Registration: {health?.registration_enabled ? "open" : "closed"}</li>
-            <li>Simulation: {health?.simulation_enabled ? "enabled" : "disabled"}</li>
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">WebSocket pub/sub</span>
+              <span>{health?.ws_pubsub_backend ?? "memory"}</span>
+            </li>
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">Redis</span>
+              <span>{health?.redis_configured ? "configured" : "not configured"}</span>
+            </li>
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">Registration</span>
+              <span>{health?.registration_enabled ? "open" : "closed"}</span>
+            </li>
+            <li className="flex items-center justify-between gap-4 py-2 text-body">
+              <span className="text-muted">Simulation</span>
+              <span>{health?.simulation_enabled ? "enabled" : "disabled"}</span>
+            </li>
           </ul>
-        </Panel>
-        <Panel title="Fleet">
-          <p className="text-2xl font-semibold">{stats?.hosts_online}/{stats?.hosts_total} hosts online</p>
-          <p className="text-sm text-muted mt-2">{stats?.alerts_open} open alerts · {stats?.alerts_critical} critical</p>
-          <p className="text-sm text-muted">Retention: {stats?.retention_days} days</p>
         </Panel>
       </div>
     </div>

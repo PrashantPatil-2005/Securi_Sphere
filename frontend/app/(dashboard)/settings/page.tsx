@@ -4,6 +4,8 @@ import { memo, useMemo, useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader, Panel } from "@/components/ui/Panel";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils/cn";
@@ -29,15 +31,15 @@ const AppearanceSettings = memo(function AppearanceSettings() {
             <p className="text-body font-medium text-foreground">Theme</p>
             <p className="text-caption normal-case text-muted mt-0.5">Choose light or dark mode. Saved automatically.</p>
           </div>
-          <select
-            className="input-siem w-auto min-w-[140px] text-body py-1.5"
+          <Select
+            className="w-auto min-w-[140px]"
             value={theme === "dark" ? "Dark" : "Light"}
             onChange={(e) => setTheme(e.target.value === "Dark" ? "dark" : "light")}
             aria-label="Theme"
           >
             <option value="Dark">Dark</option>
             <option value="Light">Light</option>
-          </select>
+          </Select>
         </div>
         <div className="flex items-start justify-between gap-4 py-3">
           <div className="flex-1 min-w-0">
@@ -109,8 +111,15 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-5xl">
       <PageHeader title="Settings" subtitle="Appearance, notifications, and system configuration" />
       <div className="relative max-w-sm">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search settings…" className="input-siem pl-9" />
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none z-10" aria-hidden />
+        <Input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search settings…"
+          className="pl-9"
+          aria-label="Search settings"
+        />
       </div>
       <div className="flex flex-col lg:flex-row gap-6">
         <nav className="lg:w-48 shrink-0 flex lg:flex-col gap-1" role="tablist">

@@ -26,6 +26,7 @@ import {
   Shield,
   Gauge,
   Inbox,
+  Wrench,
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
@@ -37,6 +38,8 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 320;
 const COLLAPSED_WIDTH = 56;
 const DEFAULT_WIDTH = 240;
+const COLLAPSED_KEY = "securisphere-sidebar-collapsed";
+const WIDTH_KEY = "securisphere-sidebar-width";
 
 function isNavActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
@@ -67,6 +70,7 @@ const navSections: NavSection[] = [
     title: "Operations",
     items: [
       { href: "/hosts", label: "Hosts", icon: Server },
+      { href: "/maintenance", label: "Maintenance", icon: Wrench },
       { href: "/events", label: "Events", icon: Activity },
       { href: "/alerts", label: "Alerts", icon: Bell },
       { href: "/notifications", label: "Notifications", icon: Inbox },
@@ -130,8 +134,30 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
   const connected = useWsConnected();
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
+  const [prefsReady, setPrefsReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    const storedCollapsed = localStorage.getItem(COLLAPSED_KEY);
+    const storedWidth = localStorage.getItem(WIDTH_KEY);
+    if (storedCollapsed === "true") setCollapsed(true);
+    if (storedWidth) {
+      const parsed = Number.parseInt(storedWidth, 10);
+      if (!Number.isNaN(parsed) && parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) setWidth(parsed);
+    }
+    setPrefsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!prefsReady) return;
+    localStorage.setItem(COLLAPSED_KEY, String(collapsed));
+  }, [collapsed, prefsReady]);
+
+  useEffect(() => {
+    if (!prefsReady || collapsed) return;
+    localStorage.setItem(WIDTH_KEY, String(width));
+  }, [width, collapsed, prefsReady]);
 
   const effectiveWidth = drawer ? DEFAULT_WIDTH : collapsed ? COLLAPSED_WIDTH : width;
   const isCollapsed = drawer ? false : collapsed;

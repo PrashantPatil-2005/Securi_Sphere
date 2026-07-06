@@ -56,4 +56,4 @@ Use this flow for guide presentations and viva demos.
 
 - **Investigation narrative:** events → alerts → offenses → timeline → incident
 - **Differentiators vs flat alert lists:** offense grouping, explainable scoring, attack reconstruction
-- **Production-lite:** maintenance windows, saved-search alert cron, UTF-8 CI guard
+- **Production-lite:** maintenance windows (**Operations → Maintenance** at `/maintenance`), saved-search alert cron, UTF-8 CI guard

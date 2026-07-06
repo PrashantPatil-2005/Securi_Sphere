@@ -198,6 +198,9 @@ Sprint UI-2  →  Alerts mobile drawer + FilterBar
 Sprint UI-3  →  Search redesign + form migration (alerts, hosts)
 Sprint UI-4  →  Empty states + responsive tables + reports
 Sprint UI-5  →  Nav polish + a11y pass + optional motion
+Sprint UI-6  →  Phase 4 delight (command palette a11y, connection banner, sidebar persist, toast offset, rules Panel)
+Sprint UI-7  →  Settings/Profile forms, System pipeline polish, incidents + simulation form migration
+Sprint UI-8  →  Maintenance cleanup: alerts/events/hosts filter inputs + search mode toggles → Input/Button
 ```
 
 Each sprint: one PR, screenshot before/after in description, `npx tsc --noEmit` + spot-check light/dark.
@@ -242,7 +245,27 @@ After Phase 3, every list page should feel as polished as the dashboard overview
 - `docs/AI_AND_UX_ROADMAP.md` — AI assistant + command palette (shipped)
 - `docs/WRAP_UP.md` — overall product status
 
-**Next step:** ~~Sprint UI-5~~ **Sprint UI-5 complete**. Phase 3 polish and sprint UI-1–5 are done; Phase 4 items (command palette listbox, offline banner, sidebar width persist, etc.) remain optional.
+**Next step:** ~~Sprint UI-5~~ ~~Sprint UI-6~~ ~~Sprint UI-7~~ ~~Sprint UI-8~~ **UI improvement plan complete.** All dashboard list pages now use shared `Input`/`Button` components for filter rows and primary actions. Remaining raw `.btn-ghost` on pagination, ExportMenu, simulation nav links, and notifications "Mark all read" is intentional low-traffic markup — no further sprints planned.
+
+### Sprint UI-8 changelog (shipped)
+- **Alerts** — FilterBar rule/search fields → `Input`; bulk action bar → `Button variant="ghost" size="sm"`
+- **Events** — FilterBar event type and keyword fields → `Input`
+- **Hosts** — add-host form and hostname filter → `Input`/`Button`; table Enroll/Re-enroll and copy actions → `Button variant="ghost" size="sm"`
+- **Search** — main query field → `Input` (with search icon); mode toggles, example/saved chips, and "Edit query" → `Button variant="ghost"`
+
+### Sprint UI-7 changelog (shipped)
+- **Settings** — search field and theme picker migrated to `Input`/`Select`; notifications tab already used shared form components
+- **Profile** — explicit field ids; `Button` loading states on save/password actions
+- **System** — pipeline layer cards use `glass-panel` layout; `StatCard` row for fleet metrics; Readiness/Configuration panels aligned with rules/reports typography
+- **Incidents** — create form wrapped in `Panel` with `Input`/`Button`; investigation note form and status actions migrated
+- **Simulation** — host `Select` and wizard `Button` controls migrated (step-3 nav links remain anchor-styled)
+
+### Sprint UI-6 changelog (shipped)
+- **CommandPalette** — `listbox` + `aria-activedescendant` combobox pattern; Home/End navigation; active option scroll-into-view; options without nested buttons
+- **ConnectionBanner** — global offline / WebSocket reconnect notice in TopNav; dismissible; auto-clears on reconnect (`useOnline` + `useWsConnected`)
+- **Sidebar** — collapsed state and width persisted to `localStorage` (`securisphere-sidebar-collapsed`, `securisphere-sidebar-width`)
+- **Toast** — repositioned to `bottom-24 right-6` so toasts clear the AI assistant FAB
+- **Rules** — detection tab wrapped in `Panel` sections (create form + rules list); correlation form uses Panel body layout
 
 ### Sprint UI-5 changelog (shipped)
 - **Sidebar** — icon-only Settings + Profile when collapsed; nested-route active highlighting (`isNavActive`); `aria-current="page"` on nav links; `aria-label` on sign out; duplicate theme toggle removed (theme lives in TopNav user menu)

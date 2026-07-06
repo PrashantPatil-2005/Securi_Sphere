@@ -6,6 +6,8 @@ import { ClipboardList } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
@@ -101,19 +103,34 @@ function IncidentsPageContent() {
       <InvestigationTrail />
       {isError && <QueryError onRetry={() => refetch()} />}
       {isLoading && !isError && <TableSkeleton rows={4} />}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          createMutation.mutate();
-        }}
-        className="panel p-4 flex gap-3 flex-wrap"
-      >
-        <input required placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} className="input-siem flex-1 min-w-[200px]" />
-        <input placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} className="input-siem flex-1 min-w-[200px]" />
-        <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-          Create
-        </button>
-      </form>
+      <Panel title="Create incident">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate();
+          }}
+          className="flex gap-3 flex-wrap items-end"
+        >
+          <Input
+            required
+            label="Title"
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="flex-1 min-w-[200px]"
+          />
+          <Input
+            label="Description"
+            placeholder="Description"
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            className="flex-1 min-w-[200px]"
+          />
+          <Button type="submit" loading={createMutation.isPending}>
+            Create
+          </Button>
+        </form>
+      </Panel>
       <div className="grid lg:grid-cols-2 gap-6">
         <Panel title="Incidents">
           <div className="space-y-2 max-h-[32rem] overflow-y-auto">
@@ -154,18 +171,18 @@ function IncidentsPageContent() {
               <div className="flex flex-wrap gap-2 mb-4">
                 {detail.status === "open" && (
                   <>
-                    <button type="button" onClick={() => statusMutation.mutate({ id: detail.id, status: "investigating" })} className="btn-ghost text-xs">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "investigating" })}>
                       Investigate
-                    </button>
-                    <button type="button" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })} className="btn-ghost text-xs">
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })}>
                       Resolve
-                    </button>
+                    </Button>
                   </>
                 )}
                 {detail.status === "investigating" && (
-                  <button type="button" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })} className="btn-ghost text-xs">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })}>
                     Resolve
-                  </button>
+                  </Button>
                 )}
               </div>
               {detail.alert_ids.length > 0 && (
@@ -194,12 +211,18 @@ function IncidentsPageContent() {
                   e.preventDefault();
                   if (note.trim()) noteMutation.mutate();
                 }}
-                className="flex gap-2"
+                className="flex gap-2 items-end"
               >
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add investigation note…" className="input-siem flex-1" />
-                <button type="submit" className="btn-primary text-sm" disabled={noteMutation.isPending}>
+                <Input
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add investigation note…"
+                  aria-label="Investigation note"
+                  className="flex-1"
+                />
+                <Button type="submit" size="sm" loading={noteMutation.isPending}>
                   Add
-                </button>
+                </Button>
               </form>
             </>
           )}

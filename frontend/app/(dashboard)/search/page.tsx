@@ -165,9 +165,11 @@ function SearchPageContent() {
             <p className="text-muted mb-1">Generated SIEM query:</p>
             <code className="font-mono text-accent break-all">{nlMutation.data.siem_query}</code>
             <p className="text-xs text-muted mt-2">{nlMutation.data.explanation}</p>
-            <button
+            <Button
               type="button"
-              className="btn-ghost text-xs mt-2"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
               onClick={() => {
                 setQ(nlMutation.data!.siem_query);
                 setSubmitted(nlMutation.data!.siem_query);
@@ -175,7 +177,7 @@ function SearchPageContent() {
               }}
             >
               Edit query
-            </button>
+            </Button>
           </div>
         )}
         {nlMutation.isError && (
@@ -186,37 +188,39 @@ function SearchPageContent() {
 
       <div className="flex flex-wrap gap-2">
         {(["siem", "global"] as const).map((m) => (
-          <button
+          <Button
             key={m}
             type="button"
+            variant="ghost"
             onClick={() => setMode(m)}
-            className={cn("btn-ghost capitalize", mode === m && "bg-accent/10 text-accent border-accent/30")}
+            className={cn("capitalize", mode === m && "bg-accent/10 text-accent border-accent/30")}
           >
             {m === "siem" ? "SIEM query" : "Global search"}
-          </button>
+          </Button>
         ))}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex gap-2 items-end">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" aria-hidden />
-          <input
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none z-10" aria-hidden />
+          <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={mode === "siem" ? siemHint : "Search keyword…"}
-            className={cn("input-siem w-full pl-9", mode === "siem" && "font-mono")}
+            className={cn("pl-9", mode === "siem" && "font-mono")}
+            aria-label="Search query"
           />
         </div>
-        <Button type="submit">Run</Button>
+        <Button type="submit" className="shrink-0">Run</Button>
       </form>
 
       {mode === "siem" && (
         <div className="flex flex-wrap gap-2">
           <span className="text-xs text-muted self-center">Examples:</span>
           {examples.map((ex) => (
-            <button key={ex} type="button" onClick={() => { setQ(ex); setSubmitted(ex); }} className="btn-ghost text-xs font-mono">
+            <Button key={ex} type="button" variant="ghost" size="sm" className="font-mono" onClick={() => { setQ(ex); setSubmitted(ex); }}>
               {ex}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -224,9 +228,9 @@ function SearchPageContent() {
         <div className="flex flex-wrap gap-2">
           <span className="text-xs text-muted self-center">Saved:</span>
           {saved.map((s) => (
-            <button key={s.id} type="button" onClick={() => { setQ(s.query); setSubmitted(s.query); }} className="btn-ghost text-xs">
+            <Button key={s.id} type="button" variant="ghost" size="sm" onClick={() => { setQ(s.query); setSubmitted(s.query); }}>
               {s.name}
-            </button>
+            </Button>
           ))}
         </div>
       )}

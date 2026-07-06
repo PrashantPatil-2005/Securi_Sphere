@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useMemo, useState } from "react";
 import { Copy, Check, Info, Server } from "lucide-react";
-import { usePaginatedResource } from "@/lib/hooks/useApiQuery";
+import { usePaginatedResource, useMaintenanceWindows } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
@@ -20,6 +20,7 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
 import { useUser } from "@/lib/hooks/useUser";
 
@@ -66,9 +67,9 @@ function CopyButton({ text, label }: { text: string; label: string }) {
   }
 
   return (
-    <button type="button" onClick={copy} className="btn-ghost text-xs shrink-0" aria-label={`Copy ${label}`}>
+    <Button type="button" variant="ghost" size="sm" onClick={copy} className="shrink-0" aria-label={`Copy ${label}`}>
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-    </button>
+    </Button>
   );
 }
 
@@ -77,9 +78,9 @@ const HostActions = memo(function HostActions({ host, onEnroll }: { host: Host; 
     return <span className="text-xs text-muted">Enrolled</span>;
   }
   return (
-    <button onClick={() => onEnroll(host)} className="btn-ghost text-xs">
+    <Button type="button" variant="ghost" size="sm" onClick={() => onEnroll(host)}>
       {host.enrolled ? "Re-enroll" : "Enroll"}
-    </button>
+    </Button>
   );
 });
 
@@ -106,6 +107,12 @@ export default function HostsPage() {
   const [newName, setNewName] = useState("");
   const [riskHostId, setRiskHostId] = useState<string | null>(null);
 
+  const { data: maintenanceWindows = [] } = useMaintenanceWindows();
+  const activeMaintenanceHostIds = useMemo(
+    () => new Set(maintenanceWindows.filter((w) => w.active).map((w) => w.host_id)),
+    [maintenanceWindows],
+  );
+
   const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Host>({
     endpoint: "/api/v1/hosts",
     queryKey: "hosts",
@@ -131,8 +138,13 @@ export default function HostsPage() {
   const columns: Column<Host>[] = useMemo(
     () => [
       { key: "name", header: "Host", width: "130px", render: (h) => (
-        <button type="button" className="font-medium text-left hover:text-accent" onClick={() => setRiskHostId(h.id)}>
+        <button type="button" className="font-medium text-left hover:text-accent inline-flex items-center gap-1.5 flex-wrap" onClick={() => setRiskHostId(h.id)}>
           {h.name}
+          {activeMaintenanceHostIds.has(h.id) && (
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning/15 text-warning normal-case" title="Maintenance window active">
+              Maint
+            </span>
+          )}
         </button>
       ) },
       {
@@ -186,7 +198,7 @@ export default function HostsPage() {
         render: (h) => <HostActions host={h} onEnroll={enroll} />,
       },
     ],
-    [enroll],
+    [enroll, activeMaintenanceHostIds],
   );
 
   async function addHost(e: React.FormEvent) {
@@ -224,15 +236,15 @@ export default function HostsPage() {
         <li>Click Enroll → run install command on Ubuntu/Debian VM</li>
         <li>Agent registers → status becomes online; heartbeats keep it live</li>
       </ol>
-      <form onSubmit={addHost} className="flex gap-2 mb-4">
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="input-siem max-w-xs" disabled={!canManageHosts} />
-        <button type="submit" className="btn-primary" disabled={!canManageHosts}>Add host</button>
+      <form onSubmit={addHost} className="flex gap-2 mb-4 items-end">
+        <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="max-w-xs" disabled={!canManageHosts} aria-label="New host name" />
+        <Button type="submit" disabled={!canManageHosts}>Add host</Button>
       </form>
       <FilterBar
         activeCount={filters.hostname ? 1 : 0}
         more={
           <>
-            <input placeholder="Hostname" value={filters.hostname} onChange={(e) => { setFilters({ ...filters, hostname: e.target.value }); setPage(1); }} className="input-siem max-w-xs" />
+            <Input label="Hostname" placeholder="Hostname" value={filters.hostname} onChange={(e) => { setFilters({ ...filters, hostname: e.target.value }); setPage(1); }} className="max-w-xs" />
             <div className="space-y-1.5">
               <span className="block text-body font-medium text-foreground text-sm">Sort</span>
               <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
@@ -267,8 +279,11 @@ export default function HostsPage() {
             renderMobileCard={(h) => (
               <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <button type="button" className="font-medium text-left hover:text-accent" onClick={() => setRiskHostId(h.id)}>
+                  <button type="button" className="font-medium text-left hover:text-accent inline-flex items-center gap-1.5 flex-wrap" onClick={() => setRiskHostId(h.id)}>
                     {h.name}
+                    {activeMaintenanceHostIds.has(h.id) && (
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning/15 text-warning normal-case">Maint</span>
+                    )}
                   </button>
                   <span className={`text-xs capitalize shrink-0 ${statusTone[h.status] || "text-muted"}`}>{h.status}</span>
                 </div>

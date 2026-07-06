@@ -12,6 +12,24 @@ export function useTimeQueryKey(base: string, extra: Record<string, unknown> = {
   return [base, queryParams, extra] as const;
 }
 
+export interface MaintenanceWindow {
+  id: string;
+  host_id: string;
+  host_name: string;
+  reason: string | null;
+  starts_at: string;
+  ends_at: string;
+  active: boolean;
+}
+
+export function useMaintenanceWindows() {
+  return useQuery({
+    queryKey: ["maintenance-windows"],
+    queryFn: () => api<MaintenanceWindow[]>("/api/v1/maintenance-windows"),
+    staleTime: 30_000,
+  });
+}
+
 export function useHostsList() {
   return useQuery({
     queryKey: ["hosts", "options"],

@@ -197,12 +197,12 @@ For HTTPS servers, use `https://securi.yourdomain.com` as `--server`.
 | Section | Pages | Status |
 |---------|-------|--------|
 | Overview | Dashboard, Analytics, Metrics | Live API data |
-| Operations | Hosts, Events, Alerts, Offenses, Investigations | Full |
+| Operations | Hosts, Maintenance, Events, Alerts, Offenses, Investigations | Full |
 | Intelligence | MITRE, Timeline, Network, Search | Full |
 | Administration | Rules, Reports, Audit, Simulation, System Health | Admin/analyst RBAC |
 | Settings | Theme, notifications, system info | Theme + notifications wired |
 
-**Not yet in UI:** correlation rules editor, maintenance windows (API exists only).
+**Not yet in UI:** correlation rules editor. Maintenance windows are at **Operations → Maintenance** (`/maintenance`).
 
 ---
 

@@ -17,6 +17,7 @@ import {
 } from "@/lib/hooks/useNotifications";
 import { useWsMessages } from "@/lib/websocket";
 import { cn } from "@/lib/utils/cn";
+import { ConnectionBanner } from "./ConnectionBanner";
 
 function NotificationCenter() {
   const queryClient = useQueryClient();
@@ -239,31 +240,34 @@ export function TopNav({ onMenuClick, showMenu }: TopNavProps) {
   };
 
   return (
-    <header className="sticky top-0 z-40 flex items-center gap-4 px-4 lg:px-6 h-14 glass-nav border-b shrink-0">
-      {showMenu && (
-        <button type="button" onClick={onMenuClick} className="p-2 rounded-md text-muted hover:text-foreground lg:hidden" aria-label="Open menu">
-          <Menu className="w-5 h-5" />
-        </button>
-      )}
+    <header className="sticky top-0 z-40 glass-nav border-b shrink-0">
+      <div className="flex items-center gap-4 px-4 lg:px-6 h-14">
+        {showMenu && (
+          <button type="button" onClick={onMenuClick} className="p-2 rounded-md text-muted hover:text-foreground lg:hidden" aria-label="Open menu">
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
 
-      <form onSubmit={handleSearch} className="flex-1 max-w-xl">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" aria-hidden />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search events, alerts, hosts…"
-            className="w-full pl-9 pr-4 py-1.5 text-body bg-[var(--input-bg)] border border-border-subtle rounded-md text-foreground placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-            aria-label="Global search"
-          />
+        <form onSubmit={handleSearch} className="flex-1 max-w-xl">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search events, alerts, hosts…"
+              className="w-full pl-9 pr-4 py-1.5 text-body bg-[var(--input-bg)] border border-border-subtle rounded-md text-foreground placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              aria-label="Global search"
+            />
+          </div>
+        </form>
+
+        <div className="flex items-center gap-1 ml-auto">
+          <NotificationCenter />
+          <UserMenu />
         </div>
-      </form>
-
-      <div className="flex items-center gap-1 ml-auto">
-        <NotificationCenter />
-        <UserMenu />
       </div>
+      <ConnectionBanner />
     </header>
   );
 }

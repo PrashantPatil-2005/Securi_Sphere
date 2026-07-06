@@ -15,6 +15,7 @@ import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -106,8 +107,8 @@ export default function EventsPage() {
         activeCount={[filters.event_type, filters.q].filter(Boolean).length}
         more={
           <>
-            <input placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} className="input-siem" />
-            <input placeholder="Keyword search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="input-siem" />
+            <Input label="Event type" placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} />
+            <Input label="Keyword" placeholder="Keyword search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
             <div className="space-y-1.5">
               <span className="block text-body font-medium text-foreground text-sm">Sort</span>
               <SortSelect value={sort} onChange={setSort} />

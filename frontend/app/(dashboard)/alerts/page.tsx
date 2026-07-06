@@ -26,6 +26,8 @@ import { EmptyState } from "@/components/ui/Panel";
 import { Drawer } from "@/components/ui/Drawer";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 interface Alert {
@@ -227,8 +229,8 @@ function AlertsPageContent() {
               <option value="">All hosts</option>
               {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
             </Select>
-            <input placeholder="Rule name" value={filters.rule_name} onChange={(e) => { setFilters({ ...filters, rule_name: e.target.value }); setPage(1); }} className="input-siem" />
-            <input placeholder="Search title or description" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} className="input-siem" />
+            <Input label="Rule name" placeholder="Rule name" value={filters.rule_name} onChange={(e) => { setFilters({ ...filters, rule_name: e.target.value }); setPage(1); }} />
+            <Input label="Search" placeholder="Search title or description" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} />
           </>
         }
       >
@@ -261,33 +263,37 @@ function AlertsPageContent() {
           {canMutate && checkedIds.size > 0 && (
             <div className="mb-3 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border-subtle bg-[var(--sidebar-hover)]">
               <span className="text-sm text-[var(--muted)]">{checkedIds.size} selected</span>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={bulkMutation.isPending}
                 onClick={() => runBulk({ status: "investigating", assigned_to: user?.id })}
-                className="btn-ghost text-xs"
               >
                 Assign to me
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
+                className="text-success"
                 disabled={bulkMutation.isPending}
                 onClick={() => runBulk({ status: "resolved" })}
-                className="btn-ghost text-xs text-success"
               >
                 Resolve
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={bulkMutation.isPending}
                 onClick={() => runBulk({ status: "closed" })}
-                className="btn-ghost text-xs"
               >
                 Close
-              </button>
-              <button type="button" onClick={() => setCheckedIds(new Set())} className="btn-ghost text-xs ml-auto">
+              </Button>
+              <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={() => setCheckedIds(new Set())}>
                 Clear
-              </button>
+              </Button>
             </div>
           )}
           {canMutate && pageItems.length > 0 && (

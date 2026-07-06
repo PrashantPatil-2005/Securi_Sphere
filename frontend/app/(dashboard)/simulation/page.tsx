@@ -5,6 +5,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { QueryError } from "@/components/ui/QueryError";
@@ -82,14 +84,15 @@ export default function SimulationPage() {
         }
         subtitle="Inject synthetic events for demos. Dashboard charts hide simulated data by default — use Purge when done."
         action={
-          <button
+          <Button
             type="button"
-            className="btn-ghost text-sm"
-            disabled={purgeMutation.isPending}
+            variant="ghost"
+            size="sm"
+            loading={purgeMutation.isPending}
             onClick={() => purgeMutation.mutate()}
           >
             Purge simulated data
-          </button>
+          </Button>
         }
       />
       <div className="flex gap-2">
@@ -114,14 +117,14 @@ export default function SimulationPage() {
             {step === 0 && (
               <>
                 <h2 className="text-subheading">Step 1 — Target host</h2>
-                <select value={hostId} onChange={(e) => setHostId(e.target.value)} className="input-siem w-full">
+                <Select label="Target host" value={hostId} onChange={(e) => setHostId(e.target.value)}>
                   {hosts.map((h) => (
                     <option key={h.id} value={h.id}>{h.name}</option>
                   ))}
-                </select>
-                <button type="button" className="btn-primary" disabled={!hostId} onClick={() => setStep(1)}>
+                </Select>
+                <Button type="button" disabled={!hostId} onClick={() => setStep(1)}>
                   Continue
-                </button>
+                </Button>
               </>
             )}
             {step === 1 && (
@@ -143,16 +146,16 @@ export default function SimulationPage() {
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" className="btn-ghost" onClick={() => setStep(0)}>Back</button>
-                  <button
+                  <Button type="button" variant="ghost" onClick={() => setStep(0)}>Back</Button>
+                  <Button
                     type="button"
-                    className="btn-primary"
-                    disabled={!scenario || runMutation.isPending}
+                    disabled={!scenario}
+                    loading={runMutation.isPending}
                     onClick={() => runMutation.mutate()}
                   >
                     <FlaskConical className="w-4 h-4" />
                     Run simulation
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -166,9 +169,9 @@ export default function SimulationPage() {
                   <a href="/alerts" className="btn-ghost text-sm">View alerts</a>
                   <a href="/offenses" className="btn-ghost text-sm">View offenses</a>
                   <a href="/timeline" className="btn-ghost text-sm">Attack timeline</a>
-                  <button type="button" className="btn-primary text-sm" onClick={() => { setStep(0); setLastResult(null); }}>
+                  <Button type="button" size="sm" onClick={() => { setStep(0); setLastResult(null); }}>
                     Run again
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
