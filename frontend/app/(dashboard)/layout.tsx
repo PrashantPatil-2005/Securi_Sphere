@@ -14,11 +14,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppProviders>
         <ToastProvider>
           <TimeRangeProvider>
-            <AuthGuard>
+            <AppShell>
               <AssistantProvider>
-                <AppShell>{children}</AppShell>
+                <AuthGuard>{children}</AuthGuard>
               </AssistantProvider>
-            </AuthGuard>
+            </AppShell>
           </TimeRangeProvider>
         </ToastProvider>
       </AppProviders>

@@ -33,18 +33,18 @@ export const typography = {
 } as const;
 
 export const chartColors = {
-  primary: "#4c9aff",
-  secondary: "#7b8ba3",
-  success: "#3dd68c",
-  warning: "#f5c842",
-  danger: "#ff6b6b",
-  critical: "#ff4757",
-  high: "#ff8c42",
-  medium: "#f5c842",
-  low: "#4c9aff",
-  info: "#7b8ba3",
-  grid: "#243044",
-  tooltip: { bg: "#111820", border: "#243044" },
+  primary: "#3b82f6",
+  secondary: "#64748b",
+  success: "#22c55e",
+  warning: "#eab308",
+  danger: "#ef4444",
+  critical: "#ef4444",
+  high: "#f97316",
+  medium: "#eab308",
+  low: "#3b82f6",
+  info: "#64748b",
+  grid: "var(--border)",
+  tooltip: { bg: "var(--card)", border: "var(--border)" },
 } as const;
 
 export const animation = {

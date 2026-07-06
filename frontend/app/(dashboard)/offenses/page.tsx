@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ShieldAlert } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
@@ -137,7 +138,15 @@ function OffensesPageContent() {
                 <p className="text-xs text-muted mt-1">{o.host_name} · {o.event_count} events · {o.status}</p>
               </button>
             ))}
-            {!isLoading && offenses.length === 0 && <EmptyState title="No offenses" description="No offenses in selected range." />}
+            {!isLoading && offenses.length === 0 && (
+              <EmptyState
+                title="No offenses"
+                description="Offenses appear when correlation rules group related alerts. Try running a simulation."
+                icon={<ShieldAlert className="w-10 h-10 opacity-40" />}
+                action="/simulation"
+                actionLabel="Run simulation"
+              />
+            )}
           </div>
         </Panel>
         <Panel title="Details">

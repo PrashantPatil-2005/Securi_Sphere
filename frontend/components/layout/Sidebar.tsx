@@ -234,9 +234,11 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
           </div>
         )}
         <button
+          type="button"
           onClick={toggleTheme}
           className={cn("nav-link nav-link-idle w-full", isCollapsed && "justify-center px-2")}
           title={isCollapsed ? (theme === "dark" ? "Light mode" : "Dark mode") : undefined}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         >
           {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           {!isCollapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Network } from "lucide-react";
 import { api } from "@/lib/api";
 import { NetworkForceGraph } from "@/components/NetworkForceGraph";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
@@ -37,7 +38,13 @@ export default function NetworkPage() {
       {isLoading && <TableSkeleton rows={4} />}
       {isError && <QueryError onRetry={() => refetch()} />}
       {!isLoading && !isError && nodes.length === 0 && (
-        <EmptyState title="No hosts enrolled" description="Add hosts and enroll agents to see topology." />
+        <EmptyState
+          title="No hosts enrolled"
+          description="Add hosts and enroll agents to see the network topology."
+          icon={<Network className="w-10 h-10 opacity-40" />}
+          action="/hosts"
+          actionLabel="Add a host"
+        />
       )}
       {nodes.length > 0 && <NetworkForceGraph nodes={nodes} edges={edges} />}
       {nodes.length > 0 && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Gauge } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { api } from "@/lib/api";
@@ -86,7 +87,13 @@ export default function MetricsPage() {
           </div>
         </Panel>
       ) : (
-        <EmptyState title="No metrics" description="No metrics for the selected host and time range." />
+        <EmptyState
+          title="No metrics"
+          description="Select a host with an enrolled agent, or widen the time range."
+          icon={<Gauge className="w-10 h-10 opacity-40" />}
+          action="/hosts"
+          actionLabel="View hosts"
+        />
       )}
     </div>
   );

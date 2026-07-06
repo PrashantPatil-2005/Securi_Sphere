@@ -2,6 +2,8 @@
 
 import { memo, useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { EmptyState } from "@/components/ui/Panel";
 
 export interface Column<T> {
   key: string;
@@ -17,6 +19,11 @@ interface Props<T> {
   height?: number;
   rowHeight?: number;
   emptyMessage?: string;
+  emptyTitle?: string;
+  emptyIcon?: ReactNode;
+  emptyAction?: string;
+  emptyActionLabel?: string;
+  renderMobileCard?: (row: T) => ReactNode;
 }
 
 function VirtualDataTableInner<T>({
@@ -26,7 +33,13 @@ function VirtualDataTableInner<T>({
   height = 520,
   rowHeight = 44,
   emptyMessage = "No records match your filters.",
+  emptyTitle,
+  emptyIcon,
+  emptyAction,
+  emptyActionLabel,
+  renderMobileCard,
 }: Props<T>) {
+  const isMobile = useMediaQuery("(max-width: 767px)");
   const parentRef = useRef<HTMLDivElement>(null);
   const gridCols = useMemo(() => columns.map((c) => c.width || "1fr").join(" "), [columns]);
   const virtualizer = useVirtualizer({
@@ -37,7 +50,30 @@ function VirtualDataTableInner<T>({
   });
 
   if (rows.length === 0) {
+    if (emptyTitle || emptyIcon) {
+      return (
+        <EmptyState
+          title={emptyTitle ?? "No results"}
+          description={emptyMessage}
+          icon={emptyIcon}
+          action={emptyAction}
+          actionLabel={emptyActionLabel}
+        />
+      );
+    }
     return <p className="empty-desc py-8 text-center">{emptyMessage}</p>;
+  }
+
+  if (isMobile && renderMobileCard) {
+    return (
+      <div className="space-y-2 md:hidden">
+        {rows.map((row) => (
+          <div key={rowKey(row)} className="panel p-3">
+            {renderMobileCard(row)}
+          </div>
+        ))}
+      </div>
+    );
   }
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useState, Suspense } from "react";
+import { Bell } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePaginatedResource, useHostsList, useAlertStatusMutation, useAlertBulkMutation } from "@/lib/hooks/useApiQuery";
@@ -22,6 +23,10 @@ import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Panel";
+import { Drawer } from "@/components/ui/Drawer";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Select } from "@/components/ui/Select";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 interface Alert {
   id: string;
@@ -124,6 +129,7 @@ function AlertsPageContent() {
   const { data: hosts = [] } = useHostsList();
   const { data: user } = useUser();
   const canMutate = user?.role.name === "admin" || user?.role.name === "analyst";
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const { data, isLoading, isFetching, isError, refetch } = usePaginatedResource<Alert>({
     endpoint: "/api/v1/alerts",
     queryKey: "alerts",
@@ -193,6 +199,8 @@ function AlertsPageContent() {
     [selectedId, checkedIds, toggleChecked, canMutate],
   );
 
+  const secondaryFilterCount = [filters.host_id, filters.rule_name, filters.q].filter(Boolean).length;
+
   return (
     <div>
       <PageHeader
@@ -206,23 +214,47 @@ function AlertsPageContent() {
         action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />}
       />
       <TimeRangeBar />
-      <div className="filter-bar">
-        <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">
+      <FilterBar
+        activeCount={secondaryFilterCount}
+        more={
+          <>
+            <Select
+              label="Host"
+              value={filters.host_id}
+              onChange={(e) => { setFilters({ ...filters, host_id: e.target.value }); setPage(1); }}
+              className="min-w-[140px]"
+            >
+              <option value="">All hosts</option>
+              {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </Select>
+            <input placeholder="Rule name" value={filters.rule_name} onChange={(e) => { setFilters({ ...filters, rule_name: e.target.value }); setPage(1); }} className="input-siem" />
+            <input placeholder="Search title or description" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} className="input-siem" />
+          </>
+        }
+      >
+        <Select
+          label="Status"
+          value={filters.status}
+          onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }}
+          className="min-w-[130px]"
+        >
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filters.severity} onChange={(e) => { setFilters({ ...filters, severity: e.target.value }); setPage(1); }} className="input-siem">
+        </Select>
+        <Select
+          label="Severity"
+          value={filters.severity}
+          onChange={(e) => { setFilters({ ...filters, severity: e.target.value }); setPage(1); }}
+          className="min-w-[130px]"
+        >
           <option value="">All severities</option>
           {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filters.host_id} onChange={(e) => { setFilters({ ...filters, host_id: e.target.value }); setPage(1); }} className="input-siem">
-          <option value="">All hosts</option>
-          {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-        </select>
-        <input placeholder="Rule name" value={filters.rule_name} onChange={(e) => { setFilters({ ...filters, rule_name: e.target.value }); setPage(1); }} className="input-siem" />
-        <input placeholder="Search" value={filters.q} onChange={(e) => { setFilters({ ...filters, q: e.target.value }); setPage(1); }} className="input-siem" />
-        <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
-      </div>
+        </Select>
+        <div className="space-y-1.5">
+          <span className="block text-body font-medium text-foreground text-sm">Sort</span>
+          <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
+        </div>
+      </FilterBar>
 
       <div className="grid lg:grid-cols-2 gap-6 items-start">
         <div>
@@ -278,7 +310,13 @@ function AlertsPageContent() {
           ) : (
             <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
               {(data?.items ?? []).length === 0 ? (
-                <EmptyState title="No alerts" description="Adjust filters or time range to see detection results." />
+                <EmptyState
+                  title="No alerts"
+                  description="Run a simulation to generate demo alerts, or adjust filters and time range."
+                  icon={<Bell className="w-10 h-10 opacity-40" />}
+                  action="/simulation"
+                  actionLabel="Run simulation"
+                />
               ) : (
                 <VirtualList
                   items={data?.items ?? []}
@@ -294,7 +332,7 @@ function AlertsPageContent() {
           <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
         </div>
 
-        <div className="lg:sticky lg:top-20">
+        <div className="hidden lg:block lg:sticky lg:top-20">
           <AlertInvestigationPane
             alertId={selectedId}
             onStatus={setStatus}
@@ -302,6 +340,22 @@ function AlertsPageContent() {
           />
         </div>
       </div>
+
+      <Drawer
+        open={!!selectedId && !isDesktop}
+        onClose={() => setSelectedId(null)}
+        title="Alert investigation"
+        side="bottom"
+        className="lg:hidden"
+      >
+        {selectedId && (
+          <AlertInvestigationPane
+            alertId={selectedId}
+            onStatus={setStatus}
+            isUpdating={statusMutation.isPending}
+          />
+        )}
+      </Drawer>
     </div>
   );
 }

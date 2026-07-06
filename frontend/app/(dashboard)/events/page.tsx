@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Activity } from "lucide-react";
 import { useCursorPaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
@@ -12,6 +13,8 @@ import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Select } from "@/components/ui/Select";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -99,28 +102,57 @@ export default function EventsPage() {
     <div>
       <PageHeader title="Events" subtitle="Security event log with keyset pagination" action={<ExportMenu resource="events" query={exportQuery} />} />
       <TimeRangeBar />
-      <div className="filter-bar grid md:grid-cols-4 gap-2">
-        <select value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className="input-siem">
+      <FilterBar
+        activeCount={[filters.event_type, filters.q].filter(Boolean).length}
+        more={
+          <>
+            <input placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} className="input-siem" />
+            <input placeholder="Keyword search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="input-siem" />
+            <div className="space-y-1.5">
+              <span className="block text-body font-medium text-foreground text-sm">Sort</span>
+              <SortSelect value={sort} onChange={setSort} />
+            </div>
+          </>
+        }
+      >
+        <Select label="Host" value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className="min-w-[140px]">
           <option value="">All hosts</option>
           {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-        </select>
-        <select value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className="input-siem">
+        </Select>
+        <Select label="Severity" value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className="min-w-[130px]">
           <option value="">All severities</option>
           {["info", "low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <input placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} className="input-siem" />
-        <input placeholder="Keyword" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} className="input-siem" />
-        <SortSelect value={sort} onChange={setSort} />
-      </div>
+        </Select>
+      </FilterBar>
       {isLoading ? (
         <TableSkeleton />
       ) : isError ? (
         <QueryError onRetry={() => refetch()} />
       ) : items.length === 0 ? (
-        <EmptyState title="No events" description="Adjust filters or enroll an agent to ingest events." />
+        <EmptyState
+          title="No events"
+          description="Enroll an agent on a host, or adjust filters and time range."
+          icon={<Activity className="w-10 h-10 opacity-40" />}
+          action="/hosts"
+          actionLabel="Add a host"
+        />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable rows={items} columns={columns} rowKey={rowKeyById} />
+          <VirtualDataTable
+            rows={items}
+            columns={columns}
+            rowKey={rowKeyById}
+            renderMobileCard={(e) => (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <SeverityBadge severity={e.severity} />
+                  <span className="text-[11px] text-muted tabular-nums">{new Date(e.timestamp).toLocaleString()}</span>
+                </div>
+                <p className="font-mono text-xs text-accent">{e.event_type}</p>
+                {e.description && <p className="text-sm text-muted line-clamp-2">{e.description}</p>}
+              </div>
+            )}
+          />
         </div>
       )}
       <CursorPaginationBar

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Bot, Send, X, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/assistant/AssistantProvider";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 import { cn } from "@/lib/utils/cn";
 
 interface ChatMessage {
@@ -40,6 +42,11 @@ export function AIAssistantPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useBodyScrollLock(open);
+  useFocusTrap(panelRef, open);
 
   const chatMutation = useMutation({
     mutationFn: (message: string) =>
@@ -67,12 +74,21 @@ export function AIAssistantPanel() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, chatMutation.isPending]);
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setOpen(false);
     clearContext();
     setMessages([]);
     setInput("");
-  }
+  }, [setOpen, clearContext]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, handleClose]);
 
   function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -97,12 +113,18 @@ export function AIAssistantPanel() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[min(420px,calc(100vw-2rem))] flex flex-col rounded-xl border border-border bg-card shadow-2xl overflow-hidden max-h-[min(560px,calc(100vh-6rem))]">
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="fixed bottom-6 right-6 z-50 w-[min(420px,calc(100vw-2rem))] flex flex-col rounded-xl border border-border bg-card shadow-2xl overflow-hidden max-h-[min(560px,calc(100vh-6rem))] animate-scale-in"
+    >
       <header className="flex items-center justify-between px-4 py-3 border-b border-border-subtle bg-[var(--sidebar-hover)]">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-accent" />
+          <Sparkles className="w-4 h-4 text-accent" aria-hidden />
           <div>
-            <p className="text-sm font-semibold">AI Security Assistant</p>
+            <p id={titleId} className="text-sm font-semibold">AI Security Assistant</p>
             <p className="text-[10px] text-muted normal-case">
               {context.alertId ? "Alert context" : context.offenseId ? "Offense context" : "SOC copilot"}
             </p>

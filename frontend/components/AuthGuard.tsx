@@ -6,7 +6,7 @@ import { clearTokens } from "@/lib/api";
 import { useUser } from "@/lib/hooks/useUser";
 import { PageSkeleton } from "@/components/ui/PageSkeleton";
 
-/** Blocks dashboard until GET /auth/me succeeds; redirects to login on failure. */
+/** Blocks dashboard content until GET /auth/me succeeds; redirects to login on failure. */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -21,16 +21,12 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [isError, router, pathname]);
 
   if (isLoading && !data) {
-    return (
-      <div className="p-6">
-        <PageSkeleton />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if ((isError || !data) && isFetched) {
     return (
-      <div className="p-6 text-center text-muted text-sm">
+      <div className="py-16 text-center text-muted text-sm">
         Redirecting to sign in…
       </div>
     );

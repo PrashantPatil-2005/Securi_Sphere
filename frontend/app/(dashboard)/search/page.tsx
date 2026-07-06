@@ -3,15 +3,27 @@
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Search, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
-import { PageHeader, EmptyState, Panel } from "@/components/ui/Panel";
+import {
+  AlertResultRow,
+  EventResultRow,
+  HostResultRow,
+  SearchResultSection,
+  SearchResultsEmpty,
+  SearchResultsSummary,
+} from "@/components/search/SearchResults";
+import { PageHeader, Panel } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
+import { cn } from "@/lib/utils/cn";
 
 interface SiemResult {
   backend?: string;
@@ -113,120 +125,155 @@ function SearchPageContent() {
   const refetch = mode === "siem" ? refetchSiem : refetchGlobal;
 
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader
         title="Search"
         subtitle={mode === "siem" ? `SIEM query language — e.g. ${siemHint}` : "Global search across hosts, alerts, and events"}
       />
       <TimeRangeBar />
+
       <Panel title="Natural language search" subtitle='Plain English → SIEM query, e.g. "Show failed logins from last hour"'>
         <form
-          className="flex gap-2"
+          className="flex flex-col sm:flex-row gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (!nlQuery.trim()) return;
             nlMutation.mutate(nlQuery.trim());
           }}
         >
-          <input
+          <Input
             value={nlQuery}
             onChange={(e) => setNlQuery(e.target.value)}
             placeholder="Show failed logins from last hour"
-            className="input-siem flex-1"
+            className="flex-1"
           />
-          <button type="submit" className="btn-primary" disabled={!nlQuery.trim() || nlMutation.isPending}>
-            {nlMutation.isPending ? "Converting…" : "Convert"}
-          </button>
+          <Button type="submit" loading={nlMutation.isPending} disabled={!nlQuery.trim()} className="shrink-0">
+            <Sparkles className="w-4 h-4" />
+            Convert
+          </Button>
         </form>
         {nlMutation.data && (
-          <p className="text-xs text-muted mt-2">
-            → <code className="font-mono">{nlMutation.data.siem_query}</code>
-            {" "}({nlMutation.data.explanation})
-          </p>
+          <div className="mt-3 p-3 rounded-lg border border-accent/25 bg-accent/5 text-sm">
+            <p className="text-muted mb-1">Generated SIEM query:</p>
+            <code className="font-mono text-accent break-all">{nlMutation.data.siem_query}</code>
+            <p className="text-xs text-muted mt-2">{nlMutation.data.explanation}</p>
+            <button
+              type="button"
+              className="btn-ghost text-xs mt-2"
+              onClick={() => {
+                setQ(nlMutation.data!.siem_query);
+                setSubmitted(nlMutation.data!.siem_query);
+                setMode("siem");
+              }}
+            >
+              Edit query
+            </button>
+          </div>
         )}
         {nlMutation.isError && (
           <p className="text-xs text-danger mt-2">{nlMutation.error.message}</p>
         )}
       </Panel>
-      <div className="flex gap-2 mb-4">
-        <button type="button" onClick={() => setMode("siem")} className={mode === "siem" ? "btn-primary" : "btn-ghost"}>SIEM</button>
-        <button type="button" onClick={() => setMode("global")} className={mode === "global" ? "btn-primary" : "btn-ghost"}>Global</button>
+
+      <div className="flex flex-wrap gap-2">
+        {(["siem", "global"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cn("btn-ghost capitalize", mode === m && "bg-accent/10 text-accent border-accent/30")}
+          >
+            {m === "siem" ? "SIEM query" : "Global search"}
+          </button>
+        ))}
       </div>
-      <form onSubmit={handleSubmit} className="flex gap-2 mb-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={mode === "siem" ? siemHint : "Search keyword…"}
-          className="input-siem flex-1 font-mono"
-        />
-        <button type="submit" className="btn-primary">Run</button>
+
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" aria-hidden />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={mode === "siem" ? siemHint : "Search keyword…"}
+            className={cn("input-siem w-full pl-9", mode === "siem" && "font-mono")}
+          />
+        </div>
+        <Button type="submit">Run</Button>
       </form>
+
       {mode === "siem" && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <span className="text-xs text-muted self-center">Examples:</span>
           {examples.map((ex) => (
-            <button key={ex} type="button" onClick={() => { setQ(ex); setSubmitted(ex); }} className="btn-ghost text-xs">{ex}</button>
+            <button key={ex} type="button" onClick={() => { setQ(ex); setSubmitted(ex); }} className="btn-ghost text-xs font-mono">
+              {ex}
+            </button>
           ))}
         </div>
       )}
       {saved.length > 0 && mode === "siem" && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <span className="text-xs text-muted self-center">Saved:</span>
           {saved.map((s) => (
-            <button key={s.id} type="button" onClick={() => { setQ(s.query); setSubmitted(s.query); }} className="btn-ghost text-xs">{s.name}</button>
+            <button key={s.id} type="button" onClick={() => { setQ(s.query); setSubmitted(s.query); }} className="btn-ghost text-xs">
+              {s.name}
+            </button>
           ))}
         </div>
       )}
+
       {isLoading && submitted.length > 0 && <TableSkeleton rows={4} />}
       {isError && submitted.length > 0 && <QueryError onRetry={() => refetch()} />}
+
       {mode === "siem" && siem && !isError && (
-        <div className={`space-y-2 ${isFetching ? "opacity-60" : ""}`}>
-          <p className="text-sm text-muted">
-            {siem.total_events} events · {siem.total_alerts} alerts
-            {siem.backend && <> · <span className="font-mono text-xs">{siem.backend}</span></>}
-          </p>
+        <div className={cn("space-y-4", isFetching && "opacity-60")}>
+          <SearchResultsSummary events={siem.total_events} alerts={siem.total_alerts} backend={siem.backend} />
           {siem.events.length === 0 && siem.alerts.length === 0 && (
-            <EmptyState title="No results" description="Try broadening your query or time range." />
+            <SearchResultsEmpty description="Try broadening your query or time range." />
           )}
-          {siem.events.map((ev) => (
-            <div key={ev.id} className="panel p-3 text-sm font-mono">{new Date(ev.timestamp).toLocaleString()} · {ev.event_type} · {ev.description}</div>
-          ))}
-          {siem.alerts.map((a) => (
-            <div key={a.id} className="panel p-3 text-sm">[{a.severity}] {a.title}</div>
-          ))}
+          <SearchResultSection title="Alerts" count={siem.alerts.length}>
+            {siem.alerts.map((a) => <AlertResultRow key={a.id} alert={a} />)}
+          </SearchResultSection>
+          <SearchResultSection title="Events" count={siem.events.length}>
+            {siem.events.map((ev) => <EventResultRow key={ev.id} event={ev} />)}
+          </SearchResultSection>
         </div>
       )}
+
       {mode === "global" && global && !isError && (
-        <div className={`space-y-4 ${isFetching ? "opacity-60" : ""}`}>
+        <div className={cn("space-y-4", isFetching && "opacity-60")}>
+          <SearchResultsSummary
+            events={global.events.length}
+            alerts={global.alerts.length}
+            hosts={global.hosts.length}
+          />
           {global.hosts.length === 0 && global.alerts.length === 0 && global.events.length === 0 && (
-            <EmptyState title="No results" description={`Nothing matched "${global.query}"`} />
+            <SearchResultsEmpty description={`Nothing matched "${global.query}"`} />
           )}
-          {global.hosts.length > 0 && (
-            <Panel title={`Hosts (${global.hosts.length})`}>
-              <div className="space-y-2">
-                {global.hosts.map((h) => (
-                  <div key={h.id} className="text-sm">{h.name} · {h.status} · {h.ip ?? "—"}</div>
-                ))}
-              </div>
-            </Panel>
-          )}
-          {global.alerts.length > 0 && (
-            <Panel title={`Alerts (${global.alerts.length})`}>
-              <div className="space-y-2">
-                {global.alerts.map((a) => (
-                  <div key={a.id} className="text-sm">[{a.severity}] {a.title} · {a.status}</div>
-                ))}
-              </div>
-            </Panel>
-          )}
-          {global.events.length > 0 && (
-            <Panel title={`Events (${global.events.length})`}>
-              <div className="space-y-2">
-                {global.events.map((e) => (
-                  <div key={e.id} className="text-sm font-mono">{e.event_type} · {e.description}</div>
-                ))}
-              </div>
-            </Panel>
+          <SearchResultSection title="Hosts" count={global.hosts.length}>
+            {global.hosts.map((h) => <HostResultRow key={h.id} host={h} />)}
+          </SearchResultSection>
+          <SearchResultSection title="Alerts" count={global.alerts.length}>
+            {global.alerts.map((a) => <AlertResultRow key={a.id} alert={a} />)}
+          </SearchResultSection>
+          <SearchResultSection title="Events" count={global.events.length}>
+            {global.events.map((e) => <EventResultRow key={e.id} event={e} />)}
+          </SearchResultSection>
+          {global.users.length > 0 && (
+            <SearchResultSection title="Users" count={global.users.length}>
+              {global.users.map((u) => (
+                <div key={u.id} className="panel p-3 text-sm">
+                  <p className="font-medium">{u.full_name || u.email}</p>
+                  <p className="text-xs text-muted">{u.email}</p>
+                </div>
+              ))}
+            </SearchResultSection>
           )}
         </div>
+      )}
+
+      {submitted && !isLoading && !isError && mode === "siem" && !siem && (
+        <p className="text-sm text-muted">Enter a query and press Run.</p>
       )}
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { ClipboardList } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
@@ -133,7 +134,13 @@ function IncidentsPageContent() {
                 </div>
               </button>
             ))}
-            {!isLoading && !isError && items.length === 0 && <EmptyState title="No incidents" description="Create an incident to begin an investigation." />}
+            {!isLoading && !isError && items.length === 0 && (
+              <EmptyState
+                title="No incidents"
+                description="Use the form above to create an incident and begin an investigation."
+                icon={<ClipboardList className="w-10 h-10 opacity-40" />}
+              />
+            )}
           </div>
         </Panel>
         <Panel title="Investigation workspace">

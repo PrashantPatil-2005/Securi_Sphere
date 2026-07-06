@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, FlaskConical, Bell, LayoutDashboard, Server, ShieldAlert } from "lucide-react";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 import { cn } from "@/lib/utils/cn";
 
 interface CommandItem {
@@ -18,7 +20,12 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const router = useRouter();
+
+  useBodyScrollLock(open);
+  useFocusTrap(panelRef, open);
 
   const navigate = useCallback(
     (path: string) => {
@@ -94,26 +101,39 @@ export function CommandPalette() {
         aria-label="Close command palette"
         onClick={() => setOpen(false)}
       />
-      <div className="relative w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl overflow-hidden">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-scale-in"
+      >
+        <p id={titleId} className="sr-only">
+          Command palette
+        </p>
         <div className="flex items-center gap-2 px-4 py-3 border-b border-border-subtle">
-          <Search className="w-4 h-4 text-muted shrink-0" />
+          <Search className="w-4 h-4 text-muted shrink-0" aria-hidden />
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search pages and actions…"
             className="flex-1 bg-transparent outline-none text-sm"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="command-palette-list"
+            aria-activedescendant={filtered[activeIndex] ? `cmd-${filtered[activeIndex].id}` : undefined}
           />
           <kbd className="text-[10px] text-muted px-1.5 py-0.5 rounded border border-border-subtle">Esc</kbd>
         </div>
-        <ul className="max-h-72 overflow-y-auto py-2">
+        <ul id="command-palette-list" role="listbox" className="max-h-72 overflow-y-auto py-2">
           {filtered.length === 0 && (
             <li className="px-4 py-3 text-sm text-muted">No matches</li>
           )}
           {filtered.map((item, i) => {
             const Icon = item.icon;
             return (
-              <li key={item.id}>
+              <li key={item.id} id={`cmd-${item.id}`} role="option" aria-selected={i === activeIndex}>
                 <button
                   type="button"
                   onClick={item.action}
@@ -122,7 +142,7 @@ export function CommandPalette() {
                     i === activeIndex && "bg-[var(--sidebar-hover)]",
                   )}
                 >
-                  <Icon className="w-4 h-4 text-muted shrink-0" />
+                  <Icon className="w-4 h-4 text-muted shrink-0" aria-hidden />
                   <span>{item.label}</span>
                 </button>
               </li>

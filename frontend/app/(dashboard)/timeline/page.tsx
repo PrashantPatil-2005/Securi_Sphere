@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
@@ -59,7 +60,13 @@ export default function TimelinePage() {
       {isLoading && <TableSkeleton rows={4} />}
       {isError && <QueryError onRetry={() => refetch()} />}
       {!isLoading && !isError && items.length === 0 && (
-        <EmptyState title="No attack timelines" description="Run a simulation or wait for correlated activity to build chains." />
+        <EmptyState
+          title="No attack timelines"
+          description="Run a simulation or wait for correlated activity to build attack chains."
+          icon={<Clock className="w-10 h-10 opacity-40" />}
+          action="/simulation"
+          actionLabel="Run simulation"
+        />
       )}
       <div className="grid lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.2fr)] gap-6">
         <div className="space-y-3">

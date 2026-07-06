@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useMemo, useState } from "react";
-import { Copy, Check, Info } from "lucide-react";
+import { Copy, Check, Info, Server } from "lucide-react";
 import { usePaginatedResource } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { api } from "@/lib/api";
@@ -13,11 +13,14 @@ import SortSelect from "@/components/SortSelect";
 import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Select } from "@/components/ui/Select";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { useUser } from "@/lib/hooks/useUser";
 
 interface Host {
@@ -225,36 +228,78 @@ export default function HostsPage() {
         <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New host name" required className="input-siem max-w-xs" disabled={!canManageHosts} />
         <button type="submit" className="btn-primary" disabled={!canManageHosts}>Add host</button>
       </form>
-      <div className="filter-bar">
-        <input placeholder="Hostname" value={filters.hostname} onChange={(e) => { setFilters({ ...filters, hostname: e.target.value }); setPage(1); }} className="input-siem" />
-        <select value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="input-siem">
+      <FilterBar
+        activeCount={filters.hostname ? 1 : 0}
+        more={
+          <>
+            <input placeholder="Hostname" value={filters.hostname} onChange={(e) => { setFilters({ ...filters, hostname: e.target.value }); setPage(1); }} className="input-siem max-w-xs" />
+            <div className="space-y-1.5">
+              <span className="block text-body font-medium text-foreground text-sm">Sort</span>
+              <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
+            </div>
+          </>
+        }
+      >
+        <Select label="Status" value={filters.status} onChange={(e) => { setFilters({ ...filters, status: e.target.value }); setPage(1); }} className="min-w-[140px]">
           <option value="">All statuses</option>
           {["inactive", "online", "offline", "warning", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <SortSelect value={sort} onChange={(s) => { setSort(s); setPage(1); }} />
-      </div>
+        </Select>
+      </FilterBar>
       {isLoading ? (
         <TableSkeleton />
       ) : isError ? (
         <QueryError onRetry={() => refetch()} />
       ) : (data?.items ?? []).length === 0 ? (
-        <EmptyState title="No hosts" description="Add a host, then enroll a Debian or Ubuntu VM with the install command below." />
+        <EmptyState
+          title="No hosts"
+          description="Add a host above, then enroll a Debian or Ubuntu VM with the install command."
+          icon={<Server className="w-10 h-10 opacity-40" />}
+        />
       ) : (
         <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable rows={data?.items ?? []} columns={columns} rowKey={rowKeyById} />
+          <VirtualDataTable
+            rows={data?.items ?? []}
+            columns={columns}
+            rowKey={rowKeyById}
+            emptyTitle="No hosts"
+            emptyMessage="Add a host above, then enroll a Debian or Ubuntu VM."
+            emptyIcon={<Server className="w-10 h-10 opacity-40" />}
+            renderMobileCard={(h) => (
+              <div className="space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <button type="button" className="font-medium text-left hover:text-accent" onClick={() => setRiskHostId(h.id)}>
+                    {h.name}
+                  </button>
+                  <span className={`text-xs capitalize shrink-0 ${statusTone[h.status] || "text-muted"}`}>{h.status}</span>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs text-muted">
+                  <span>{h.enrolled ? "Enrolled" : "Pending"}</span>
+                  {h.hostname && <span>{h.hostname}</span>}
+                  {h.risk_score != null && <span className="text-danger">Risk {h.risk_score}</span>}
+                  <span>{h.alert_count ?? 0} alerts</span>
+                </div>
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-[11px] text-muted tabular-nums">
+                    {h.last_seen ? new Date(h.last_seen).toLocaleString() : "Never seen"}
+                  </span>
+                  <HostActions host={h} onEnroll={enroll} />
+                </div>
+              </div>
+            )}
+          />
         </div>
       )}
       <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPage={setPage} onPageSize={(s) => { setPageSize(s); setPage(1); }} />
       <HostRiskDrawer hostId={riskHostId} onClose={() => setRiskHostId(null)} />
-      {enrollment && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setEnrollment(null)}>
-          <div className="panel max-w-2xl w-full p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div>
-              <h2 className="text-subheading">Install agent on {enrollment.host_name}</h2>
-              <p className="text-caption normal-case text-muted mt-1">
-                Token expires {new Date(enrollment.expires_at).toLocaleString()}.
-              </p>
-            </div>
+      <Dialog
+        open={!!enrollment}
+        onClose={() => { setEnrollment(null); refetch(); }}
+        title={enrollment ? `Install agent on ${enrollment.host_name}` : "Install agent"}
+        description={enrollment ? `Token expires ${new Date(enrollment.expires_at).toLocaleString()}.` : undefined}
+        size="xl"
+      >
+        {enrollment && (
+          <div className="space-y-4">
             <div className="rounded-lg border border-accent/25 bg-accent/5 p-4 space-y-3">
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" aria-hidden />
@@ -292,8 +337,8 @@ export default function HostsPage() {
             </p>
             <Button onClick={() => { setEnrollment(null); refetch(); }}>Done</Button>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
       {enrolling && (
         <div className="fixed inset-0 bg-black/30 z-40" aria-hidden />
       )}

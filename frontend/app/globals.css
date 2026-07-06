@@ -13,6 +13,7 @@
   --border-subtle: #161d28;
   --accent: #3b82f6;
   --accent-muted: #2563eb;
+  --accent-foreground: #ffffff;
   --accent-subtle: rgba(59, 130, 246, 0.12);
   --success: #22c55e;
   --warning: #eab308;
@@ -29,9 +30,23 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-blur: 16px;
   --ambient-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.15), transparent 60%);
+  --badge-critical-bg: rgba(239, 68, 68, 0.15);
+  --badge-critical-fg: #fca5a5;
+  --badge-critical-border: rgba(239, 68, 68, 0.35);
+  --badge-high-bg: rgba(249, 115, 22, 0.15);
+  --badge-high-fg: #fdba74;
+  --badge-high-border: rgba(249, 115, 22, 0.35);
+  --badge-medium-bg: rgba(234, 179, 8, 0.12);
+  --badge-medium-fg: #fde047;
+  --badge-medium-border: rgba(234, 179, 8, 0.3);
+  --badge-low-bg: rgba(59, 130, 246, 0.12);
+  --badge-low-fg: #93c5fd;
+  --badge-low-border: rgba(59, 130, 246, 0.3);
+  --badge-info-bg: rgba(100, 116, 139, 0.15);
+  --badge-info-fg: #cbd5e1;
+  --badge-info-border: rgba(100, 116, 139, 0.35);
 }
 
-/* ─── Light theme ─── */
 [data-theme="light"] {
   --background: #f8fafc;
   --foreground: #0f172a;
@@ -41,6 +56,7 @@
   --border-subtle: #f1f5f9;
   --accent: #2563eb;
   --accent-muted: #1d4ed8;
+  --accent-foreground: #ffffff;
   --accent-subtle: rgba(37, 99, 235, 0.08);
   --success: #16a34a;
   --warning: #ca8a04;
@@ -56,6 +72,21 @@
   --glass-border: rgba(0, 0, 0, 0.08);
   --glass-blur: 16px;
   --ambient-gradient: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37, 99, 235, 0.08), transparent 60%);
+  --badge-critical-bg: rgba(220, 38, 38, 0.1);
+  --badge-critical-fg: #b91c1c;
+  --badge-critical-border: rgba(220, 38, 38, 0.25);
+  --badge-high-bg: rgba(234, 88, 12, 0.1);
+  --badge-high-fg: #c2410c;
+  --badge-high-border: rgba(234, 88, 12, 0.25);
+  --badge-medium-bg: rgba(202, 138, 4, 0.1);
+  --badge-medium-fg: #a16207;
+  --badge-medium-border: rgba(202, 138, 4, 0.25);
+  --badge-low-bg: rgba(37, 99, 235, 0.08);
+  --badge-low-fg: #1d4ed8;
+  --badge-low-border: rgba(37, 99, 235, 0.2);
+  --badge-info-bg: rgba(100, 116, 139, 0.1);
+  --badge-info-fg: #475569;
+  --badge-info-border: rgba(100, 116, 139, 0.2);
 }
 
 * {
@@ -108,7 +139,7 @@ body {
     box-shadow: 0 1px 3px var(--shadow-color);
   }
   .glass-panel:hover {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--border);
   }
 
   .glass-nav {
@@ -192,11 +223,31 @@ body {
   .badge {
     @apply inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide;
   }
-  .badge-critical { @apply bg-red-950/60 text-red-300 border border-red-900/50; }
-  .badge-high { @apply bg-orange-950/60 text-orange-300 border border-orange-900/50; }
-  .badge-medium { @apply bg-yellow-950/50 text-yellow-200 border border-yellow-900/40; }
-  .badge-low { @apply bg-blue-950/50 text-blue-300 border border-blue-900/40; }
-  .badge-info { @apply bg-slate-800/60 text-slate-300 border border-slate-700/50; }
+  .badge-critical {
+    color: var(--badge-critical-fg);
+    background: var(--badge-critical-bg);
+    border: 1px solid var(--badge-critical-border);
+  }
+  .badge-high {
+    color: var(--badge-high-fg);
+    background: var(--badge-high-bg);
+    border: 1px solid var(--badge-high-border);
+  }
+  .badge-medium {
+    color: var(--badge-medium-fg);
+    background: var(--badge-medium-bg);
+    border: 1px solid var(--badge-medium-border);
+  }
+  .badge-low {
+    color: var(--badge-low-fg);
+    background: var(--badge-low-bg);
+    border: 1px solid var(--badge-low-border);
+  }
+  .badge-info {
+    color: var(--badge-info-fg);
+    background: var(--badge-info-bg);
+    border: 1px solid var(--badge-info-border);
+  }
 
   .data-table-wrap {
     @apply border border-border-subtle rounded-lg overflow-hidden;

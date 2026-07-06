@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Bell } from "lucide-react";
 import {
   useNotificationHistory,
   useNotificationMutations,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/hooks/useNotifications";
 import PaginationBar from "@/components/PaginationBar";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
+import { FilterBar } from "@/components/ui/FilterBar";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
@@ -40,8 +42,8 @@ export default function NotificationsPage() {
         }
       />
 
-      <div className="filter-bar mb-4">
-        <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
+      <FilterBar>
+        <label className="flex items-center gap-2 text-sm text-[var(--muted)] cursor-pointer">
           <input
             type="checkbox"
             checked={unreadOnly}
@@ -57,7 +59,7 @@ export default function NotificationsPage() {
             {data.unread_count} unread · {data.total} total
           </span>
         )}
-      </div>
+      </FilterBar>
 
       {isLoading ? (
         <TableSkeleton rows={8} />
@@ -69,6 +71,7 @@ export default function NotificationsPage() {
             <EmptyState
               title="No notifications"
               description={unreadOnly ? "You're all caught up." : "New alerts and offenses will appear here."}
+              icon={<Bell className="w-10 h-10 opacity-40" />}
             />
           ) : (
             <div className="space-y-2">

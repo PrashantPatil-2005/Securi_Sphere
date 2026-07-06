@@ -8,6 +8,9 @@ import { buildQuery } from "@/lib/buildQuery";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
 import { LazyEventTrendChart, LazySeverityCharts, LazyAnalyticsCharts, LazyWidget } from "@/components/LazyWidget";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
@@ -81,15 +84,21 @@ export default function AnalyticsPage() {
     <div className="space-y-5">
       <PageHeader title="SIEM analytics" subtitle="Trends, distributions, and threat indicators" />
       <TimeRangeBar />
-      <div className="filter-bar">
-        <input placeholder="Host ID filter" value={hostFilter} onChange={(e) => setHostFilter(e.target.value)} className="input-siem" />
-        <select value={alertStatus} onChange={(e) => setAlertStatus(e.target.value)} className="input-siem">
+      <FilterBar activeCount={hostFilter ? 1 : 0}>
+        <Input
+          label="Host ID"
+          placeholder="Filter by host UUID"
+          value={hostFilter}
+          onChange={(e) => setHostFilter(e.target.value)}
+          className="max-w-xs"
+        />
+        <Select label="Alert status" value={alertStatus} onChange={(e) => setAlertStatus(e.target.value)} className="min-w-[160px]">
           <option value="">All alert statuses</option>
           <option value="open">Open</option>
           <option value="investigating">Investigating</option>
           <option value="resolved">Resolved</option>
-        </select>
-      </div>
+        </Select>
+      </FilterBar>
 
       <Panel title="Security events trend">
         {trendError ? (

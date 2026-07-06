@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Panel } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
@@ -154,25 +158,25 @@ export default function RulesPage() {
       {tab === "detection" && (
         <>
           {isLoading && <TableSkeleton rows={4} />}
-          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="panel grid md:grid-cols-6 gap-3 items-end">
-            <input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-siem" />
-            <select value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })} className="input-siem">
+          <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="panel grid md:grid-cols-6 gap-3 items-end p-4">
+            <Input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} label="Name" />
+            <Select label="Type" value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}>
               {ruleTypes.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input type="number" placeholder="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} className="input-siem" />
-            <input type="number" placeholder="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} className="input-siem" />
-            <select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} className="input-siem">
+            </Select>
+            <Input type="number" label="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} />
+            <Input type="number" label="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} />
+            <Select label="Severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
               {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button type="submit" className="btn-primary">Add rule</button>
+            </Select>
+            <Button type="submit" loading={createMutation.isPending}>Add rule</Button>
           </form>
           <div className="space-y-2">
             {rules.map((r) => (
               <div key={r.id} className="flex items-center justify-between p-3 glass-panel">
-                <div>
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{r.name}</span>
-                  <span className="text-muted text-sm ml-2">{r.rule_type}</span>
-                  <span className={`text-xs ml-2 severity-${r.severity}`}>{r.severity}</span>
+                  <span className="text-muted text-sm">{r.rule_type}</span>
+                  <SeverityBadge severity={r.severity} />
                 </div>
                 <button type="button" onClick={() => toggleMutation.mutate({ id: r.id, enabled: r.enabled })} className={cn("text-sm px-3 py-1 rounded", r.enabled ? "bg-success/20 text-success" : "bg-muted/20 text-muted")}>
                   {r.enabled ? "Enabled" : "Disabled"}
@@ -191,20 +195,20 @@ export default function RulesPage() {
               e.preventDefault();
               corrCreateMutation.mutate();
             }}
-            className="panel grid md:grid-cols-2 lg:grid-cols-4 gap-3 items-end mb-4"
+            className="panel grid md:grid-cols-2 lg:grid-cols-4 gap-3 items-end p-4 mb-4"
           >
-            <input required placeholder="Rule name" value={corrForm.name} onChange={(e) => setCorrForm({ ...corrForm, name: e.target.value })} className="input-siem" />
-            <select value={corrForm.rule_type} onChange={(e) => setCorrForm({ ...corrForm, rule_type: e.target.value as typeof corrForm.rule_type })} className="input-siem">
+            <Input required label="Rule name" value={corrForm.name} onChange={(e) => setCorrForm({ ...corrForm, name: e.target.value })} />
+            <Select label="Type" value={corrForm.rule_type} onChange={(e) => setCorrForm({ ...corrForm, rule_type: e.target.value as typeof corrForm.rule_type })}>
               {CORR_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input required placeholder="Event sequence (comma-separated)" value={corrForm.event_sequence} onChange={(e) => setCorrForm({ ...corrForm, event_sequence: e.target.value })} className="input-siem lg:col-span-2" />
-            <input placeholder="Description" value={corrForm.description} onChange={(e) => setCorrForm({ ...corrForm, description: e.target.value })} className="input-siem lg:col-span-2" />
-            <input type="number" min={1} placeholder="Window (min)" value={corrForm.window_minutes} onChange={(e) => setCorrForm({ ...corrForm, window_minutes: +e.target.value })} className="input-siem" />
-            <input placeholder="Min counts (e.g. ssh_login_failure:3)" value={corrForm.min_occurrences} onChange={(e) => setCorrForm({ ...corrForm, min_occurrences: e.target.value })} className="input-siem" />
-            <select value={corrForm.severity} onChange={(e) => setCorrForm({ ...corrForm, severity: e.target.value as typeof corrForm.severity })} className="input-siem">
+            </Select>
+            <Input required label="Event sequence" hint="Comma-separated" value={corrForm.event_sequence} onChange={(e) => setCorrForm({ ...corrForm, event_sequence: e.target.value })} className="lg:col-span-2" />
+            <Input label="Description" value={corrForm.description} onChange={(e) => setCorrForm({ ...corrForm, description: e.target.value })} className="lg:col-span-2" />
+            <Input type="number" min={1} label="Window (min)" value={corrForm.window_minutes} onChange={(e) => setCorrForm({ ...corrForm, window_minutes: +e.target.value })} />
+            <Input label="Min counts" hint="e.g. ssh_login_failure:3" value={corrForm.min_occurrences} onChange={(e) => setCorrForm({ ...corrForm, min_occurrences: e.target.value })} />
+            <Select label="Severity" value={corrForm.severity} onChange={(e) => setCorrForm({ ...corrForm, severity: e.target.value as typeof corrForm.severity })}>
               {SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button type="submit" className="btn-primary" disabled={corrCreateMutation.isPending}>Add rule</button>
+            </Select>
+            <Button type="submit" loading={corrCreateMutation.isPending}>Add rule</Button>
           </form>
           <div className="space-y-2">
             {corrRules.map((r) => (
@@ -214,6 +218,7 @@ export default function RulesPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{r.name}</span>
                       <span className="text-xs text-accent uppercase">{r.rule_type}</span>
+                      <SeverityBadge severity={r.severity} />
                       {r.is_system && <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted/20 text-muted">System</span>}
                     </div>
                     <p className="text-sm text-muted mt-1">{r.description}</p>

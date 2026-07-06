@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { ScrollText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { VirtualList } from "@/components/VirtualList";
 import { rowKeyById } from "@/lib/rowKey";
 import { PageHeader } from "@/components/ui/Panel";
+import { FilterBar } from "@/components/ui/FilterBar";
+import { Input } from "@/components/ui/Input";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Panel";
@@ -49,16 +52,23 @@ export default function AuditPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Audit Log" subtitle="Administrative actions and security-relevant changes" />
-      <input
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        placeholder="Filter by action…"
-        className="input-siem max-w-xs"
-      />
+      <FilterBar activeCount={filter ? 1 : 0}>
+        <Input
+          label="Action filter"
+          placeholder="Filter by action…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="max-w-sm"
+        />
+      </FilterBar>
       {isLoading && <TableSkeleton rows={8} />}
       {isError && <QueryError onRetry={() => refetch()} />}
       {!isLoading && !isError && logs.length === 0 && (
-        <EmptyState title="No audit entries" description="Actions will appear here as users interact with the platform." />
+        <EmptyState
+          title="No audit entries"
+          description="Actions will appear here as users interact with the platform."
+          icon={<ScrollText className="w-10 h-10 opacity-40" />}
+        />
       )}
       {!isLoading && !isError && logs.length > 0 && (
         <>

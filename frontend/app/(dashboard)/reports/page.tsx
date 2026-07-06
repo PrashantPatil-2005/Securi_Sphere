@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { FileText, Server, ShieldAlert } from "lucide-react";
 import { api } from "@/lib/api";
 import { downloadAuthenticated } from "@/lib/download";
-import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
+import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/Select";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { useToast } from "@/components/ui/Toast";
@@ -48,55 +51,66 @@ export default function ReportsPage() {
         <TableSkeleton rows={4} />
       ) : data ? (
         <div className="grid md:grid-cols-3 gap-4">
-          <div className="panel p-4">
-            <p className="text-muted text-sm">Total Hosts</p>
-            <p className="text-2xl font-bold tabular-nums">{data.total_hosts}</p>
-          </div>
-          <div className="panel p-4">
-            <p className="text-muted text-sm">Open Alerts</p>
-            <p className="text-2xl font-bold tabular-nums text-yellow-400">{data.open_alerts}</p>
-          </div>
-          <div className="panel p-4">
-            <p className="text-muted text-sm">Hosts Scored</p>
-            <p className="text-2xl font-bold tabular-nums">{data.threat_scores.length}</p>
-          </div>
+          <StatCard label="Total hosts" value={data.total_hosts} tone="info" href="/hosts" />
+          <StatCard label="Open alerts" value={data.open_alerts} tone="warning" href="/alerts" />
+          <StatCard label="Hosts scored" value={data.threat_scores.length} tone="default" href="/analytics" />
         </div>
       ) : (
-        <EmptyState title="No summary data" description="Unable to load report summary." />
+        <EmptyState
+          title="No summary data"
+          description="Unable to load report summary."
+          icon={<FileText className="w-10 h-10 opacity-40" />}
+        />
       )}
       <Panel title="Generate report">
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <label className="text-sm text-muted">Report period</label>
-            <select
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value as typeof reportType)}
-              className="input-siem"
-            >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-            </select>
-          </div>
-          <div className="flex gap-3">
-            <button
+          <Select
+            label="Report period"
+            value={reportType}
+            onChange={(e) => setReportType(e.target.value as typeof reportType)}
+            className="max-w-xs"
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </Select>
+          <div className="flex flex-wrap gap-3">
+            <Button
               type="button"
               onClick={() => exportMutation.mutate("pdf")}
-              disabled={exportMutation.isPending}
-              className="btn-primary text-sm"
+              loading={exportMutation.isPending}
+              size="sm"
             >
+              <FileText className="w-4 h-4" />
               Export PDF
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="ghost"
               onClick={() => exportMutation.mutate("csv")}
               disabled={exportMutation.isPending}
-              className="btn-ghost text-sm"
+              size="sm"
             >
               Export CSV
-            </button>
+            </Button>
           </div>
         </div>
+      </Panel>
+      <Panel title="What's included" subtitle="Each generated report bundles">
+        <ul className="text-sm text-muted space-y-2 list-disc list-inside">
+          <li className="flex items-center gap-2 list-none">
+            <Server className="w-4 h-4 text-accent shrink-0" aria-hidden />
+            Host inventory and connectivity summary
+          </li>
+          <li className="flex items-center gap-2 list-none">
+            <ShieldAlert className="w-4 h-4 text-warning shrink-0" aria-hidden />
+            Open and resolved alerts for the period
+          </li>
+          <li className="flex items-center gap-2 list-none">
+            <FileText className="w-4 h-4 text-muted shrink-0" aria-hidden />
+            Threat scores and MITRE technique mapping
+          </li>
+        </ul>
       </Panel>
     </div>
   );
