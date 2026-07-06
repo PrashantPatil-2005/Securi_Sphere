@@ -242,7 +242,13 @@ After Phase 3, every list page should feel as polished as the dashboard overview
 - `docs/AI_AND_UX_ROADMAP.md` — AI assistant + command palette (shipped)
 - `docs/WRAP_UP.md` — overall product status
 
-**Next step:** ~~Sprint UI-4~~ **Sprint UI-4 complete**. Next: **Sprint UI-5** (nav polish + a11y pass + optional motion).
+**Next step:** ~~Sprint UI-5~~ **Sprint UI-5 complete**. Phase 3 polish and sprint UI-1–5 are done; Phase 4 items (command palette listbox, offline banner, sidebar width persist, etc.) remain optional.
+
+### Sprint UI-5 changelog (shipped)
+- **Sidebar** — icon-only Settings + Profile when collapsed; nested-route active highlighting (`isNavActive`); `aria-current="page"` on nav links; `aria-label` on sign out; duplicate theme toggle removed (theme lives in TopNav user menu)
+- **HelpTooltip** — click-to-toggle on coarse-pointer devices with outside-dismiss
+- **EmptyState** — icon container styling, `role="status"`, optional `onAction` callback; search no-results CTA scrolls to natural-language panel
+- **PageTransition** — subtle route-change fade in `AppShell` (skipped when reduced motion is enabled)
 
 ### Sprint UI-4 changelog (shipped)
 - **`VirtualDataTable`** — `renderMobileCard`, rich empty props (`emptyTitle`, `emptyIcon`, `emptyAction`), mobile card layout via `useMediaQuery`

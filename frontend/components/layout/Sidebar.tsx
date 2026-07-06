@@ -16,8 +16,6 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Moon,
-  Sun,
   User,
   Network,
   Target,
@@ -31,7 +29,6 @@ import {
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
-import { useTheme } from "@/lib/theme/ThemeProvider";
 import { useWsConnected } from "@/lib/websocket";
 import { cn } from "@/lib/utils/cn";
 import { BrandLogo } from "./BrandLogo";
@@ -40,6 +37,11 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 320;
 const COLLAPSED_WIDTH = 56;
 const DEFAULT_WIDTH = 240;
+
+function isNavActive(href: string, pathname: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 interface NavItem {
   href: string;
@@ -106,6 +108,7 @@ const NavLink = memo(function NavLink({
       href={href}
       prefetch
       onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
       className={cn("nav-link", active ? "nav-link-active" : "nav-link-idle", collapsed && "justify-center px-2")}
       title={collapsed ? label : undefined}
     >
@@ -125,7 +128,6 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const connected = useWsConnected();
-  const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(DEFAULT_WIDTH);
   const [isDragging, setIsDragging] = useState(false);
@@ -195,7 +197,7 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-4 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 p-2 space-y-4 overflow-y-auto overflow-x-hidden" aria-label="Main navigation">
         {filteredSections.map((section) => (
           <div key={section.title}>
             {!isCollapsed && (
@@ -208,7 +210,7 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
                 <NavLink
                   key={item.href}
                   {...item}
-                  active={pathname === item.href}
+                  active={isNavActive(item.href, pathname)}
                   collapsed={isCollapsed}
                   onNavigate={handleNavigate}
                 />
@@ -216,13 +218,27 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
             </div>
           </div>
         ))}
-        {!isCollapsed && (
-          <div>
+        <div>
+          {!isCollapsed && (
             <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/70">System</p>
-            <NavLink href="/settings" label="Settings" icon={Settings} active={pathname.startsWith("/settings")} collapsed={false} onNavigate={handleNavigate} />
-            <NavLink href="/profile" label="Profile" icon={User} active={pathname.startsWith("/profile")} collapsed={false} onNavigate={handleNavigate} />
-          </div>
-        )}
+          )}
+          <NavLink
+            href="/settings"
+            label="Settings"
+            icon={Settings}
+            active={isNavActive("/settings", pathname)}
+            collapsed={isCollapsed}
+            onNavigate={handleNavigate}
+          />
+          <NavLink
+            href="/profile"
+            label="Profile"
+            icon={User}
+            active={isNavActive("/profile", pathname)}
+            collapsed={isCollapsed}
+            onNavigate={handleNavigate}
+          />
+        </div>
       </nav>
 
       {/* Bottom section */}
@@ -235,18 +251,10 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
         )}
         <button
           type="button"
-          onClick={toggleTheme}
-          className={cn("nav-link nav-link-idle w-full", isCollapsed && "justify-center px-2")}
-          title={isCollapsed ? (theme === "dark" ? "Light mode" : "Dark mode") : undefined}
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          {!isCollapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
-        </button>
-        <button
           onClick={logout}
           className={cn("nav-link nav-link-idle w-full text-danger/80 hover:text-danger", isCollapsed && "justify-center px-2")}
           title={isCollapsed ? "Sign out" : undefined}
+          aria-label="Sign out"
         >
           <LogOut className="w-4 h-4" />
           {!isCollapsed && <span>Sign out</span>}

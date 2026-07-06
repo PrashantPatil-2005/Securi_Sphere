@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Server } from "lucide-react";
+import { ChevronRight, Search, Server } from "lucide-react";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { Panel, EmptyState } from "@/components/ui/Panel";
 import { cn } from "@/lib/utils/cn";
@@ -125,8 +125,22 @@ export function SearchResultsSummary({
   );
 }
 
-export function SearchResultsEmpty({ description }: { description: string }) {
-  return <EmptyState title="No results" description={description} />;
+export function SearchResultsEmpty({
+  description,
+  onTryNl,
+}: {
+  description: string;
+  onTryNl?: () => void;
+}) {
+  return (
+    <EmptyState
+      title="No results"
+      description={description}
+      icon={<Search />}
+      actionLabel={onTryNl ? "Try natural language" : undefined}
+      onAction={onTryNl}
+    />
+  );
 }
 
 export function SearchResultSection({

@@ -65,20 +65,27 @@ export function EmptyState({
   description,
   action,
   actionLabel,
+  onAction,
   icon,
 }: {
   title: string;
   description?: string;
   action?: string;
   actionLabel?: string;
+  onAction?: () => void;
   icon?: ReactNode;
 }) {
   return (
-    <div className="empty-state">
-      {icon && <div className="mb-4 flex justify-center text-muted">{icon}</div>}
+    <div className="empty-state" role="status">
+      {icon && <div className="empty-state-icon" aria-hidden>{icon}</div>}
       <p className="empty-title">{title}</p>
       {description && <p className="empty-desc">{description}</p>}
-      {action && actionLabel && (
+      {actionLabel && onAction && (
+        <button type="button" onClick={onAction} className="btn-primary inline-flex mt-4">
+          {actionLabel}
+        </button>
+      )}
+      {action && actionLabel && !onAction && (
         <Link href={action} className="btn-primary inline-flex mt-4">
           {actionLabel}
         </Link>

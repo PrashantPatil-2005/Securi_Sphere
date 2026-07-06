@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Sparkles } from "lucide-react";
@@ -63,7 +63,13 @@ function SearchPageContent() {
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [nlQuery, setNlQuery] = useState("");
+  const nlInputRef = useRef<HTMLInputElement>(null);
   const debouncedQ = useDebounce(q, 400);
+
+  const focusNlSearch = useCallback(() => {
+    document.getElementById("nl-search")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    nlInputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const param = searchParams.get("q");
@@ -132,21 +138,23 @@ function SearchPageContent() {
       />
       <TimeRangeBar />
 
-      <Panel title="Natural language search" subtitle='Plain English → SIEM query, e.g. "Show failed logins from last hour"'>
-        <form
-          className="flex flex-col sm:flex-row gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!nlQuery.trim()) return;
-            nlMutation.mutate(nlQuery.trim());
-          }}
-        >
-          <Input
-            value={nlQuery}
-            onChange={(e) => setNlQuery(e.target.value)}
-            placeholder="Show failed logins from last hour"
-            className="flex-1"
-          />
+      <div id="nl-search">
+        <Panel title="Natural language search" subtitle='Plain English → SIEM query, e.g. "Show failed logins from last hour"'>
+          <form
+            className="flex flex-col sm:flex-row gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!nlQuery.trim()) return;
+              nlMutation.mutate(nlQuery.trim());
+            }}
+          >
+            <Input
+              ref={nlInputRef}
+              value={nlQuery}
+              onChange={(e) => setNlQuery(e.target.value)}
+              placeholder="Show failed logins from last hour"
+              className="flex-1"
+            />
           <Button type="submit" loading={nlMutation.isPending} disabled={!nlQuery.trim()} className="shrink-0">
             <Sparkles className="w-4 h-4" />
             Convert
@@ -173,7 +181,8 @@ function SearchPageContent() {
         {nlMutation.isError && (
           <p className="text-xs text-danger mt-2">{nlMutation.error.message}</p>
         )}
-      </Panel>
+        </Panel>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         {(["siem", "global"] as const).map((m) => (
@@ -229,7 +238,7 @@ function SearchPageContent() {
         <div className={cn("space-y-4", isFetching && "opacity-60")}>
           <SearchResultsSummary events={siem.total_events} alerts={siem.total_alerts} backend={siem.backend} />
           {siem.events.length === 0 && siem.alerts.length === 0 && (
-            <SearchResultsEmpty description="Try broadening your query or time range." />
+            <SearchResultsEmpty description="Try broadening your query or time range." onTryNl={focusNlSearch} />
           )}
           <SearchResultSection title="Alerts" count={siem.alerts.length}>
             {siem.alerts.map((a) => <AlertResultRow key={a.id} alert={a} />)}
@@ -248,7 +257,7 @@ function SearchPageContent() {
             hosts={global.hosts.length}
           />
           {global.hosts.length === 0 && global.alerts.length === 0 && global.events.length === 0 && (
-            <SearchResultsEmpty description={`Nothing matched "${global.query}"`} />
+            <SearchResultsEmpty description={`Nothing matched "${global.query}"`} onTryNl={focusNlSearch} />
           )}
           <SearchResultSection title="Hosts" count={global.hosts.length}>
             {global.hosts.map((h) => <HostResultRow key={h.id} host={h} />)}

@@ -271,11 +271,17 @@ body {
   .empty-state {
     @apply py-16 px-6 text-center;
   }
+  .empty-state-icon {
+    @apply mx-auto mb-4 w-14 h-14 rounded-xl bg-[var(--sidebar-hover)] flex items-center justify-center text-muted;
+  }
+  .empty-state-icon svg {
+    @apply w-7 h-7 opacity-60;
+  }
   .empty-title {
-    @apply text-sm font-medium text-foreground;
+    @apply text-base font-medium text-foreground;
   }
   .empty-desc {
-    @apply text-sm text-muted mt-1 max-w-sm mx-auto;
+    @apply text-sm text-muted mt-1.5 max-w-md mx-auto leading-relaxed;
   }
 
   .nav-link {

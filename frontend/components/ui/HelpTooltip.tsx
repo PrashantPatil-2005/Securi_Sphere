@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 
 export function HelpTooltip({
   content,
@@ -13,17 +14,36 @@ export function HelpTooltip({
 }) {
   const [visible, setVisible] = useState(false);
   const id = useId();
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const isTouch = useMediaQuery("(pointer: coarse)");
+
+  useEffect(() => {
+    if (!visible || !isTouch) return;
+    const onOutside = (e: MouseEvent | TouchEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setVisible(false);
+      }
+    };
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("touchstart", onOutside);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchstart", onOutside);
+    };
+  }, [visible, isTouch]);
 
   return (
-    <span className={cn("relative inline-flex items-center", className)}>
+    <span ref={rootRef} className={cn("relative inline-flex items-center", className)}>
       <button
         type="button"
         className="text-muted hover:text-foreground transition-colors p-0.5"
         aria-describedby={visible ? id : undefined}
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-        onFocus={() => setVisible(true)}
-        onBlur={() => setVisible(false)}
+        aria-expanded={isTouch ? visible : undefined}
+        onMouseEnter={isTouch ? undefined : () => setVisible(true)}
+        onMouseLeave={isTouch ? undefined : () => setVisible(false)}
+        onFocus={isTouch ? undefined : () => setVisible(true)}
+        onBlur={isTouch ? undefined : () => setVisible(false)}
+        onClick={isTouch ? () => setVisible((v) => !v) : undefined}
         aria-label="Help"
       >
         <HelpCircle className="w-3.5 h-3.5" />
