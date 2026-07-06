@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.validators import InetStr
+
 
 class HostCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -12,7 +14,7 @@ class HostResponse(BaseModel):
     id: UUID
     name: str
     hostname: str | None
-    ip_address: str | None
+    ip_address: InetStr
     os_info: str | None
     status: str
     enrolled: bool = False

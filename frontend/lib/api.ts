@@ -1,12 +1,15 @@
 import { clearAuthCookie, setAuthCookie } from "./auth/session";
 
+/** Browser uses same-origin requests (Next.js rewrites to the backend). */
 const API_URL =
-  typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_URL
+  typeof window !== "undefined"
     ? ""
     : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 /** WebSocket always connects directly to the backend (not via Next rewrite). */
-export const WS_API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export const WS_API_URL = BACKEND_URL;
 
 export interface TokenPair {
   access_token: string;
@@ -105,7 +108,7 @@ export async function api<T>(
   try {
     res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
   } catch {
-    throw new Error("Cannot reach the server. Make sure the backend is running on " + API_URL);
+    throw new Error("Cannot reach the server. Make sure the backend is running on " + BACKEND_URL);
   }
 
   if (res.status === 401 && retry) {

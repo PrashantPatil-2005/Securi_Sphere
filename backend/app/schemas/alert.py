@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.schemas.event import EventResponse
+from app.schemas.validators import InetStr
 
 
 class AlertResponse(BaseModel):
@@ -52,7 +53,7 @@ class AlertInvestigationHost(BaseModel):
     name: str
     hostname: str | None
     status: str
-    ip_address: str | None
+    ip_address: InetStr
     risk_score: int | None = None
 
 

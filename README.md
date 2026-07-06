@@ -12,7 +12,32 @@ A lightweight security monitoring platform inspired by Wazuh, built for small Li
 
 ## Quick Start
 
-### 1. Start PostgreSQL
+### One-command dev (Windows)
+
+```powershell
+cd c:\Users\Prash\Desktop\Securi
+.\scripts\dev-windows.ps1
+```
+
+Stop dev servers: `.\scripts\dev-stop.ps1`
+
+**Demo / presentation mode** (faster page loads, no dev compilation):
+
+```powershell
+.\scripts\dev-windows.ps1 -Demo
+```
+
+**LAN access from other devices** on the same network:
+
+```powershell
+.\scripts\dev-windows.ps1 -LanIp 192.168.0.105
+```
+
+Open Windows Firewall for TCP ports 3000 and 8000.
+
+### Manual start
+
+#### 1. Start PostgreSQL
 
 ```powershell
 cd c:\Users\Prash\Desktop\Securi
@@ -41,6 +66,32 @@ npm run dev
 ```
 
 Dashboard: http://localhost:3000
+
+Dev login (seeded in development): `admin@test.local` / `testpass123`
+
+### LAN pilot deploy (Windows + Docker)
+
+```powershell
+.\scripts\deploy-windows-lan.ps1 -LanIp 192.168.0.105
+```
+
+After registering admin: `.\scripts\pilot-harden.ps1`
+
+Agent install on Ubuntu VM:
+
+```powershell
+.\scripts\agent-install-help.ps1 -ServerUrl http://192.168.0.105:8000 -EnrollToken YOUR_TOKEN
+```
+
+See [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for Linux VPS deployment and backups.
+
+### API smoke test
+
+With backend running:
+
+```powershell
+.\scripts\smoke-api.ps1
+```
 
 ### 4. First Login
 

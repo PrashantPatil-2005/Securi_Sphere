@@ -20,7 +20,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isError, router, pathname]);
 
-  if (isLoading || !isFetched) {
+  if (isLoading && !data) {
     return (
       <div className="p-6">
         <PageSkeleton />
@@ -28,7 +28,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isError || !data) {
+  if ((isError || !data) && isFetched) {
     return (
       <div className="p-6 text-center text-muted text-sm">
         Redirecting to sign in…

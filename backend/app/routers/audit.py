@@ -10,6 +10,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.audit import AuditLog
 from app.models.user import User
+from app.schemas.validators import InetStr
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -20,7 +21,7 @@ class AuditResponse(BaseModel):
     action: str
     resource_type: str | None
     resource_id: UUID | None
-    ip_address: str | None
+    ip_address: InetStr
     details: dict | None
     timestamp: datetime
     model_config = {"from_attributes": True}

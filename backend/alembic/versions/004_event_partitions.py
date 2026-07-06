@@ -9,6 +9,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from app.config import settings
+
+    if not settings.event_partitioning_enabled:
+        return
+
     op.execute(
         """
         DO $$

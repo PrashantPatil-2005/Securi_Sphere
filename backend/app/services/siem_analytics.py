@@ -123,17 +123,17 @@ async def failed_login_analytics(db: AsyncSession, tr: TimeRange, host_id: UUID 
     )
 
     by_user = await db.execute(
-        select(Event.metadata_["username"].astext.label("username"), func.count())
-        .where(*clauses, Event.metadata_["username"].astext.isnot(None))
-        .group_by(Event.metadata_["username"].astext)
+        select(Event.username, func.count())
+        .where(*clauses, Event.username.isnot(None))
+        .group_by(Event.username)
         .order_by(func.count().desc())
         .limit(20)
     )
 
     by_ip = await db.execute(
-        select(Event.metadata_["source_ip"].astext.label("source_ip"), func.count())
-        .where(*clauses, Event.metadata_["source_ip"].astext.isnot(None))
-        .group_by(Event.metadata_["source_ip"].astext)
+        select(cast(Event.source_ip, String).label("source_ip"), func.count())
+        .where(*clauses, Event.source_ip.isnot(None))
+        .group_by(Event.source_ip)
         .order_by(func.count().desc())
         .limit(20)
     )

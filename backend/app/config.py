@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     mail_from: str = "noreply@securi.local"
     telegram_bot_token: str = ""
     debug: bool = True
+    sql_echo: bool = False
     environment: str = "development"
     retention_days: int = 90
     async_event_pipeline: bool = True

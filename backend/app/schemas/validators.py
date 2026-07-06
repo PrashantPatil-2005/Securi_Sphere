@@ -25,3 +25,13 @@ def normalize_auth_email(value: object) -> str:
 
 
 AuthEmail = Annotated[str, BeforeValidator(normalize_auth_email)]
+
+
+def coerce_inet_to_str(value: object) -> str | None:
+    """PostgreSQL INET columns may deserialize as ipaddress objects."""
+    if value is None:
+        return None
+    return str(value)
+
+
+InetStr = Annotated[str | None, BeforeValidator(coerce_inet_to_str)]

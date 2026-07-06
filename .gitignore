@@ -4,7 +4,10 @@ venv/
 .env
 backend/.env
 backend/venv
-scripts/
+scripts/*
+!scripts/*.sh
+!scripts/*.ps1
+!scripts/*.js
 frontend/.env.local
 *.db
 node_modules/

@@ -9,13 +9,10 @@ SecuriSphere uses **Alembic** for schema versioning. Startup calls `migrate_sche
 | `001_baseline` | `001_baseline.py` | Create all tables from SQLAlchemy models |
 | `002_indexes` | `002_indexes.py` | Performance indexes (idempotent) |
 | `003_constraints` | `003_constraints.py` | CHECK constraints |
-| `004_event_partitions` | `004_event_partitions.py` | Monthly RANGE partitions on `events` |
+| `004_event_partitions` | `004_event_partitions.py` | Monthly RANGE partitions on `events` (skipped unless `EVENT_PARTITIONING_ENABLED=true`) |
+| `005_agent_cert` | `005_agent_cert.py` | Agent mTLS fingerprint column |
 
-Enable partition auto-creation after migration:
-
-```env
-EVENT_PARTITIONING_ENABLED=true
-```
+**Note:** Keep `EVENT_PARTITIONING_ENABLED=false` for pilot/demo until the Event model and offense FKs are reconciled with composite partition keys.
 
 ## Commands (from `backend/`)
 

@@ -16,7 +16,7 @@ export function useUser() {
     queryFn: () => api<UserMe>("/api/v1/auth/me"),
     staleTime: 300_000,
     retry: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 

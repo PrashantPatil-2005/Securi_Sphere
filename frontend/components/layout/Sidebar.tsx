@@ -104,6 +104,7 @@ const NavLink = memo(function NavLink({
   return (
     <Link
       href={href}
+      prefetch
       onClick={onNavigate}
       className={cn("nav-link", active ? "nav-link-active" : "nav-link-idle", collapsed && "justify-center px-2")}
       title={collapsed ? label : undefined}

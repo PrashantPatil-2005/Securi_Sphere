@@ -25,6 +25,23 @@ SERVER_URL=https://securi.yourdomain.com
 FRONTEND_URL=https://securi.yourdomain.com
 ```
 
+### Windows LAN pilot
+
+If the dashboard runs on a Windows PC at `192.168.0.105`:
+
+```powershell
+.\scripts\deploy-windows-lan.ps1 -LanIp 192.168.0.105
+```
+
+On the Ubuntu VM:
+
+```bash
+curl -fsSL http://192.168.0.105:8000/install.sh | sudo bash -s -- \
+  --token ENROLL_TOKEN --server http://192.168.0.105:8000
+```
+
+Use `.\scripts\agent-install-help.ps1` to print the exact command after enrolling a host.
+
 ---
 
 ## Step 1 — Add a host in the dashboard

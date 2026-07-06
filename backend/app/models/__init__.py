@@ -7,6 +7,7 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.incident import Incident, IncidentAlert, IncidentNote
 from app.models.in_app_notification import InAppNotification, InAppNotificationRead
+from app.models.maintenance import MaintenanceWindow
 from app.models.metric import Metric
 from app.models.mitre import MitreTechnique
 from app.models.notification import NotificationSettings
@@ -36,5 +37,5 @@ __all__ = [
     "AttackTimeline", "HostThreatScore", "Incident", "IncidentNote", "IncidentAlert",
     "Offense", "OffenseEvent", "HostRiskHistory", "MitreMapping", "SavedSearch", "GeneratedReport",
     "UserSession", "AgentRequestNonce", "AnalyticsDailyStat", "IngestDedup",
-    "InAppNotification", "InAppNotificationRead",
+    "InAppNotification", "InAppNotificationRead", "MaintenanceWindow",
 ]

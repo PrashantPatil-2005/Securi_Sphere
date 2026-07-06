@@ -8,21 +8,32 @@ branch_labels = None
 depends_on = None
 
 CONSTRAINTS = [
-    "ALTER TABLE events ADD CONSTRAINT IF NOT EXISTS chk_events_severity CHECK (severity IN ('info','low','medium','high','critical'))",
-    "ALTER TABLE alerts ADD CONSTRAINT IF NOT EXISTS chk_alerts_severity CHECK (severity IN ('info','low','medium','high','critical'))",
-    "ALTER TABLE alerts ADD CONSTRAINT IF NOT EXISTS chk_alerts_status CHECK (status IN ('open','investigating','resolved','closed'))",
-    "ALTER TABLE offenses ADD CONSTRAINT IF NOT EXISTS chk_offenses_status CHECK (status IN ('open','investigating','closed'))",
-    "ALTER TABLE host_threat_scores ADD CONSTRAINT IF NOT EXISTS chk_threat_score_range CHECK (score >= 0 AND score <= 100)",
+    ("events", "chk_events_severity", "severity IN ('info','low','medium','high','critical')"),
+    ("alerts", "chk_alerts_severity", "severity IN ('info','low','medium','high','critical')"),
+    ("alerts", "chk_alerts_status", "status IN ('open','investigating','resolved','closed')"),
+    ("offenses", "chk_offenses_status", "status IN ('open','investigating','closed')"),
+    ("host_threat_scores", "chk_threat_score_range", "score >= 0 AND score <= 100"),
 ]
 
 
+def _add_check(table: str, name: str, check: str) -> str:
+    return f"""
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = '{name}'
+      ) THEN
+        ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({check});
+      END IF;
+    END $$;
+    """
+
+
 def upgrade() -> None:
-    for stmt in CONSTRAINTS:
-        op.execute(stmt)
+    for table, name, check in CONSTRAINTS:
+        op.execute(_add_check(table, name, check))
 
 
 def downgrade() -> None:
-    for stmt in reversed(CONSTRAINTS):
-        name = stmt.split("IF NOT EXISTS ")[1].split(" CHECK")[0].strip()
-        table = stmt.split("TABLE ")[1].split(" ADD")[0].strip()
+    for table, name, _ in reversed(CONSTRAINTS):
         op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {name}")
