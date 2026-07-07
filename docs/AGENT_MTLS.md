@@ -1,6 +1,6 @@
 # Agent mTLS (optional)
 
-SecuriSphere agents use **API keys** over HTTPS by default. For production, enable **mutual TLS** so only enrolled agents with valid client certificates can call `/api/v1/agent/*`.
+Securi agents use **API keys** over HTTPS by default. For production, enable **mutual TLS** so only enrolled agents with valid client certificates can call `/api/v1/agent/*`.
 
 ## Enable
 

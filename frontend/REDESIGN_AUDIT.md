@@ -1,4 +1,4 @@
-# SecuriSphere Frontend Redesign — Audit Report
+# Securi Frontend Redesign — Audit Report
 
 **Last updated:** July 2026 (post Sprint 1–2 stabilization)
 

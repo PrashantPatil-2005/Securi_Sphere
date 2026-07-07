@@ -29,6 +29,7 @@ def build_siem_index_query(
         must.append({"range": {ts_field: {"lte": tr.to_time.isoformat()}}})
 
     filters = parsed["filters"]
+    in_filters = parsed.get("in_filters", {})
     if "host" in filters:
         must.append(
             {
@@ -51,8 +52,12 @@ def build_siem_index_query(
                     }
                 }
             )
+        elif "username" in in_filters:
+            must.append({"terms": {"username": in_filters["username"]}})
         if "source_ip" in filters:
             must.append({"term": {"source_ip": filters["source_ip"]}})
+        elif "source_ip" in in_filters:
+            must.append({"terms": {"source_ip": in_filters["source_ip"]}})
     elif "status" in filters:
         must.append({"term": {"status": filters["status"]}})
 

@@ -1,24 +1,37 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Clock, Server, ShieldAlert } from "lucide-react";
+import { ArrowRight, Clock, Server, ShieldAlert, LayoutDashboard } from "lucide-react";
+import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 
 interface Props {
   offenseId?: string;
   hostId?: string;
   hostName?: string;
   incidentId?: string;
+  alertId?: string;
 }
 
-export function InvestigationTrail({ offenseId, hostId, hostName, incidentId }: Props) {
+export function InvestigationTrail({ offenseId, hostId, hostName, incidentId, alertId }: Props) {
+  const workspaceLink = alertId
+    ? workspaceHref({ alertId })
+    : offenseId
+      ? workspaceHref({ offenseId })
+      : incidentId
+        ? workspaceHref({ incidentId })
+        : "/investigation";
+
   const steps = [
     { label: "Alerts", href: "/alerts", icon: ShieldAlert },
-    ...(offenseId ? [{ label: "Offense", href: `/offenses?selected=${offenseId}`, icon: ShieldAlert }] : []),
+    ...(offenseId ? [{ label: "Offense", href: workspaceHref({ offenseId }), icon: ShieldAlert }] : []),
     ...(hostId ? [{ label: hostName || "Host", href: `/hosts`, icon: Server }] : []),
     { label: "Timeline", href: hostId ? `/timeline?host=${hostId}` : "/timeline", icon: Clock },
-    ...(incidentId
-      ? [{ label: "Investigation", href: `/incidents?selected=${incidentId}`, icon: ArrowRight }]
-      : [{ label: "Investigation", href: "/incidents", icon: ArrowRight }]),
+    ...(incidentId ? [{ label: "Incidents", href: "/incidents", icon: LayoutDashboard }] : []),
+    {
+      label: "Case Workspace",
+      href: workspaceLink,
+      icon: incidentId || alertId || offenseId ? LayoutDashboard : ArrowRight,
+    },
   ];
 
   return (

@@ -8,6 +8,9 @@ import re
 import httpx
 
 from app.config import settings
+from app.core.circuit_breaker import CircuitOpenError
+from app.core.circuit_guard import run_async
+from app.core.http_timeouts import outbound_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +42,11 @@ async def lookup_virustotal(ioc: str) -> dict:
     headers = {"x-apikey": settings.virustotal_api_key}
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            res = await client.get(url, headers=headers)
+        async def _fetch():
+            async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
+                return await client.get(url, headers=headers)
+
+        res = await run_async("virustotal", _fetch)
         if res.status_code == 404:
             return {"ioc": ioc, "kind": kind, "backend": "virustotal", "found": False}
         res.raise_for_status()
@@ -59,6 +65,8 @@ async def lookup_virustotal(ioc: str) -> dict:
             "reputation": attrs.get("reputation"),
             "link": f"https://www.virustotal.com/gui/{kind}/{ioc}",
         }
+    except CircuitOpenError:
+        return {"ioc": ioc, "kind": kind, "backend": "virustotal", "error": "circuit_open"}
     except Exception as exc:
         logger.warning("VirusTotal lookup failed: %s", exc)
         return {"ioc": ioc, "kind": kind, "backend": "virustotal", "error": str(exc)}

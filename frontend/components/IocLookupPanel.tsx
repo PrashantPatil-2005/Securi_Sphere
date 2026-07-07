@@ -49,7 +49,10 @@ export function IocLookupPanel({ value }: { value: string | null | undefined }) 
       </form>
       {isLoading && <p className="text-sm text-muted">Checking…</p>}
       {isError && <p className="text-sm text-danger">Lookup failed</p>}
-      {data && (
+      {data && data.backend === "none" && (
+        <p className="text-sm text-warning">IOC enrichment disabled — set VIRUSTOTAL_API_KEY on the server.</p>
+      )}
+      {data && data.backend !== "none" && (
         <div className="text-sm space-y-1">
           {data.message && <p className="text-muted">{data.message}</p>}
           {data.error && <p className="text-danger">{data.error}</p>}

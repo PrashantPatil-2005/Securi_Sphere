@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.brand import PRODUCT_NAME
 from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.user import User
@@ -36,6 +37,7 @@ async def list_events(
     page_size: int = ListParams.page_size(),
     cursor: str | None = Query(None, description="Keyset cursor from a previous response (next_cursor)"),
     include_simulated: bool | None = Query(None),
+    mitre_technique_id: str | None = None,
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     items, total, next_cursor, has_more = await query_events(
@@ -43,7 +45,7 @@ async def list_events(
         host_id=host_id, severity=severity, event_type=event_type,
         username=username, source_ip=source_ip, service_name=service_name, status=status,
         q=q, exact=exact, sort=sort, page=page, page_size=page_size, cursor=cursor,
-        include_simulated=include_simulated,
+        include_simulated=include_simulated, mitre_technique_id=mitre_technique_id,
     )
     return EventListResponse(
         items=[EventResponse.model_validate(e) for e in items],
@@ -100,5 +102,5 @@ async def export_events(
     if format == "json":
         return export_json(rows, "events.json")
     if format == "pdf":
-        return export_pdf(rows, "SecuriSphere Events Export", "events.pdf")
+        return export_pdf(rows, f"{PRODUCT_NAME} Events Export", "events.pdf")
     return export_csv(rows, "events.csv")

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
+import { markOnboardingSearchCompleted } from "@/lib/onboarding";
 import { buildQuery } from "@/lib/buildQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
@@ -18,6 +19,7 @@ import {
   SearchResultsEmpty,
   SearchResultsSummary,
 } from "@/components/search/SearchResults";
+import { SavedSearchesPanel } from "@/components/search/SavedSearchesPanel";
 import { PageHeader, Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -35,6 +37,7 @@ interface SiemResult {
 
 interface GlobalResult {
   query: string;
+  backend?: string;
   hosts: { id: string; name: string; hostname: string | null; status: string; ip: string | null }[];
   alerts: { id: string; title: string; severity: string; status: string }[];
   events: { id: string; event_type: string; description: string | null; severity: string }[];
@@ -55,6 +58,14 @@ function SearchPageContent() {
   const searchParams = useSearchParams();
   const { queryParams } = useTimeRange();
   const { data: hosts = [] } = useHostsList();
+  const { data: publicSettings } = useQuery({
+    queryKey: ["settings", "public"],
+    queryFn: () =>
+      api<{ ai_assistant_enabled: boolean; ai_provider: string }>("/api/v1/settings/public"),
+    staleTime: 300_000,
+  });
+  const nlEnabled = publicSettings?.ai_assistant_enabled !== false;
+  const nlLocalMode = publicSettings?.ai_provider === "local";
   const examples = hosts[0]
     ? [`host:${hosts[0].name} severity:critical`, "event_type:ssh_login_failure", "username:root"]
     : FALLBACK_EXAMPLES;
@@ -73,10 +84,15 @@ function SearchPageContent() {
 
   useEffect(() => {
     const param = searchParams.get("q");
+    const modeParam = searchParams.get("mode");
     if (param) {
       setQ(param);
       setSubmitted(param);
-      setMode("global");
+      if (modeParam === "siem" || modeParam === "global") {
+        setMode(modeParam);
+      } else {
+        setMode("global");
+      }
     }
   }, [searchParams]);
 
@@ -100,12 +116,6 @@ function SearchPageContent() {
     staleTime: 60_000,
   });
 
-  const { data: saved = [] } = useQuery({
-    queryKey: ["saved-searches"],
-    queryFn: () => api<{ id: string; name: string; query: string }[]>("/api/v1/saved-searches"),
-    staleTime: 120_000,
-  });
-
   const nlMutation = useMutation({
     mutationFn: (query: string) =>
       api<{ siem_query: string; explanation: string; provider: string; confidence: string }>(
@@ -116,6 +126,7 @@ function SearchPageContent() {
       setMode("siem");
       setQ(data.siem_query);
       setSubmitted(data.siem_query);
+      markOnboardingSearchCompleted();
     },
   });
 
@@ -123,6 +134,7 @@ function SearchPageContent() {
     e.preventDefault();
     if (!debouncedQ.trim()) return;
     setSubmitted(debouncedQ.trim());
+    markOnboardingSearchCompleted();
   }
 
   const isLoading = mode === "siem" ? siemLoading : globalLoading;
@@ -139,7 +151,14 @@ function SearchPageContent() {
       <TimeRangeBar />
 
       <div id="nl-search">
-        <Panel title="Natural language search" subtitle='Plain English → SIEM query, e.g. "Show failed logins from last hour"'>
+        <Panel
+          title="Natural language search"
+          subtitle={
+            nlEnabled
+              ? `Plain English → SIEM query${nlLocalMode ? " (local mode)" : ""}, e.g. "Show failed logins from last hour"`
+              : "Natural language search is disabled on this server — use SIEM query mode below"
+          }
+        >
           <form
             className="flex flex-col sm:flex-row gap-2"
             onSubmit={(e) => {
@@ -155,14 +174,20 @@ function SearchPageContent() {
               placeholder="Show failed logins from last hour"
               className="flex-1"
             />
-          <Button type="submit" loading={nlMutation.isPending} disabled={!nlQuery.trim()} className="shrink-0">
+          <Button type="submit" loading={nlMutation.isPending} disabled={!nlQuery.trim() || !nlEnabled} className="shrink-0">
             <Sparkles className="w-4 h-4" />
             Convert
           </Button>
         </form>
         {nlMutation.data && (
           <div className="mt-3 p-3 rounded-lg border border-accent/25 bg-accent/5 text-sm">
-            <p className="text-muted mb-1">Generated SIEM query:</p>
+            <p className="text-muted mb-1">
+              Generated SIEM query
+              {nlMutation.data.provider === "local" && (
+                <span className="ml-2 text-[10px] font-normal px-1.5 py-0.5 rounded bg-muted/20 text-muted">local mode</span>
+              )}
+              :
+            </p>
             <code className="font-mono text-accent break-all">{nlMutation.data.siem_query}</code>
             <p className="text-xs text-muted mt-2">{nlMutation.data.explanation}</p>
             <Button
@@ -224,15 +249,14 @@ function SearchPageContent() {
           ))}
         </div>
       )}
-      {saved.length > 0 && mode === "siem" && (
-        <div className="flex flex-wrap gap-2">
-          <span className="text-xs text-muted self-center">Saved:</span>
-          {saved.map((s) => (
-            <Button key={s.id} type="button" variant="ghost" size="sm" onClick={() => { setQ(s.query); setSubmitted(s.query); }}>
-              {s.name}
-            </Button>
-          ))}
-        </div>
+      {mode === "siem" && (
+        <SavedSearchesPanel
+          currentQuery={q}
+          onRun={(query) => {
+            setQ(query);
+            setSubmitted(query);
+          }}
+        />
       )}
 
       {isLoading && submitted.length > 0 && <TableSkeleton rows={4} />}
@@ -259,6 +283,7 @@ function SearchPageContent() {
             events={global.events.length}
             alerts={global.alerts.length}
             hosts={global.hosts.length}
+            backend={global.backend}
           />
           {global.hosts.length === 0 && global.alerts.length === 0 && global.events.length === 0 && (
             <SearchResultsEmpty description={`Nothing matched "${global.query}"`} onTryNl={focusNlSearch} />

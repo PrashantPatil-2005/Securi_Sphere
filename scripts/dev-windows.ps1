@@ -8,6 +8,9 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
+. "$PSScriptRoot\ensure-docker-env.ps1"
+Ensure-DockerEnv | Out-Null
+
 function Wait-Postgres {
     $max = 30
     for ($i = 0; $i -lt $max; $i++) {
@@ -19,7 +22,7 @@ function Wait-Postgres {
 }
 
 Write-Host "==> Starting Postgres + Redis"
-docker compose up -d postgres redis
+docker compose -f docker-compose.dev.yml up -d
 Wait-Postgres
 
 # Ensure backend .env exists
@@ -39,16 +42,25 @@ SQL_ECHO=false
     }
 }
 
-# Ensure frontend .env.local
-$apiUrl = if ($LanIp) { "http://${LanIp}:8000" } else { "http://localhost:8000" }
+# Ensure frontend .env.local — prefer reachable API (LAN IP may not work on same host)
+. "$PSScriptRoot\ensure-docker-env.ps1"
+Ensure-DockerEnv | Out-Null
+$preferredApi = "http://localhost:8000"
+if ($LanIp) {
+    $preferredApi = "http://${LanIp}:8000"
+} elseif (Test-Path "$Root\backend\.env") {
+    $match = Select-String -Path "$Root\backend\.env" -Pattern '^SERVER_URL=(.+)$' | Select-Object -First 1
+    if ($match) { $preferredApi = $match.Matches[0].Groups[1].Value.Trim() }
+}
+$apiUrl = Resolve-ApiBase -Preferred $preferredApi -ProjectRoot $Root
 Set-Content -Encoding utf8 "$Root\frontend\.env.local" "NEXT_PUBLIC_API_URL=$apiUrl"
 
 Write-Host "==> Backend venv + migrations"
 Set-Location "$Root\backend"
 if (-not (Test-Path "venv")) {
     python -m venv venv
-    .\venv\Scripts\pip install -r requirements.txt
 }
+.\venv\Scripts\pip install -r requirements.txt -q
 .\venv\Scripts\alembic upgrade head
 
 Write-Host "==> Starting backend on :8000"
@@ -80,11 +92,13 @@ if ($Demo) {
 
 Write-Host ""
 Write-Host "Securi is starting."
-Write-Host "  Dashboard: http://localhost:3000"
-Write-Host "  API docs:  http://localhost:8000/docs"
+$frontendUrl = if ($LanIp) { "http://${LanIp}:3000" } else { $apiUrl -replace ':8000', ':3000' }
+Write-Host "  Dashboard: $frontendUrl"
+Write-Host "  API docs:  $apiUrl/docs"
 Write-Host "  Dev login: admin@test.local / testpass123"
 if ($LanIp) {
-    Write-Host "  LAN:       http://${LanIp}:3000 (open firewall for 3000, 8000)"
+    Write-Host "  LAN:       open firewall for ports 3000 and 8000"
 }
 Write-Host ""
+Write-Host "Verify: .\scripts\verify-local.ps1"
 Write-Host "Stop with: .\scripts\dev-stop.ps1"

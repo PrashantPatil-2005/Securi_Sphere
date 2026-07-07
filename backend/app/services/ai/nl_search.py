@@ -2,6 +2,7 @@
 
 import re
 
+from app.brand import PRODUCT_NAME
 from app.services.ai.llm import call_llm, resolve_provider
 
 # (pattern, siem_query_template or callable)
@@ -130,7 +131,7 @@ async def nl_to_siem_query(text: str) -> dict:
 
     if provider != "local":
         llm_result = await call_llm(
-            "You convert natural language SOC search requests into SecuriSphere SIEM query syntax. "
+            f"You convert natural language SOC search requests into {PRODUCT_NAME} SIEM query syntax. "
             "Use field:value tokens: host, severity, event_type, username, source_ip, status, date. "
             "Date presets: 15m, 30m, 1h, 6h, 12h, 24h, 7d, 30d. "
             "Reply with ONLY the SIEM query string, no explanation.",

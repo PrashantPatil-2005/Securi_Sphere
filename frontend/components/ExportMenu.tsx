@@ -4,7 +4,7 @@ import { API_URL } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 
 interface Props {
-  resource: "events" | "alerts" | "hosts";
+  resource: "events" | "alerts" | "hosts" | "audit";
   query: string;
 }
 

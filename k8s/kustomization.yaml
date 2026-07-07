@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: securi
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - postgres.yaml
+  - redis.yaml
+  - backend.yaml
+  - worker.yaml
+  - frontend.yaml
+  - ingress.yaml
+images:
+  - name: ghcr.io/example/securi/backend
+    newName: ghcr.io/YOUR_ORG/Securi/backend
+    newTag: latest
+  - name: ghcr.io/example/securi/frontend
+    newName: ghcr.io/YOUR_ORG/Securi/frontend
+    newTag: latest

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import Link from "next/link";
 import { ClipboardList } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useDeepLinkedSelection, workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -37,18 +38,12 @@ export default function IncidentsPage() {
 }
 
 function IncidentsPageContent() {
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("selected"));
+  const [selectedId, setSelectedId] = useDeepLinkedSelection();
   const [note, setNote] = useState("");
-
-  useEffect(() => {
-    const id = searchParams.get("selected");
-    if (id) setSelectedId(id);
-  }, [searchParams]);
 
   const { data: items = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["incidents"],
@@ -99,7 +94,7 @@ function IncidentsPageContent() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Investigations" subtitle="Incident tracking, notes, and resolution workflow" />
+      <PageHeader title="Incidents" subtitle="Incident tracking, notes, and resolution workflow" />
       <InvestigationTrail />
       {isError && <QueryError onRetry={() => refetch()} />}
       {isLoading && !isError && <TableSkeleton rows={4} />}
@@ -160,7 +155,7 @@ function IncidentsPageContent() {
             )}
           </div>
         </Panel>
-        <Panel title="Investigation workspace">
+        <Panel title="Incident detail">
           {detailError && selectedId && <QueryError onRetry={() => refetchDetail()} />}
           {detailLoading && !detailError && <TableSkeleton rows={4} />}
           {detail && !detailLoading && !detailError && (
@@ -169,6 +164,9 @@ function IncidentsPageContent() {
               <p className="text-sm text-muted mb-4 capitalize">{detail.status} · {detail.severity}</p>
               {detail.description && <p className="text-sm mb-4">{detail.description}</p>}
               <div className="flex flex-wrap gap-2 mb-4">
+                <Link href={workspaceHref({ incidentId: detail.id })} className="btn-primary text-xs">
+                  Open Case Workspace
+                </Link>
                 {detail.status === "open" && (
                   <>
                     <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "investigating" })}>
@@ -190,7 +188,7 @@ function IncidentsPageContent() {
                   <p className="text-caption normal-case text-muted mb-2">Linked alerts</p>
                   <div className="flex flex-wrap gap-2">
                     {detail.alert_ids.map((id) => (
-                      <a key={id} href={`/alerts?q=${id.slice(0, 8)}`} className="text-xs font-mono text-accent hover:underline">
+                      <a key={id} href={workspaceHref({ alertId: id })} className="text-xs font-mono text-accent hover:underline">
                         {id.slice(0, 8)}…
                       </a>
                     ))}

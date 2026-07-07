@@ -21,6 +21,7 @@ class UserResponse(BaseModel):
     full_name: str | None = None
     role: RoleResponse
     is_active: bool
+    mfa_enabled: bool = False
     created_at: datetime
     last_login: datetime | None
 
@@ -41,6 +42,43 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class LoginResponse(BaseModel):
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    mfa_required: bool = False
+    mfa_token: str | None = None
+
+
+class MfaVerifyRequest(BaseModel):
+    mfa_token: str
+    code: str = Field(min_length=6, max_length=16)
+
+
+class MfaEnableRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class MfaDisableRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=16)
+    password: str | None = None
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_url: str
+
+
+class MfaStatusResponse(BaseModel):
+    enabled: bool
+    backup_codes_remaining: int
+
+
+class MfaEnableResponse(BaseModel):
+    enabled: bool
+    backup_codes: list[str]
 
 
 class RefreshRequest(BaseModel):

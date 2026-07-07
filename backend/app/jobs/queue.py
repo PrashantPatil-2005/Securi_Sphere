@@ -57,6 +57,7 @@ class JobQueue:
         self._handlers: dict[str, JobHandler] = {}
         self._workers = workers if workers is not None else settings.job_queue_workers
         self._tasks: list[asyncio.Task] = []
+        self._in_flight = 0
         self.is_running = False
         self.backend_name = "memory"
         self._memory = MemoryJobBackend()
@@ -120,11 +121,12 @@ class JobQueue:
                 logger.error("unknown job handler", extra={"job_name": job.name})
                 continue
             try:
+                self._in_flight += 1
                 await handler(**job.payload)
                 logger.info(
                     "job completed",
                     extra={"job_name": job.name, "job_id": job.id, "worker_id": worker_id},
-                )
+                    )
             except Exception:
                 job.retry_count += 1
                 if job.retry_count <= job.max_retries:
@@ -140,6 +142,8 @@ class JobQueue:
                         extra={"job_name": job.name, "job_id": job.id},
                         exc_info=True,
                     )
+            finally:
+                self._in_flight = max(0, self._in_flight - 1)
 
     def start(self, *, force: bool = False) -> None:
         if self.is_running or (not settings.job_queue_run_workers and not force):
@@ -152,8 +156,13 @@ class JobQueue:
             extra={"workers": self._workers, "backend": self.backend_name},
         )
 
-    async def stop(self) -> None:
+    async def stop(self, *, grace_seconds: float | None = None) -> None:
+        grace = settings.shutdown_grace_seconds if grace_seconds is None else grace_seconds
         self.is_running = False
+        if grace > 0:
+            deadline = asyncio.get_running_loop().time() + grace
+            while self._in_flight > 0 and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.1)
         for task in self._tasks:
             task.cancel()
         if self._tasks:

@@ -6,8 +6,8 @@ from uuid import UUID
 from app.database import async_session
 from app.jobs.queue import job_queue
 from app.services.notifications import notify_alert, notify_offense
-from app.services.retention import run_retention
-from app.services.threat_score import calculate_host_scores, update_all_threat_scores
+from app.services.playbooks import dispatch_playbook_event
+from app.services.ueba import scan_ueba_anomalies
 
 logger = logging.getLogger(__name__)
 
@@ -34,27 +34,6 @@ async def handle_notify_offense(offense_id: str) -> None:
             await db.commit()
 
 
-async def handle_threat_score(host_id: str) -> None:
-    from sqlalchemy import select
-    from app.models.host import Host
-
-    async with async_session() as db:
-        host = (await db.execute(select(Host).where(Host.id == UUID(host_id)))).scalar_one_or_none()
-        if host:
-            await calculate_host_scores(db, host)
-            await db.commit()
-
-
-async def handle_threat_score_all() -> None:
-    async with async_session() as db:
-        await update_all_threat_scores(db)
-        await db.commit()
-
-
-async def handle_retention() -> None:
-    await run_retention()
-
-
 async def handle_correlation_pipeline(host_id: str) -> None:
     from uuid import UUID as UUIDType
     from app.pipeline.processor import run_post_ingestion_pipeline
@@ -64,10 +43,26 @@ async def handle_correlation_pipeline(host_id: str) -> None:
         await db.commit()
 
 
+async def handle_playbook_dispatch(
+    event: str,
+    resource_type: str,
+    resource_id: str,
+    **extra,
+) -> None:
+    async with async_session() as db:
+        await dispatch_playbook_event(db, event, resource_type, resource_id, **extra)
+        await db.commit()
+
+
+async def handle_ueba_scan() -> None:
+    async with async_session() as db:
+        await scan_ueba_anomalies(db)
+        await db.commit()
+
+
 def register_job_handlers() -> None:
     job_queue.register("notify_alert", handle_notify_alert)
     job_queue.register("notify_offense", handle_notify_offense)
-    job_queue.register("threat_score", handle_threat_score)
-    job_queue.register("threat_score_all", handle_threat_score_all)
-    job_queue.register("retention", handle_retention)
+    job_queue.register("playbook_dispatch", handle_playbook_dispatch)
+    job_queue.register("ueba_scan", handle_ueba_scan)
     job_queue.register("correlation_pipeline", handle_correlation_pipeline)

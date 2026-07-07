@@ -76,8 +76,27 @@ Use this if you want Postgres in Docker but run backend/frontend natively.
 ### 1. PostgreSQL
 
 ```bash
-docker compose up -d postgres redis
+docker compose -f docker-compose.dev.yml up -d
 ```
+
+This starts **Postgres + Redis only** (no OpenSearch). Keep `SEARCH_BACKEND=postgres` in `.env`.
+
+**Windows:** `.\scripts\start-infra.ps1` creates the repo-root `.env` (Postgres password) from `backend/.env` and starts containers.
+
+**Optional OpenSearch** for native dev:
+
+```bash
+docker compose -f docker-compose.dev.yml -f docker-compose.opensearch-dev.yml up -d
+```
+
+Then in `backend/.env`:
+
+```env
+OPENSEARCH_URL=http://localhost:9200
+SEARCH_BACKEND=opensearch
+```
+
+Alternatively: `docker compose up -d postgres redis` (includes OpenSearch from the full stack).
 
 ### 2. Backend
 
@@ -268,6 +287,7 @@ Set `EXCLUDE_SIMULATED_FROM_DASHBOARD=true` again for production.
 | `ALLOW_REGISTRATION` | Public signup | `true` | `false` |
 | `ENABLE_SIMULATION` | Attack simulation API | `true` | `false` |
 | `EXCLUDE_SIMULATED_FROM_DASHBOARD` | Hide sim data in charts | `false` during demo | `true` |
+| `DEMO_MODE` | Seed `demo@securi.local` / `Demo1234!` admin on startup | `true` for pilots | `false` |
 | `ENVIRONMENT` | Shown in Settings | `development` | `production` |
 | `DEBUG` | Verbose errors | `true` | `false` |
 | `TRUSTED_PROXY` | Behind reverse proxy | `false` | `true` |
@@ -294,12 +314,23 @@ Also verify:
 - `JWT_SECRET` and `POSTGRES_PASSWORD` are long random values (not defaults)
 - `SERVER_URL` and `FRONTEND_URL` use `https://` when behind TLS
 - PostgreSQL and Redis are not exposed publicly (`docker-compose.prod.yml`)
+- PostgreSQL data resides on **encrypted storage** — see [DB_ENCRYPTION_AT_REST.md](DB_ENCRYPTION_AT_REST.md)
+- **Backups** enabled with `BACKUP_DIRECTORY` on a persistent volume — see [BACKUP_AUTOMATION.md](BACKUP_AUTOMATION.md)
+- **PITR** documented for managed Postgres or optional `docker-compose.pitr.yml` — see [PITR_RUNBOOK.md](PITR_RUNBOOK.md)
 - SMTP or Slack/Telegram is configured if you need outbound alert delivery
-- Back up the `securi_pg_data` Docker volume on a schedule
+- Back up the `securi_pg_data` Docker volume on a schedule — see [BACKUP_AUTOMATION.md](BACKUP_AUTOMATION.md)
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
+
+### Kubernetes
+
+For cluster deployment:
+
+- **Helm (recommended):** [HELM.md](HELM.md) — `helm/securi/`
+- **Ingress + TLS:** [KUBERNETES_INGRESS.md](KUBERNETES_INGRESS.md)
+- **Kustomize:** [KUBERNETES.md](KUBERNETES.md) — `k8s/` manifests
 
 ---
 

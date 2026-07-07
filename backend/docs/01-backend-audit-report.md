@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-SecuriSphere backend was a functional student-project SIEM API. This audit identifies architectural gaps that would prevent operation at hundreds of hosts and millions of events/day, and documents the v2.0 production refactor.
+Securi backend was a functional student-project SIEM API. This audit identifies architectural gaps that would prevent operation at hundreds of hosts and millions of events/day, and documents the v2.0 production refactor.
 
 **Overall Grade (Pre-Refactor):** C+ — Feature-complete for demos, not production-ready  
 **Overall Grade (Post-Refactor Foundation):** B+ — Production patterns in place; scale-out components pending

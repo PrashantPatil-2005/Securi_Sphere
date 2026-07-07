@@ -12,7 +12,7 @@ interface DrawerProps {
   title: string;
   description?: string;
   children: ReactNode;
-  side?: "right" | "bottom";
+  side?: "right" | "bottom" | "left";
   className?: string;
 }
 
@@ -44,12 +44,13 @@ export function Drawer({
   if (!open) return null;
 
   const isBottom = side === "bottom";
+  const isLeft = side === "left";
 
   return (
     <div
       className={cn(
         "fixed inset-0 z-50 flex",
-        isBottom ? "flex-col justify-end" : "justify-end",
+        isBottom ? "flex-col justify-end" : isLeft ? "justify-start" : "justify-end",
       )}
     >
       <button
@@ -68,7 +69,9 @@ export function Drawer({
           "relative glass-nav shadow-2xl overflow-y-auto",
           isBottom
             ? "w-full max-h-[85vh] rounded-t-xl border-t animate-slide-up p-5"
-            : "w-full max-w-md h-full border-l animate-slide-in-right p-6",
+            : isLeft
+              ? "w-full max-w-md h-full border-r animate-slide-in-left p-6"
+              : "w-full max-w-md h-full border-l animate-slide-in-right p-6",
           className,
         )}
       >

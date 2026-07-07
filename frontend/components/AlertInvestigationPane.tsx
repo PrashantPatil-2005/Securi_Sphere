@@ -6,6 +6,7 @@ import { Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/assistant/AssistantProvider";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
+import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import { IocLookupPanel } from "@/components/IocLookupPanel";
 import { Panel, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
@@ -93,7 +94,7 @@ export function AlertInvestigationPane({
 
   return (
     <div className="space-y-4">
-      <InvestigationTrail hostId={host.id} hostName={host.name} />
+      <InvestigationTrail hostId={host.id} hostName={host.name} alertId={alert.id} />
       <Panel title="Alert details">
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -145,6 +146,9 @@ export function AlertInvestigationPane({
             </Link>
             <Link href={`/timeline?host=${host.id}`} className="btn-ghost text-xs">
               Full timeline
+            </Link>
+            <Link href={workspaceHref({ alertId: alert.id })} className="btn-primary text-xs">
+              Open Case Workspace
             </Link>
             <button
               type="button"

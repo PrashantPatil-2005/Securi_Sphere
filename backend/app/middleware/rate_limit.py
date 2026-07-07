@@ -70,6 +70,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return count > max_requests
 
     async def dispatch(self, request: Request, call_next):
+        if settings.testing or settings.environment == "development":
+            return await call_next(request)
+
         limit_cfg = self._limit_for(request.url.path)
         if not limit_cfg:
             return await call_next(request)

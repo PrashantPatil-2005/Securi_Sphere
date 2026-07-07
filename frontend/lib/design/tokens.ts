@@ -1,4 +1,4 @@
-/** SecuriSphere Design System Tokens */
+/** Securi design system tokens */
 
 export const spacing = {
   xs: "0.25rem",   // 4px
@@ -21,7 +21,7 @@ export const shadows = {
   sm: "0 1px 2px rgba(0,0,0,0.25)",
   md: "0 4px 12px rgba(0,0,0,0.35)",
   lg: "0 8px 24px rgba(0,0,0,0.45)",
-  glow: "0 0 20px rgba(76,154,255,0.15)",
+  glow: "0 0 20px rgba(59,130,246,0.15)",
 } as const;
 
 export const typography = {

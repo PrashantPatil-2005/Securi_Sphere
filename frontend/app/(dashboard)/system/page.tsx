@@ -6,11 +6,25 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { cn } from "@/lib/utils/cn";
 import { api } from "@/lib/api";
+import { BackupPanel } from "@/components/BackupPanel";
 
 interface Health {
   status: string;
   checks: Record<string, string>;
   environment: string;
+  search_backend?: string;
+  opensearch?: {
+    status?: string;
+    cluster_name?: string;
+    number_of_nodes?: number;
+    indices?: number;
+    events_indices?: number;
+    events_docs?: number;
+    alerts_docs?: number;
+    hosts_docs?: number;
+    oldest_event_index?: string | null;
+    ism_retention_days?: number;
+  } | null;
   job_queue_running: boolean;
   job_queue_backend?: string;
   job_queue_pending?: number;
@@ -147,6 +161,29 @@ export default function SystemHealthPage() {
               <span>{health?.ws_pubsub_backend ?? "memory"}</span>
             </li>
             <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">Search backend</span>
+              <span className="capitalize">{health?.search_backend ?? "postgres"}</span>
+            </li>
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
+              <span className="text-muted">OpenSearch</span>
+              <span className="text-right text-sm">
+                {health?.opensearch ? (
+                  <>
+                    {health.opensearch.status ?? "unknown"}
+                    {health.opensearch.number_of_nodes != null ? ` · ${health.opensearch.number_of_nodes} nodes` : ""}
+                    {health.opensearch.indices != null ? ` · ${health.opensearch.indices} indices` : ""}
+                    {health.opensearch.events_docs != null ? ` · ${health.opensearch.events_docs.toLocaleString()} event docs` : ""}
+                    {health.opensearch.ism_retention_days != null ? ` · ISM ${health.opensearch.ism_retention_days}d` : ""}
+                    {health.opensearch.oldest_event_index ? (
+                      <span className="block text-xs text-muted mt-0.5">oldest: {health.opensearch.oldest_event_index}</span>
+                    ) : null}
+                  </>
+                ) : (
+                  "not configured (Postgres search)"
+                )}
+              </span>
+            </li>
+            <li className="flex items-center justify-between gap-4 py-2 border-b border-border-subtle/50 text-body">
               <span className="text-muted">Redis</span>
               <span>{health?.redis_configured ? "configured" : "not configured"}</span>
             </li>
@@ -160,6 +197,7 @@ export default function SystemHealthPage() {
             </li>
           </ul>
         </Panel>
+        <BackupPanel />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { Shield } from "lucide-react";
 import { ThemeProvider } from "@/lib/theme/ThemeProvider";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -19,7 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 <Shield className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <h1 className="text-heading font-semibold text-white">SecuriSphere</h1>
+                <h1 className="text-heading font-semibold text-white">{PRODUCT_NAME}</h1>
                 <p className="text-caption normal-case text-white/50">Enterprise Security Platform</p>
               </div>
             </div>
@@ -41,7 +42,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               </div>
             </div>
             <p className="text-caption normal-case text-white/30">
-              © {new Date().getFullYear()} SecuriSphere. All rights reserved.
+              © {new Date().getFullYear()} {PRODUCT_NAME}. All rights reserved.
             </p>
           </div>
         </div>
@@ -53,7 +54,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <div className="w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
                 <Shield className="w-4 h-4 text-accent" />
               </div>
-              <span className="text-heading font-semibold">SecuriSphere</span>
+              <span className="text-heading font-semibold">{PRODUCT_NAME}</span>
             </div>
             {children}
           </div>

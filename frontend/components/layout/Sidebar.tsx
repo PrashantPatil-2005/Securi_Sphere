@@ -27,6 +27,8 @@ import {
   Gauge,
   Inbox,
   Wrench,
+  FolderSearch,
+  BookMarked,
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
@@ -38,8 +40,10 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 320;
 const COLLAPSED_WIDTH = 56;
 const DEFAULT_WIDTH = 240;
-const COLLAPSED_KEY = "securisphere-sidebar-collapsed";
-const WIDTH_KEY = "securisphere-sidebar-width";
+const COLLAPSED_KEY = "securi-sidebar-collapsed";
+const LEGACY_COLLAPSED_KEY = "securisphere-sidebar-collapsed";
+const WIDTH_KEY = "securi-sidebar-width";
+const LEGACY_WIDTH_KEY = "securisphere-sidebar-width";
 
 function isNavActive(href: string, pathname: string): boolean {
   if (href === "/") return pathname === "/";
@@ -63,6 +67,7 @@ const navSections: NavSection[] = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/threat-scores", label: "Threat scores", icon: ShieldAlert },
       { href: "/metrics", label: "Metrics", icon: Gauge },
     ],
   },
@@ -75,7 +80,8 @@ const navSections: NavSection[] = [
       { href: "/alerts", label: "Alerts", icon: Bell },
       { href: "/notifications", label: "Notifications", icon: Inbox },
       { href: "/offenses", label: "Offenses", icon: ShieldAlert },
-      { href: "/incidents", label: "Investigations", icon: AlertTriangle },
+      { href: "/investigation", label: "Case Workspace", icon: FolderSearch },
+      { href: "/incidents", label: "Incidents", icon: AlertTriangle },
     ],
   },
   {
@@ -88,12 +94,18 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: "Lab",
+    items: [
+      { href: "/simulation", label: "Attack Lab", icon: FlaskConical },
+    ],
+  },
+  {
     title: "Management",
     items: [
       { href: "/rules", label: "Detection Rules", icon: Shield },
+      { href: "/intel", label: "Threat Intel", icon: BookMarked },
       { href: "/reports", label: "Reports", icon: FileText },
       { href: "/audit", label: "Audit Log", icon: ScrollText },
-      { href: "/simulation", label: "Simulation", icon: FlaskConical },
       { href: "/system", label: "System Health", icon: Activity },
     ],
   },
@@ -139,8 +151,8 @@ export function Sidebar({ className, drawer = false, onClose }: SidebarProps) {
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   useEffect(() => {
-    const storedCollapsed = localStorage.getItem(COLLAPSED_KEY);
-    const storedWidth = localStorage.getItem(WIDTH_KEY);
+    const storedCollapsed = localStorage.getItem(COLLAPSED_KEY) ?? localStorage.getItem(LEGACY_COLLAPSED_KEY);
+    const storedWidth = localStorage.getItem(WIDTH_KEY) ?? localStorage.getItem(LEGACY_WIDTH_KEY);
     if (storedCollapsed === "true") setCollapsed(true);
     if (storedWidth) {
       const parsed = Number.parseInt(storedWidth, 10);

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.brand import PRODUCT_NAME
 from app.config import settings
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,12 +64,14 @@ async def list_alerts(
     sort: SortOrder = ListParams.sort(),
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
+    mitre_technique_id: str | None = None,
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     items, total = await query_alerts(
         db, tr,
         host_id=host_id, severity=severity, status=status, rule_name=rule_name,
         assigned_to=assigned_to, q=q, exact=exact, sort=sort, page=page, page_size=page_size,
+        mitre_technique_id=mitre_technique_id,
     )
     return AlertListResponse(items=[_to_response(a) for a in items], total=total, page=page, page_size=page_size)
 
@@ -107,7 +110,7 @@ async def export_alerts(
     if format == "json":
         return export_json(rows, "alerts.json")
     if format == "pdf":
-        return export_pdf(rows, "SecuriSphere Alerts Export", "alerts.pdf")
+        return export_pdf(rows, f"{PRODUCT_NAME} Alerts Export", "alerts.pdf")
     return export_csv(rows, "alerts.csv")
 
 
@@ -290,6 +293,7 @@ async def update_alert_status(
     alert = result.scalar_one_or_none()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
+    old_status = alert.status
     alert.status = body.status
     if body.assigned_to is not None:
         alert.assigned_to = body.assigned_to
@@ -299,4 +303,13 @@ async def update_alert_status(
     await update_host_statuses(db)
     await log_audit(db, "alert_status_update", user_id=user.id, resource_type="alert", resource_id=alert_id, details={"status": body.status})
     await ws_manager.broadcast({"type": "alert_updated", "data": {"id": str(alert.id), "status": body.status}})
+    if old_status != body.status:
+        from app.services.playbooks import schedule_playbook_dispatch
+        await schedule_playbook_dispatch(
+            "alert_status_changed",
+            "alert",
+            alert.id,
+            old_status=old_status,
+            new_status=body.status,
+        )
     return _to_response(alert)

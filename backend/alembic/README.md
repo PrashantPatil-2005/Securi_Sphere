@@ -1,6 +1,6 @@
 # Database migrations (Alembic)
 
-SecuriSphere uses **Alembic** for schema versioning. Startup calls `migrate_schema()` → `alembic upgrade head`.
+Securi uses **Alembic** for schema versioning. Startup calls `migrate_schema()` → `alembic upgrade head`.
 
 ## Revision chain
 

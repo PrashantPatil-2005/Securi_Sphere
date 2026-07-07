@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api } from "@/lib/api";
+import { api, establishSession } from "@/lib/api";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PasswordStrength } from "@/components/ui/PasswordStrength";
+import { CardSkeleton } from "@/components/ui/Skeleton";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -16,10 +18,28 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [allowRegistration, setAllowRegistration] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/v1/settings/public")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        if (cfg && typeof cfg.allow_registration === "boolean") {
+          setAllowRegistration(cfg.allow_registration);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSettingsLoading(false));
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!allowRegistration) {
+      setError("Registration is disabled. Contact your administrator.");
+      return;
+    }
     if (password !== confirm) {
       setError("Passwords do not match");
       return;
@@ -31,7 +51,9 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api("/api/v1/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }, false);
-      router.push("/login");
+      await api("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false);
+      await establishSession();
+      router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -39,11 +61,37 @@ export default function RegisterPage() {
     }
   }
 
+  if (settingsLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="h-10 w-48 rounded-lg bg-card animate-pulse" />
+        <CardSkeleton />
+        <CardSkeleton />
+      </div>
+    );
+  }
+
+  if (!allowRegistration) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+        <div className="mb-8">
+          <h1 className="text-display text-foreground">Registration closed</h1>
+          <p className="text-body text-muted mt-2">
+            Self-service sign-up is disabled on this deployment. Ask an administrator for an invite or sign in with an existing account.
+          </p>
+        </div>
+        <Link href="/login" className="btn-primary inline-flex">
+          Go to sign in
+        </Link>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
       <div className="mb-8">
         <h1 className="text-display text-foreground">Create account</h1>
-        <p className="text-body text-muted mt-2">Set up your SecuriSphere workspace</p>
+        <p className="text-body text-muted mt-2">Set up your {PRODUCT_NAME} workspace</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">

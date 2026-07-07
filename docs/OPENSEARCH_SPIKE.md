@@ -1,4 +1,4 @@
-# OpenSearch Spike — SecuriSphere
+# OpenSearch Spike — Securi
 
 ## Status: Spike complete (pilot-ready)
 
@@ -60,6 +60,10 @@ On OpenSearch failure, the router **falls back** to PostgreSQL automatically.
 
 ## Next steps (post-spike)
 
-1. ISM retention policies on indices
-2. Enable security plugin + TLS in production
-3. Bulk worker for backfill instead of inline indexing
+See **[OPENSEARCH_AT_SCALE.md](OPENSEARCH_AT_SCALE.md)** for monthly indices, bulk ingest, ISM retention, and admin backfill.
+
+Remaining for full production:
+
+1. Enable security plugin + TLS in production
+2. Multi-node cluster + replicas
+3. CDC worker for sub-second sync at very high volume

@@ -2,9 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 
+from app.brand import PRODUCT_NAME
 from app.config import settings
 from app.core.health import readiness
 from app.database import get_db
@@ -14,7 +15,7 @@ from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
 from app.models.user import User
-from app.search.opensearch_client import opensearch_enabled
+from app.search.opensearch_client import opensearch_cluster_health, opensearch_enabled
 from app.websocket.manager import ws_manager
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -24,9 +25,12 @@ router = APIRouter(prefix="/system", tags=["system"])
 async def system_health(user: User = Depends(require_roles("admin"))):
     ready = await readiness()
     pending = await job_queue.pending_count()
+    os_health = await opensearch_cluster_health() if settings.opensearch_url else None
     return {
         **ready,
         "environment": settings.environment,
+        "search_backend": "opensearch" if opensearch_enabled() else "postgres",
+        "opensearch": os_health,
         "job_queue_backend": job_queue.backend_name,
         "job_queue_running": job_queue.is_running,
         "job_queue_pending": pending,
@@ -40,7 +44,7 @@ async def system_health(user: User = Depends(require_roles("admin"))):
 
 @router.get("/pipeline")
 async def pipeline_status(db=Depends(get_db), user: User = Depends(require_roles("admin"))):
-    """QRadar-style 3-layer pipeline map for SecuriSphere."""
+    """QRadar-style 3-layer pipeline map for Securi."""
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     events_24h = (
         await db.execute(select(func.count()).select_from(Event).where(Event.timestamp >= since))
@@ -108,7 +112,7 @@ async def pipeline_status(db=Depends(get_db), user: User = Depends(require_roles
             },
         ],
         "console": {
-            "name": "SecuriSphere Console",
+            "name": f"{PRODUCT_NAME} Console",
             "qradar_equivalent": "QRadar Console",
             "features": ["graphs", "reports", "alerts", "offenses", "investigations", "mitre"],
             "ui_routes": ["/", "/alerts", "/offenses", "/search", "/reports"],
@@ -138,3 +142,67 @@ async def system_stats(db=Depends(get_db), user: User = Depends(require_roles("a
         "alerts_critical": alerts_critical,
         "retention_days": settings.retention_days,
     }
+
+
+@router.get("/circuits")
+async def circuit_breaker_status(user: User = Depends(require_roles("admin"))):
+    from app.core.circuit_breaker import all_breaker_snapshots
+
+    return {
+        "enabled": settings.circuit_breakers_enabled,
+        "failure_threshold": settings.circuit_breaker_failure_threshold,
+        "recovery_seconds": settings.circuit_breaker_recovery_seconds,
+        "circuits": all_breaker_snapshots(),
+    }
+
+
+@router.get("/timeouts")
+async def request_timeout_status(user: User = Depends(require_roles("admin"))):
+    from app.core.http_timeouts import resolve_request_timeout
+
+    return {
+        "enabled": settings.request_timeout_enabled,
+        "default_seconds": settings.request_timeout_seconds,
+        "agent_seconds": settings.request_timeout_agent_seconds,
+        "export_seconds": settings.request_timeout_export_seconds,
+        "outbound_seconds": settings.outbound_http_timeout_seconds,
+        "outbound_short_seconds": settings.outbound_http_timeout_short_seconds,
+        "examples": {
+            "api": resolve_request_timeout("/api/v1/alerts"),
+            "agent": resolve_request_timeout("/api/v1/agent/events"),
+            "export": resolve_request_timeout("/api/v1/events/export"),
+            "health": resolve_request_timeout("/health/ready"),
+        },
+    }
+
+
+@router.get("/pool")
+async def database_pool_status_endpoint(
+    api_replicas: int = 1,
+    worker_replicas: int = 0,
+    user: User = Depends(require_roles("admin")),
+):
+    from app.core.db_pool import database_pool_status, estimate_cluster_connections
+
+    return {
+        **database_pool_status(),
+        "cluster_estimate": estimate_cluster_connections(
+            api_replicas=api_replicas,
+            worker_replicas=worker_replicas,
+        ),
+    }
+
+
+@router.post("/opensearch/backfill")
+async def opensearch_backfill(
+    event_limit: int = 10_000,
+    alert_limit: int = 5000,
+    user: User = Depends(require_roles("admin")),
+):
+    """Bulk reindex hosts, events, and alerts into OpenSearch (admin)."""
+    if not settings.opensearch_url:
+        raise HTTPException(status_code=400, detail="OPENSEARCH_URL is not configured")
+    from app.services.opensearch_backfill import run_opensearch_backfill
+
+    counts = await run_opensearch_backfill(event_limit=event_limit, alert_limit=alert_limit)
+    return {"status": "ok", "indexed": counts, "search_backend": "opensearch"}

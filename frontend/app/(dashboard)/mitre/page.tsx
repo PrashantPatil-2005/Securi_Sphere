@@ -1,12 +1,15 @@
 "use client";
 
+import { Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { MitreTechniqueDrilldown } from "@/components/mitre/MitreTechniqueDrilldown";
 import { GlassPanel } from "@/components/ui/GlassPanel";
-import { PageHeader } from "@/components/ui/Panel";
+import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
@@ -31,8 +34,19 @@ interface MatrixResponse {
   total_techniques: number;
 }
 
-export default function MitrePage() {
+function heatClass(count: number, selected: boolean) {
+  const base = count > 5
+    ? "bg-danger/20 border-danger/40"
+    : count > 0
+      ? "bg-warning/15 border-warning/30"
+      : "glass-panel border-border-subtle";
+  const ring = selected ? " ring-2 ring-accent ring-offset-1 ring-offset-background" : "";
+  return `${base}${ring}`;
+}
+
+function MitrePageContent() {
   const { queryParams } = useTimeRange();
+  const [selectedTechnique, setSelectedTechnique] = useDeepLinkedSelection("technique");
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["mitre-matrix", queryParams],
     queryFn: () => api<MatrixResponse>(`/api/v1/mitre/matrix${buildQuery({}, queryParams)}`),
@@ -46,10 +60,14 @@ export default function MitrePage() {
     name: tactic.split(" ")[0],
     coverage: pct,
   }));
+  const totalHits = Object.values(tactics).flat().reduce((sum, t) => sum + t.count, 0);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="MITRE ATT&CK" subtitle="Detection coverage heatmap across tactics and techniques" />
+      <PageHeader
+        title="MITRE ATT&CK"
+        subtitle="Detection coverage heatmap — click a technique to drill down"
+      />
       <TimeRangeBar />
       {isLoading && <TableSkeleton rows={6} />}
       {isError && <QueryError onRetry={() => refetch()} />}
@@ -60,7 +78,9 @@ export default function MitrePage() {
             <p className="text-caption normal-case text-muted">Overall coverage</p>
           </GlassPanel>
           <GlassPanel className="text-center md:col-span-2">
-            <p className="text-sm text-muted">{data.total_techniques} techniques seeded · heat intensity = event matches in range</p>
+            <p className="text-sm text-muted">
+              {data.total_techniques} techniques seeded · heat intensity = event matches in range
+            </p>
           </GlassPanel>
         </div>
       )}
@@ -77,6 +97,12 @@ export default function MitrePage() {
           </ResponsiveContainer>
         </GlassPanel>
       )}
+      {data && totalHits === 0 && (
+        <EmptyState
+          title="No technique matches in range"
+          description="Run Attack Lab or ingest events with MITRE mappings to populate the heatmap."
+        />
+      )}
       <div className="overflow-x-auto">
         <div className="flex gap-3 min-w-max pb-4">
           {tacticOrder.map((tactic) => {
@@ -89,25 +115,42 @@ export default function MitrePage() {
                   <span className="text-accent tabular-nums">{cov}%</span>
                 </div>
                 <div className="border border-t-0 border-border-subtle rounded-b min-h-[120px] p-2 space-y-1 bg-glass/30">
-                  {items.map((t) => (
-                    <div
-                      key={t.technique_id}
-                      className={`text-xs p-2 rounded border ${
-                        t.count > 5 ? "bg-danger/20 border-danger/40" : t.count > 0 ? "bg-warning/15 border-warning/30" : "glass-panel border-border-subtle"
-                      }`}
-                      title={t.name}
-                    >
-                      <div className="font-mono text-muted">{t.technique_id}</div>
-                      <div className="truncate">{t.name}</div>
-                      {t.count > 0 && <div className="text-danger mt-1 tabular-nums">{t.count} events</div>}
-                    </div>
-                  ))}
+                  {items.map((t) => {
+                    const selected = selectedTechnique === t.technique_id;
+                    return (
+                      <button
+                        key={t.technique_id}
+                        type="button"
+                        onClick={() => setSelectedTechnique(t.technique_id)}
+                        className={`w-full text-left text-xs p-2 rounded border transition-colors hover:border-accent/50 cursor-pointer ${heatClass(t.count, selected)}`}
+                        title={t.name}
+                      >
+                        <div className="font-mono text-muted">{t.technique_id}</div>
+                        <div className="truncate">{t.name}</div>
+                        {t.count > 0 && <div className="text-danger mt-1 tabular-nums">{t.count} events</div>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      <MitreTechniqueDrilldown
+        techniqueId={selectedTechnique}
+        queryParams={queryParams}
+        onClose={() => setSelectedTechnique(null)}
+      />
     </div>
+  );
+}
+
+export default function MitrePage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={6} />}>
+      <MitrePageContent />
+    </Suspense>
   );
 }

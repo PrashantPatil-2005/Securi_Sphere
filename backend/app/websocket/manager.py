@@ -33,6 +33,13 @@ class ConnectionManager:
             logger.info("WebSocket Redis pub/sub listener started")
 
     async def stop(self) -> None:
+        for ws in list(self.active):
+            try:
+                await ws.close(code=1001, reason="server shutting down")
+            except Exception:
+                pass
+        self.active.clear()
+
         if self._listener_task:
             self._listener_task.cancel()
             try:

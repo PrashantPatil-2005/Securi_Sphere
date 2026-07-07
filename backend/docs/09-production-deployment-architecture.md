@@ -104,7 +104,7 @@ Agents should NOT reach dashboard APIs directly.
 ## Monitoring Stack
 
 ```
-SecuriSphere API → Prometheus metrics → Grafana dashboards
+Securi API → Prometheus metrics → Grafana dashboards
                  → Structured JSON logs → Loki/ELK
                  → Traces (Phase 2) → Jaeger
 ```
@@ -124,7 +124,7 @@ SecuriSphere API → Prometheus metrics → Grafana dashboards
 
 | Component | RPO | RTO | Method |
 |-----------|-----|-----|--------|
-| PostgreSQL | 1h | 4h | WAL archiving + daily snapshot |
+| PostgreSQL | 1h (pg_dump) / ≤15m (PITR) | 4h | WAL archiving + base backup — `docs/PITR_RUNBOOK.md` |
 | Redis | N/A | 5m | Recreatable job queue |
 | Config/Secrets | 0 | 1h | Git + Vault |
 

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete
 
 from app.config import settings
-from app.config import settings
 from app.database import async_session
 from app.models.alert import Alert
 from app.models.audit import AuditLog
@@ -26,7 +25,9 @@ async def run_retention() -> None:
         await db.execute(delete(Alert).where(Alert.created_at < cutoff, Alert.status.in_(["resolved", "closed"])))
         await db.execute(delete(AttackTimeline).where(AttackTimeline.created_at < cutoff))
         await db.execute(delete(CorrelationResult).where(CorrelationResult.detected_at < cutoff))
-        await db.execute(delete(AuditLog).where(AuditLog.created_at < cutoff - timedelta(days=365)))
+        if not settings.audit_immutable:
+            audit_cutoff = datetime.now(timezone.utc) - timedelta(days=settings.audit_retention_days)
+            await db.execute(delete(AuditLog).where(AuditLog.timestamp < audit_cutoff))
         await db.execute(delete(IngestDedup).where(IngestDedup.created_at < dedup_cutoff))
         await db.commit()
     if settings.event_partitioning_enabled:

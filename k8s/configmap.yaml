@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: securi-config
+  namespace: securi
+  labels:
+    app.kubernetes.io/part-of: securi
+data:
+  ENVIRONMENT: production
+  DEBUG: "false"
+  ALLOW_REGISTRATION: "false"
+  ENABLE_SIMULATION: "false"
+  EXCLUDE_SIMULATED_FROM_DASHBOARD: "true"
+  TRUSTED_PROXY: "true"
+  REDIS_URL: redis://redis:6379/0
+  JOB_QUEUE_BACKEND: redis
+  JOB_QUEUE_RUN_WORKERS: "false"
+  JOB_QUEUE_WORKERS: "2"
+  WS_PUBSUB_BACKEND: redis
+  SEARCH_BACKEND: postgres
+  SERVER_URL: https://securi.example.com
+  FRONTEND_URL: https://securi.example.com
+  BACKUP_ENABLED: "true"
+  BACKUP_DIRECTORY: /var/backups/securi
+  BACKUP_RETENTION_DAYS: "30"
+  BACKUP_SCHEDULE_HOUR: "1"
+  RETENTION_DAYS: "90"
+  ASYNC_EVENT_PIPELINE: "true"
+  EVENT_PARTITIONING_ENABLED: "false"
+  JWT_ALGORITHM: HS256
+  POSTGRES_USER: securi
+  POSTGRES_DB: securi

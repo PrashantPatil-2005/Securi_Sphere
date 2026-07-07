@@ -16,10 +16,20 @@ A lightweight security monitoring platform inspired by Wazuh, built for small Li
 
 ```powershell
 cd c:\Users\Prash\Desktop\Securi
+.\scripts\start-infra.ps1          # Postgres + Redis only (first time or after reboot)
 .\scripts\dev-windows.ps1
 ```
 
 Stop dev servers: `.\scripts\dev-stop.ps1`
+
+Verify Postgres, Redis, and API health:
+
+```powershell
+.\scripts\verify-local.ps1
+.\scripts\run-tests.ps1 -Quick          # fast backend smoke
+.\scripts\run-tests.ps1 -IntegrationOnly  # all integration tests
+.\scripts\run-e2e.ps1                   # Playwright E2E (stack must be running)
+```
 
 **Demo / presentation mode** (faster page loads, no dev compilation):
 
@@ -111,16 +121,52 @@ curl -fsSL http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROL
 
 ## Documentation
 
-- docs/API.md - API reference
-- docs/SCHEMA.md - Database schema
-- docs/DEPLOYMENT.md - **Linux hosting, HTTPS, agents, and demo walkthrough**
-- docs/SIEM_PIPELINE_ARCHITECTURE.md - **QRadar-style 3-layer pipeline map**
-- docs/SOC_LAB_SCENARIO.md - **Multi-stage attack lab for portfolio**
-- docs/PRODUCTION_SECURITY.md - **Production env checklist**
-- docs/AGENT_INSTALL.md - **Add hosts, install agents, how monitoring works**
-- docs/AGENT_MTLS.md - **Agent mTLS enrollment and cert fingerprints**
-- docs/WRAP_UP.md - **Implementation complete — feature checklist and demo script**
-- docs/ROADMAP_STATUS.md - **100% in-scope completion scorecard**
+### Getting started
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Linux hosting, HTTPS, agents, demo walkthrough
+- [docs/GUIDE_DEMO.md](docs/GUIDE_DEMO.md) — 5-minute demo (simulation-only or with agent)
+- [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md) — Multi-stage attack lab for portfolio
+- [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md) — Add hosts, install agents, monitoring
+- [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) — Completion scorecard
+
+### Platform
+- [docs/API.md](docs/API.md) — API reference
+- [docs/SCHEMA.md](docs/SCHEMA.md) — Database schema
+- [docs/SIEM_PIPELINE_ARCHITECTURE.md](docs/SIEM_PIPELINE_ARCHITECTURE.md) — QRadar-style 3-layer pipeline
+- [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md) — Production env checklist
+- [docs/DB_ENCRYPTION_AT_REST.md](docs/DB_ENCRYPTION_AT_REST.md) — Database encryption at rest
+- [docs/BACKUP_AUTOMATION.md](docs/BACKUP_AUTOMATION.md) — Scheduled Postgres backups
+- [docs/PITR_RUNBOOK.md](docs/PITR_RUNBOOK.md) — Point-in-time recovery
+- [docs/KUBERNETES.md](docs/KUBERNETES.md) — Kubernetes manifests (`k8s/`)
+- [docs/HELM.md](docs/HELM.md) — Helm chart (`helm/securi/`)
+- [docs/KUBERNETES_INGRESS.md](docs/KUBERNETES_INGRESS.md) — Ingress + cert-manager TLS
+- [docs/HEALTH_PROBES.md](docs/HEALTH_PROBES.md) — Liveness / readiness / startup probes
+- [docs/GRACEFUL_SHUTDOWN.md](docs/GRACEFUL_SHUTDOWN.md) — SIGTERM drain and rollouts
+- [docs/CIRCUIT_BREAKERS.md](docs/CIRCUIT_BREAKERS.md) — External dependency circuit breakers
+- [docs/REQUEST_TIMEOUTS.md](docs/REQUEST_TIMEOUTS.md) — API and outbound HTTP timeouts
+- [docs/CONNECTION_POOLING.md](docs/CONNECTION_POOLING.md) — Postgres connection pool tuning
+- [docs/WRAP_UP.md](docs/WRAP_UP.md) — Feature checklist and handoff
+
+### Features
+- [docs/OIDC_SSO.md](docs/OIDC_SSO.md) — SSO login
+- [docs/USER_PROVISIONING.md](docs/USER_PROVISIONING.md) — Invites and team management
+- [docs/THREAT_INTEL.md](docs/THREAT_INTEL.md) — Reference sets and building blocks
+- [docs/UEBA.md](docs/UEBA.md) — User behavior analytics
+- [docs/PLAYBOOKS_SOAR.md](docs/PLAYBOOKS_SOAR.md) — SOAR webhooks
+- [docs/NOTIFICATION_RULES.md](docs/NOTIFICATION_RULES.md) — Alert routing rules
+- [docs/MITRE_HEATMAP.md](docs/MITRE_HEATMAP.md) — ATT&CK coverage
+- [docs/COMPLIANCE_REPORTS.md](docs/COMPLIANCE_REPORTS.md) — Compliance exports
+- [docs/EXECUTIVE_REPORTS.md](docs/EXECUTIVE_REPORTS.md) — Executive summaries
+- [docs/ALERTS_TABLE.md](docs/ALERTS_TABLE.md) — Alerts UI
+- [docs/SAVED_SEARCHES_DASHBOARDS.md](docs/SAVED_SEARCHES_DASHBOARDS.md) — Saved searches
+- [docs/OPENSEARCH_AT_SCALE.md](docs/OPENSEARCH_AT_SCALE.md) — Search scaling
+- [docs/AI_AND_UX_ROADMAP.md](docs/AI_AND_UX_ROADMAP.md) — AI copilot features
+- [docs/AGENT_MTLS.md](docs/AGENT_MTLS.md) — Agent mTLS enrollment
+
+### Dev infrastructure
+- `docker-compose.dev.yml` — Postgres + Redis only (no OpenSearch) for native dev
+- `docker-compose.ci.yml` — Postgres + Redis + backend for compose smoke tests
+- `scripts/demo-setup.ps1` / `scripts/demo-setup.sh` — One-command demo prep
+- `scripts/compose-smoke.ps1` / `scripts/compose-smoke.sh` — Verify Docker stack health
 
 ### Deploy on Linux (quick)
 
@@ -144,7 +190,7 @@ chmod +x scripts/deploy-linux.sh
 
 ## AI Security Assistant
 
-SecuriSphere includes a **local-first AI copilot** — no API key required for core features.
+Securi includes a **local-first AI copilot** — no API key required for core features.
 
 - **Floating assistant** (bottom-right) — explain alerts, suggest investigation steps, SIEM syntax help
 - **Ask AI about this alert** — in the investigation pane, pre-fills alert context

@@ -5,6 +5,7 @@ import logging
 import httpx
 
 from app.config import settings
+from app.core.http_timeouts import outbound_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,7 @@ async def call_llm(system_prompt: str, user_prompt: str) -> str | None:
 
 
 async def _call_openai(system_prompt: str, user_prompt: str) -> str:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=outbound_timeout()) as client:
         res = await client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {settings.openai_api_key}"},
@@ -58,7 +59,7 @@ async def _call_openai(system_prompt: str, user_prompt: str) -> str:
 
 
 async def _call_anthropic(system_prompt: str, user_prompt: str) -> str:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=outbound_timeout()) as client:
         res = await client.post(
             "https://api.anthropic.com/v1/messages",
             headers={

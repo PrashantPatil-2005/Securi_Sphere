@@ -1,4 +1,4 @@
-# AI & UX Roadmap — SecuriSphere
+# AI & UX Roadmap — Securi
 
 Last updated: July 2026
 

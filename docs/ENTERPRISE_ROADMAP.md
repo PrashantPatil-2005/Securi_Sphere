@@ -1,4 +1,4 @@
-# SecuriSphere Enterprise Roadmap
+# Securi Enterprise Roadmap
 
 Final review (Phase 15) after production transformation pass. Score: **62/100** — pilot-ready, not internet-facing enterprise SOC.
 

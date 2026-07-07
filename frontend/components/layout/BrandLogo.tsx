@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import { cn } from "@/lib/utils/cn";
 
 interface BrandLogoProps {
@@ -13,7 +14,7 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
     <div className={cn("flex items-center gap-3 min-w-0", collapsed && "justify-center", className)}>
       <Image
         src="/logo.webp"
-        alt="SecuriSphere"
+        alt={PRODUCT_NAME}
         width={collapsed ? 32 : 40}
         height={collapsed ? 32 : 40}
         className={cn(
@@ -25,10 +26,10 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
       {!collapsed && (
         <div className="min-w-0">
           <p className="text-sm font-semibold tracking-tight text-foreground truncate leading-tight">
-            SecuriSphere
+            {PRODUCT_NAME}
           </p>
           <p className="text-[10px] text-muted uppercase tracking-widest leading-tight mt-0.5">
-            Security Operations
+            {PRODUCT_TAGLINE}
           </p>
         </div>
       )}
@@ -37,7 +38,7 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
 
   if (asLink) {
     return (
-      <Link href="/" className="block hover:opacity-90 transition-opacity" aria-label="SecuriSphere home">
+      <Link href="/" className="block hover:opacity-90 transition-opacity" aria-label={`${PRODUCT_NAME} home`}>
         {content}
       </Link>
     );

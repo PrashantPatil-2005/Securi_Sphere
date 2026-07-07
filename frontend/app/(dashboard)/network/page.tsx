@@ -34,7 +34,10 @@ export default function NetworkPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Network Topology" subtitle="Force-directed view of hosts connected to the SIEM" />
+      <PageHeader
+        title="Network topology"
+        subtitle="Hosts and flow-based connections across your fleet — node color reflects status and threat score"
+      />
       {isLoading && <TableSkeleton rows={4} />}
       {isError && <QueryError onRetry={() => refetch()} />}
       {!isLoading && !isError && nodes.length === 0 && (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronRight, Search, Server } from "lucide-react";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
+import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import { Panel, EmptyState } from "@/components/ui/Panel";
 import { cn } from "@/lib/utils/cn";
 
@@ -32,7 +33,7 @@ interface HostHit {
 export function AlertResultRow({ alert, className }: { alert: AlertHit; className?: string }) {
   return (
     <Link
-      href={`/alerts?selected=${alert.id}`}
+      href={workspaceHref({ alertId: alert.id })}
       className={cn(
         "block panel p-3 hover:border-border hover:bg-[var(--sidebar-hover)] transition-colors group",
         className,

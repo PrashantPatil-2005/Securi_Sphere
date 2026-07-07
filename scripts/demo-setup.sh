@@ -37,9 +37,9 @@ create_host() {
 
 run_simulation() {
   local host_id="$1"
-  curl -sf -X POST "$API/api/v1/simulation/run/brute_force?host_id=$host_id" \
+  curl -sf -X POST "$API/api/v1/simulation/run/multi_stage_attack?host_id=$host_id" \
     -b /tmp/securi-demo-cookies.txt >/dev/null
-  echo "Ran brute_force simulation on $HOST_NAME"
+  echo "Ran multi_stage_attack simulation on $HOST_NAME"
 }
 
 register || true

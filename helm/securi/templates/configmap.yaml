@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "securi.configMapName" . }}
+  labels:
+    {{- include "securi.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.config.environment | quote }}
+  DEBUG: {{ .Values.config.debug | quote }}
+  ALLOW_REGISTRATION: {{ .Values.config.allowRegistration | quote }}
+  ENABLE_SIMULATION: {{ .Values.config.enableSimulation | quote }}
+  EXCLUDE_SIMULATED_FROM_DASHBOARD: {{ .Values.config.excludeSimulatedFromDashboard | quote }}
+  TRUSTED_PROXY: {{ .Values.config.trustedProxy | quote }}
+  REDIS_URL: {{ if .Values.redis.enabled }}redis://{{ include "securi.redisHost" . }}:6379/0{{ else }}{{ required "redis.externalUrl required when redis.enabled is false" .Values.redis.externalUrl | quote }}{{ end }}
+  JOB_QUEUE_BACKEND: {{ .Values.config.jobQueueBackend | quote }}
+  JOB_QUEUE_RUN_WORKERS: {{ .Values.config.jobQueueRunWorkers | quote }}
+  JOB_QUEUE_WORKERS: {{ .Values.config.jobQueueWorkers | quote }}
+  WS_PUBSUB_BACKEND: {{ .Values.config.wsPubsubBackend | quote }}
+  SEARCH_BACKEND: {{ .Values.config.searchBackend | quote }}
+  SERVER_URL: {{ .Values.config.serverUrl | quote }}
+  FRONTEND_URL: {{ .Values.config.frontendUrl | quote }}
+  BACKUP_ENABLED: {{ .Values.config.backupEnabled | quote }}
+  BACKUP_DIRECTORY: {{ .Values.config.backupDirectory | quote }}
+  BACKUP_RETENTION_DAYS: {{ .Values.config.backupRetentionDays | quote }}
+  BACKUP_SCHEDULE_HOUR: {{ .Values.config.backupScheduleHour | quote }}
+  RETENTION_DAYS: {{ .Values.config.retentionDays | quote }}
+  ASYNC_EVENT_PIPELINE: {{ .Values.config.asyncEventPipeline | quote }}
+  EVENT_PARTITIONING_ENABLED: {{ .Values.config.eventPartitioningEnabled | quote }}
+  JWT_ALGORITHM: {{ .Values.config.jwtAlgorithm | quote }}
+  POSTGRES_USER: {{ .Values.postgresql.auth.username | quote }}
+  POSTGRES_DB: {{ .Values.postgresql.auth.database | quote }}

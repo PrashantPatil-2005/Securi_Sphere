@@ -45,7 +45,16 @@ async def test_admin_can_access_audit(admin_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_viewer_cannot_run_simulation(viewer_client: AsyncClient):
+async def test_analyst_can_list_simulation_scenarios(analyst_client: AsyncClient):
+    res = await analyst_client.get("/api/v1/simulation/scenarios")
+    assert res.status_code == 200
+    body = res.json()
+    assert "scenarios" in body
+    assert "enabled" in body
+
+
+@pytest.mark.asyncio
+async def test_viewer_cannot_list_simulation_scenarios(viewer_client: AsyncClient):
     res = await viewer_client.get("/api/v1/simulation/scenarios")
     assert res.status_code == 403
 
@@ -54,7 +63,12 @@ async def test_viewer_cannot_run_simulation(viewer_client: AsyncClient):
 async def test_admin_can_list_simulation_scenarios(admin_client: AsyncClient):
     res = await admin_client.get("/api/v1/simulation/scenarios")
     assert res.status_code == 200
-    assert "scenarios" in res.json()
+    body = res.json()
+    assert "scenarios" in body
+    assert "enabled" in body
+    assert len(body["scenarios"]) >= 1
+    assert "id" in body["scenarios"][0]
+    assert "steps" in body["scenarios"][0]
 
 
 @pytest.mark.asyncio

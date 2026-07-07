@@ -1,0 +1,90 @@
+{{- if .Values.ingress.enabled }}
+{{- $backendName := printf "%s-backend" (include "securi.fullname" .) }}
+{{- $frontendName := printf "%s-frontend" (include "securi.fullname" .) }}
+{{- $tlsSecret := default (printf "%s-tls" (include "securi.fullname" .)) .Values.ingress.tls.secretName }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "securi.fullname" . }}
+  labels:
+    {{- include "securi.labels" . | nindent 4 }}
+  annotations:
+    {{- if and .Values.ingress.tls.enabled .Values.ingress.certManager.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.certManager.clusterIssuer | quote }}
+    {{- end }}
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    {{- if .Values.ingress.stickySessions }}
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: securi-route
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+    {{- end }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className | quote }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ $tlsSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /docs
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /openapi.json
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /install.sh
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /agent-bundle.tar.gz
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $backendName }}
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $frontendName }}
+                port:
+                  number: 3000
+{{- end }}

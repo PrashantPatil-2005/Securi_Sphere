@@ -1,4 +1,4 @@
-# UI Improvement Plan — SecuriSphere
+# UI Improvement Plan — Securi
 
 Last updated: July 2026
 
@@ -263,7 +263,7 @@ After Phase 3, every list page should feel as polished as the dashboard overview
 ### Sprint UI-6 changelog (shipped)
 - **CommandPalette** — `listbox` + `aria-activedescendant` combobox pattern; Home/End navigation; active option scroll-into-view; options without nested buttons
 - **ConnectionBanner** — global offline / WebSocket reconnect notice in TopNav; dismissible; auto-clears on reconnect (`useOnline` + `useWsConnected`)
-- **Sidebar** — collapsed state and width persisted to `localStorage` (`securisphere-sidebar-collapsed`, `securisphere-sidebar-width`)
+- **Sidebar** — collapsed state and width persisted to `localStorage` (`Securi-sidebar-collapsed`, `Securi-sidebar-width`)
 - **Toast** — repositioned to `bottom-24 right-6` so toasts clear the AI assistant FAB
 - **Rules** — detection tab wrapped in `Panel` sections (create form + rules list); correlation form uses Panel body layout
 
@@ -297,3 +297,36 @@ After Phase 3, every list page should feel as polished as the dashboard overview
 - `TimeRangeBar` — inline variant (slimmer on list pages)
 - **Alerts** — bottom-sheet investigation drawer on mobile/tablet (`< lg`)
 - **Events, Hosts** — migrated to FilterBar + Select
+
+---
+
+## Flow coherence sprints (FLOW-1–7 + validation) — shipped
+
+Analyst workflow polish on top of UI-1–8. See `docs/GUIDE_DEMO.md` and `scripts/validate-demo-flow.ps1`.
+
+### Sprint FLOW-1 — Naming & navigation
+- Sidebar: **Case Workspace**, **Incidents** (was Workspace / Investigations)
+- Consistent **Open Case Workspace** CTAs via `workspaceHref()`
+- Command palette expanded to 24 routes
+
+### Sprint FLOW-2 — Guided investigation
+- `GuidedInvestigationBar`, `WorkspaceNextActions`, real onboarding progress (`useOnboardingProgress`)
+
+### Sprint FLOW-3 — Shared primitives
+- `Tabs` variants + `ConfirmDialog`; Intel, Attack Lab, Settings migrated
+
+### Sprint FLOW-4 — RBAC in UI
+- `RouteGuard`, `canAccessRoute()`, register guard when `allow_registration=false`
+
+### Sprint FLOW-5 — Demo & E2E
+- `demo-setup` scripts, golden-path `lab-flow.spec.ts`, dashboard `loading.tsx` / error boundaries
+
+### Sprint FLOW-6 — Mobile & light mode
+- Case Workspace mobile drawer, network copy, light-mode tab/button polish
+
+### Sprint FLOW-7 — Demo mode
+- `DemoModeBanner`, `demo_mode` in public settings, `SOC_LAB_SCENARIO.md` alignment
+
+### Post-FLOW validation
+- `validate-demo-flow.ps1` / `.sh`, `AssistantProvider` layout fix, migration `015` SQL fix
+- Shared `e2e/helpers/auth.ts`; consolidated golden-path Playwright test

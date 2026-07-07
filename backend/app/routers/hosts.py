@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.brand import PRODUCT_NAME
 from app.config import settings
 from app.database import get_db
 from app.dependencies import client_ip, get_current_user, require_roles
@@ -50,6 +51,8 @@ async def create_host(body: HostCreate, request: Request, db: AsyncSession = Dep
     db.add(host)
     await db.flush()
     await log_audit(db, "host_create", user_id=user.id, resource_type="host", resource_id=host.id, ip_address=client_ip(request))
+    from app.search.indexer import index_host
+    await index_host(host)
     return _host_row(host, None, 0)
 
 
@@ -97,7 +100,7 @@ async def export_hosts(
     if format == "json":
         return export_json(data, "hosts.json")
     if format == "pdf":
-        return export_pdf(data, "SecuriSphere Hosts Export", "hosts.pdf")
+        return export_pdf(data, f"{PRODUCT_NAME} Hosts Export", "hosts.pdf")
     return export_csv(data, "hosts.csv")
 
 

@@ -39,7 +39,7 @@ async def run_worker() -> None:
 
     logger.info("job worker running", extra={"workers": settings.job_queue_workers})
     await stop_event.wait()
-    await job_queue.stop()
+    await job_queue.stop(grace_seconds=settings.shutdown_grace_seconds)
     logger.info("job worker stopped")
 
 

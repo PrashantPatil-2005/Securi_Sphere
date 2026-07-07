@@ -66,10 +66,13 @@ export function useNotificationMutations() {
 
 export function notificationHref(item: NotificationItem): string | null {
   if (item.resource_type === "alert" && item.resource_id) {
-    return `/alerts?selected=${item.resource_id}`;
+    return `/investigation?alert=${item.resource_id}`;
   }
   if (item.resource_type === "offense" && item.resource_id) {
-    return `/offenses?selected=${item.resource_id}`;
+    return `/investigation?offense=${item.resource_id}`;
+  }
+  if (item.resource_type === "incident" && item.resource_id) {
+    return `/investigation?incident=${item.resource_id}`;
   }
   return null;
 }

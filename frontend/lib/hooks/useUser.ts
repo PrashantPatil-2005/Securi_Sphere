@@ -23,9 +23,22 @@ export function useUser() {
 export function canAccessRoute(role: string | undefined, href: string): boolean {
   if (!role) return true;
   if (role === "admin") return true;
-  const adminOnly = ["/audit", "/simulation", "/rules", "/system"];
-  if (adminOnly.some((p) => href.startsWith(p))) return role === "admin";
-  const analystOnly = ["/reports"];
-  if (analystOnly.some((p) => href.startsWith(p)) && role === "viewer") return false;
+
+  const adminOnly = ["/audit", "/rules", "/system"];
+  if (adminOnly.some((p) => href === p || href.startsWith(`${p}/`))) {
+    return false;
+  }
+
+  if (role === "viewer") {
+    const viewerBlocked = ["/reports", "/simulation"];
+    if (viewerBlocked.some((p) => href === p || href.startsWith(`${p}/`))) {
+      return false;
+    }
+  }
+
   return true;
+}
+
+export function canPurgeSimulation(role: string | undefined): boolean {
+  return role === "admin";
 }

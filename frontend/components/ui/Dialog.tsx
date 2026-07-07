@@ -14,6 +14,9 @@ interface DialogProps {
   children: ReactNode;
   className?: string;
   size?: "md" | "lg" | "xl";
+  showHeader?: boolean;
+  align?: "center" | "top";
+  zIndex?: number;
 }
 
 const sizes = {
@@ -30,6 +33,9 @@ export function Dialog({
   children,
   className,
   size = "lg",
+  showHeader = true,
+  align = "center",
+  zIndex = 50,
 }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -50,7 +56,13 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        "fixed inset-0 flex justify-center p-4",
+        align === "top" ? "items-start pt-[15vh]" : "items-center",
+      )}
+      style={{ zIndex }}
+    >
       <button
         type="button"
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -64,26 +76,34 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         className={cn(
-          "relative w-full panel p-5 shadow-2xl animate-scale-in max-h-[min(90vh,720px)] overflow-y-auto",
+          "relative w-full panel shadow-2xl animate-scale-in max-h-[min(90vh,720px)] overflow-y-auto",
+          showHeader ? "p-5" : "overflow-hidden",
           sizes[size],
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-3 mb-4">
-          <div>
-            <h2 id={titleId} className="text-subheading text-foreground">
-              {title}
-            </h2>
-            {description && (
-              <p id={descId} className="text-caption normal-case text-muted mt-1">
-                {description}
-              </p>
-            )}
+        {!showHeader && (
+          <p id={titleId} className="sr-only">
+            {title}
+          </p>
+        )}
+        {showHeader && (
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <h2 id={titleId} className="text-subheading text-foreground">
+                {title}
+              </h2>
+              {description && (
+                <p id={descId} className="text-caption normal-case text-muted mt-1">
+                  {description}
+                </p>
+              )}
+            </div>
+            <button type="button" onClick={onClose} className="btn-ghost p-2 shrink-0" aria-label="Close">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button type="button" onClick={onClose} className="btn-ghost p-2 shrink-0" aria-label="Close">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        )}
         {children}
       </div>
     </div>

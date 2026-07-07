@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Activity } from "lucide-react";
 import { useCursorPaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
@@ -56,6 +57,15 @@ const columns: Column<Event>[] = [
 ];
 
 export default function EventsPage() {
+  return (
+    <Suspense fallback={<TableSkeleton />}>
+      <EventsPageContent />
+    </Suspense>
+  );
+}
+
+function EventsPageContent() {
+  const searchParams = useSearchParams();
   const { queryParams } = useTimeRange();
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
@@ -68,7 +78,20 @@ export default function EventsPage() {
     service_name: "",
     status: "",
     q: "",
+    mitre_technique_id: "",
   });
+
+  useEffect(() => {
+    const mitre = searchParams.get("mitre_technique_id");
+    const hostId = searchParams.get("host_id");
+    if (mitre || hostId) {
+      setFilters((prev) => ({
+        ...prev,
+        ...(mitre ? { mitre_technique_id: mitre } : {}),
+        ...(hostId ? { host_id: hostId } : {}),
+      }));
+    }
+  }, [searchParams]);
 
   const debouncedQ = useDebounce(filters.q, 400);
   const debouncedType = useDebounce(filters.event_type, 400);

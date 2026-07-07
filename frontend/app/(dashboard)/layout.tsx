@@ -6,6 +6,7 @@ import { AssistantProvider } from "@/lib/assistant/AssistantProvider";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
+import { RouteGuard } from "@/components/RouteGuard";
 import { TimeRangeProvider } from "@/lib/timeRange";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -14,11 +15,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppProviders>
         <ToastProvider>
           <TimeRangeProvider>
-            <AppShell>
-              <AssistantProvider>
-                <AuthGuard>{children}</AuthGuard>
-              </AssistantProvider>
-            </AppShell>
+            <AssistantProvider>
+              <AppShell>
+                <AuthGuard>
+                  <RouteGuard>{children}</RouteGuard>
+                </AuthGuard>
+              </AppShell>
+            </AssistantProvider>
           </TimeRangeProvider>
         </ToastProvider>
       </AppProviders>

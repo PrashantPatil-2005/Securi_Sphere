@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.http_timeouts import outbound_timeout
 from app.models.alert import Alert
 from app.models.notification import NotificationSettings
 
@@ -41,7 +42,7 @@ async def send_telegram(chat_id: str, message: str) -> None:
         return
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
             await client.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
     except Exception as e:
         logger.error("Failed to send Telegram: %s", e)
@@ -51,17 +52,36 @@ async def send_slack(webhook_url: str, message: str) -> None:
     if not webhook_url:
         return
     try:
-        async with httpx.AsyncClient() as client:
-            await client.post(webhook_url, json={"text": message}, timeout=10.0)
+        async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
+            await client.post(webhook_url, json={"text": message})
     except Exception as e:
         logger.error("Failed to send Slack notification: %s", e)
 
 
 async def notify_alert(db: AsyncSession, alert: Alert) -> None:
+    from app.services.notification_rules import dispatch_notification_rules
+
+    severity = alert.severity
+    subject = f"Securi Alert: {alert.title}"
+    plain = f"[{severity.upper()}] {alert.title}\n{alert.description or ''}"
+    html = f"<b>[{severity.upper()}]</b> {alert.title}\n{alert.description or ''}"
+
+    rule_deliveries = await dispatch_notification_rules(
+        db,
+        trigger_event="alert_created",
+        severity=severity,
+        subject=subject,
+        plain_body=plain,
+        html_body=html,
+    )
+    if rule_deliveries > 0:
+        return
+
+    # Legacy fallback when no rules exist
     if alert.severity not in ("critical", "high"):
         return
-    message = f"[{alert.severity.upper()}] {alert.title}\n{alert.description or ''}"
-    html_message = f"<b>[{alert.severity.upper()}]</b> {alert.title}\n{alert.description or ''}"
+    message = plain
+    html_message = html
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.email_enabled.is_(True)))
     for settings_row in result.scalars().all():
         if settings_row.email_address:
@@ -79,10 +99,28 @@ async def notify_alert(db: AsyncSession, alert: Alert) -> None:
 
 
 async def notify_offense(db: AsyncSession, offense) -> None:
+    from app.services.notification_rules import dispatch_notification_rules
+
+    risk = offense.risk_level
+    subject = f"Securi Offense: {offense.title}"
+    plain = f"[OFFENSE {risk.upper()}] #{offense.offense_number} {offense.title}"
+    html = f"<b>[OFFENSE {risk.upper()}]</b> #{offense.offense_number} {offense.title}"
+
+    rule_deliveries = await dispatch_notification_rules(
+        db,
+        trigger_event="offense_created",
+        severity=risk,
+        subject=subject,
+        plain_body=plain,
+        html_body=html,
+    )
+    if rule_deliveries > 0:
+        return
+
     if offense.risk_level not in ("critical", "high"):
         return
-    message = f"[OFFENSE {offense.risk_level.upper()}] #{offense.offense_number} {offense.title}"
-    html_message = f"<b>[OFFENSE {offense.risk_level.upper()}]</b> #{offense.offense_number} {offense.title}"
+    message = plain
+    html_message = html
     result = await db.execute(select(NotificationSettings).where(NotificationSettings.email_enabled.is_(True)))
     for settings_row in result.scalars().all():
         if settings_row.email_address:

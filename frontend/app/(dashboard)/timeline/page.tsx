@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
 import TimeRangeBar from "@/components/TimeRangeBar";
+import { TimelineReplayPlayer } from "@/components/timeline/TimelineReplayPlayer";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageHeader } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
@@ -38,8 +41,19 @@ interface TEvent {
 }
 
 export default function TimelinePage() {
+  return (
+    <Suspense fallback={<TableSkeleton rows={4} />}>
+      <TimelinePageContent />
+    </Suspense>
+  );
+}
+
+function TimelinePageContent() {
+  const searchParams = useSearchParams();
+  const hostFilter = searchParams.get("host");
   const { queryParams } = useTimeRange();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useDeepLinkedSelection("timeline");
+
   const { data: items = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["timelines", queryParams],
     queryFn: () => api<Timeline[]>(`/api/v1/timelines${buildQuery({ page_size: 100 }, queryParams)}`),
@@ -52,25 +66,35 @@ export default function TimelinePage() {
   });
 
   const active = items.find((t) => t.id === selected);
+  const filteredItems = hostFilter ? items.filter((t) => t.host_id === hostFilter) : items;
+
+  useEffect(() => {
+    if (hostFilter && filteredItems.length > 0 && !selected) {
+      setSelected(filteredItems[0].id);
+    }
+  }, [hostFilter, filteredItems, selected, setSelected]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Attack Timelines" subtitle="Reconstructed attack chains with MITRE technique mapping" />
+      <PageHeader
+        title="Attack Timelines"
+        subtitle="Reconstructed attack chains — select a timeline and replay events step by step"
+      />
       <TimeRangeBar />
       {isLoading && <TableSkeleton rows={4} />}
       {isError && <QueryError onRetry={() => refetch()} />}
       {!isLoading && !isError && items.length === 0 && (
         <EmptyState
           title="No attack timelines"
-          description="Run a simulation or wait for correlated activity to build attack chains."
+          description="Run a scenario in the Attack Lab or wait for correlated activity to build attack chains."
           icon={<Clock className="w-10 h-10 opacity-40" />}
           action="/simulation"
-          actionLabel="Run simulation"
+          actionLabel="Open Attack Lab"
         />
       )}
       <div className="grid lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.2fr)] gap-6">
         <div className="space-y-3">
-          {items.map((t) => (
+          {filteredItems.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -102,7 +126,7 @@ export default function TimelinePage() {
           ))}
         </div>
         <GlassPanel className="min-h-[420px]">
-          {!selected && <p className="text-muted text-sm">Select a timeline to view the attack chain.</p>}
+          {!selected && <p className="text-muted text-sm">Select a timeline to replay the attack chain.</p>}
           {selected && active && (
             <div>
               <div className="mb-6 pb-4 border-b border-border-subtle">
@@ -110,27 +134,7 @@ export default function TimelinePage() {
                 <p className="text-sm text-muted mt-1">{active.description}</p>
               </div>
               {eventsLoading && <TableSkeleton rows={4} />}
-              <div className="relative pl-6 space-y-0">
-                {events.map((e, i) => (
-                  <div key={e.id} className="relative pb-6 last:pb-0">
-                    {i < events.length - 1 && (
-                      <div className="absolute left-[5px] top-3 bottom-0 w-px bg-border-subtle" />
-                    )}
-                    <div className="absolute left-0 top-1.5 w-2.5 h-2.5 rounded-full bg-accent ring-4 ring-accent/20" />
-                    <div className="ml-4">
-                      <p className="text-xs text-muted tabular-nums">{new Date(e.timestamp).toLocaleString()}</p>
-                      <p className="font-medium mt-0.5">{e.event_type}</p>
-                      {e.description && <p className="text-sm text-muted mt-0.5">{e.description}</p>}
-                      <div className="flex items-center gap-2 mt-1">
-                        <SeverityBadge severity={e.severity} />
-                        {e.mitre_technique_id && (
-                          <span className="text-[10px] font-mono text-accent">{e.mitre_technique_id}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {!eventsLoading && <TimelineReplayPlayer events={events} title={active.title} />}
             </div>
           )}
         </GlassPanel>

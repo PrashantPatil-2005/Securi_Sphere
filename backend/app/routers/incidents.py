@@ -89,6 +89,8 @@ async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_d
     db.add(inc)
     await db.flush()
     await log_audit(db, "incident_create", user_id=user.id, resource_type="incident", resource_id=inc.id)
+    from app.services.playbooks import schedule_playbook_dispatch
+    await schedule_playbook_dispatch("incident_created", "incident", inc.id)
     return inc
 
 

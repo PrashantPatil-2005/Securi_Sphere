@@ -78,7 +78,109 @@ async def aggregate_daily_stats(db: AsyncSession, stat_date: date | None = None)
         await _upsert_stat(db, target, "avg_risk_score", "global", int(avg_risk), {})
         upserted += 1
 
+    upserted += await _aggregate_ueba_host_stats(db, target, day_start, day_end)
+    upserted += await _aggregate_ueba_user_stats(db, target, day_start, day_end)
+
     return upserted
+
+
+AUTH_EVENT_TYPES = frozenset({
+    "ssh_login_failure",
+    "ssh_login_success",
+    "sudo_usage",
+    "root_login",
+})
+
+
+async def _aggregate_ueba_host_stats(
+    db: AsyncSession,
+    target,
+    day_start: datetime,
+    day_end: datetime,
+) -> int:
+    count = 0
+    host_totals = (
+        await db.execute(
+            select(Event.host_id, func.count())
+            .where(Event.timestamp >= day_start, Event.timestamp < day_end)
+            .group_by(Event.host_id)
+        )
+    ).all()
+    for host_id, total in host_totals:
+        await _upsert_stat(db, target, "ueba_events_total", str(host_id), total, {"host_id": str(host_id)})
+        count += 1
+
+    host_fails = (
+        await db.execute(
+            select(Event.host_id, func.count())
+            .where(
+                Event.timestamp >= day_start,
+                Event.timestamp < day_end,
+                Event.event_type == "ssh_login_failure",
+            )
+            .group_by(Event.host_id)
+        )
+    ).all()
+    for host_id, fails in host_fails:
+        await _upsert_stat(db, target, "ueba_failed_logins", str(host_id), fails, {"host_id": str(host_id)})
+        count += 1
+
+    host_auth = (
+        await db.execute(
+            select(Event.host_id, func.count())
+            .where(
+                Event.timestamp >= day_start,
+                Event.timestamp < day_end,
+                Event.event_type.in_(AUTH_EVENT_TYPES),
+            )
+            .group_by(Event.host_id)
+        )
+    ).all()
+    for host_id, auth_count in host_auth:
+        await _upsert_stat(db, target, "ueba_auth_events", str(host_id), auth_count, {"host_id": str(host_id)})
+        count += 1
+    return count
+
+
+async def _aggregate_ueba_user_stats(
+    db: AsyncSession,
+    target,
+    day_start: datetime,
+    day_end: datetime,
+) -> int:
+    count = 0
+    user_fails = (
+        await db.execute(
+            select(Event.username, func.count())
+            .where(
+                Event.timestamp >= day_start,
+                Event.timestamp < day_end,
+                Event.event_type == "ssh_login_failure",
+                Event.username.isnot(None),
+            )
+            .group_by(Event.username)
+        )
+    ).all()
+    for username, fails in user_fails:
+        await _upsert_stat(db, target, "ueba_failed_logins", username, fails, {"username": username})
+        count += 1
+
+    user_auth = (
+        await db.execute(
+            select(Event.username, func.count())
+            .where(
+                Event.timestamp >= day_start,
+                Event.timestamp < day_end,
+                Event.event_type.in_(AUTH_EVENT_TYPES),
+                Event.username.isnot(None),
+            )
+            .group_by(Event.username)
+        )
+    ).all()
+    for username, auth_count in user_auth:
+        await _upsert_stat(db, target, "ueba_auth_events", username, auth_count, {"username": username})
+        count += 1
+    return count
 
 
 async def _upsert_stat(

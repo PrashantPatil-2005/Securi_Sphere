@@ -1,4 +1,4 @@
-# SecuriSphere — implementation wrap-up
+# Securi — implementation wrap-up
 
 **Status: in-scope pilot complete (100%)**  
 Last updated: July 2026
@@ -9,7 +9,7 @@ This document summarizes what was built, how to run it, and what remains intenti
 
 ## What you have
 
-SecuriSphere is a **mini-SIEM** for small Linux fleets (4–10 hosts): collection, detection, correlation, offenses, investigation, and a modern SOC dashboard.
+Securi is a **mini-SIEM** for small Linux fleets (4–10 hosts): collection, detection, correlation, offenses, investigation, and a modern SOC dashboard.
 
 ### Architecture (QRadar-style 3 layers)
 

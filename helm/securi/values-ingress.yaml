@@ -1,0 +1,11 @@
+# Enable Ingress + TLS (requires nginx ingress controller + cert-manager ClusterIssuer).
+ingress:
+  enabled: true
+  host: securi.example.com
+  className: nginx
+  certManager:
+    clusterIssuer: letsencrypt-prod
+
+config:
+  serverUrl: https://securi.example.com
+  frontendUrl: https://securi.example.com

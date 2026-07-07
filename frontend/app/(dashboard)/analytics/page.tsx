@@ -12,7 +12,12 @@ import { FilterBar } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { LazyEventTrendChart, LazySeverityCharts, LazyAnalyticsCharts, LazyWidget } from "@/components/LazyWidget";
-import { PageHeader, Panel } from "@/components/ui/Panel";
+import { UebaAnomaliesPanel } from "@/components/analytics/UebaAnomaliesPanel";
+import { ThreatScoresPanel } from "@/components/analytics/ThreatScoresPanel";
+import { AnalyticsRetentionPanel, AnalyticsSummaryPanel } from "@/components/analytics/AnalyticsSummaryPanel";
+import { HostRiskTrendsPanel } from "@/components/analytics/HostRiskTrendsPanel";
+import { HostRiskDrawer } from "@/components/HostRiskDrawer";
+import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { ChartSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 
@@ -24,6 +29,8 @@ const LazyLiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed
 export default function AnalyticsPage() {
   const { queryParams } = useTimeRange();
   const [hostFilter, setHostFilter] = useState("");
+  const [riskHostFilter, setRiskHostFilter] = useState("");
+  const [riskDrawerHostId, setRiskDrawerHostId] = useState<string | null>(null);
   const [alertStatus, setAlertStatus] = useState("");
   const extra = useMemo<Record<string, string>>(() => {
     const p: Record<string, string> = {};
@@ -55,7 +62,7 @@ export default function AnalyticsPage() {
   }>("event-types", hostExtra);
 
   const { data: failedLogins, isLoading: failLoading, isError: failError, refetch: refetchFail } = useSiemQuery<Record<string, unknown>>("failed-logins", hostExtra);
-  const { data: riskyHosts = [], isError: riskyError, refetch: refetchRisky } = useSiemQuery<{ host_name: string; risk_score: number; color: string; active_alerts: number }[]>("top-risky-hosts");
+  const { data: riskyHosts = [], isError: riskyError, refetch: refetchRisky } = useSiemQuery<{ host_id: string; host_name: string; risk_score: number; color: string; active_alerts: number }[]>("top-risky-hosts");
   const { data: health, isError: healthError, refetch: refetchHealth } = useSiemQuery<{ hosts: { host_name: string; health_status: string; health_score: number }[] }>("host-health");
 
   const { data: feedData } = useQuery({
@@ -82,8 +89,25 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="SIEM analytics" subtitle="Trends, distributions, and threat indicators" />
+      <PageHeader title="SIEM analytics" subtitle="Trends, distributions, UEBA baselines, and threat indicators" />
+      <UebaAnomaliesPanel />
+      <AnalyticsSummaryPanel />
       <TimeRangeBar />
+
+      <HostRiskTrendsPanel
+        hostId={riskHostFilter}
+        onHostIdChange={setRiskHostFilter}
+        onSelectHost={(id) => setRiskDrawerHostId(id)}
+      />
+
+      <ThreatScoresPanel
+        limit={10}
+        onSelectHost={(id) => setRiskDrawerHostId(id)}
+        viewAllHref="/threat-scores"
+      />
+
+      <AnalyticsRetentionPanel />
+
       <FilterBar activeCount={hostFilter ? 1 : 0}>
         <Input
           label="Host ID"
@@ -134,14 +158,21 @@ export default function AnalyticsPage() {
         <Panel title="Top risky hosts">
           {riskyError ? (
             <QueryError onRetry={() => refetchRisky()} />
+          ) : riskyHosts.length === 0 ? (
+            <EmptyState title="No risky hosts yet" description="Run Attack Lab or enroll agents to generate risk scores." />
           ) : (
           <div className="space-y-2">
             {riskyHosts.map((h) => (
-              <div key={h.host_name} className="flex items-center gap-2 text-sm">
+              <button
+                key={h.host_id}
+                type="button"
+                onClick={() => setRiskDrawerHostId(h.host_id)}
+                className="flex items-center gap-2 text-sm w-full text-left hover:text-accent transition-colors"
+              >
                 <span className="w-28 truncate">{h.host_name}</span>
                 <div className="flex-1 h-2 bg-[var(--input-bg)] rounded"><div className="h-full bg-[var(--danger)]" style={{ width: `${h.risk_score}%` }} /></div>
                 <span className="w-8 tabular-nums text-xs">{h.risk_score}</span>
-              </div>
+              </button>
             ))}
           </div>
           )}
@@ -149,6 +180,8 @@ export default function AnalyticsPage() {
         <Panel title="Host health">
           {healthError ? (
             <QueryError onRetry={() => refetchHealth()} />
+          ) : !(health?.hosts || []).length ? (
+            <EmptyState title="No host health data" description="Enroll hosts and collect metrics to see health scores." />
           ) : (
           (health?.hosts || []).map((h) => (
             <div key={h.host_name} className="flex justify-between py-2 border-b border-[var(--border-subtle)] text-sm">
@@ -165,6 +198,8 @@ export default function AnalyticsPage() {
       <Panel title="Live security feed">
         <LazyLiveSecurityFeed initial={feedInitial} />
       </Panel>
+
+      <HostRiskDrawer hostId={riskDrawerHostId} onClose={() => setRiskDrawerHostId(null)} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
-# SecuriSphere Backend Audit — Master Index
+# Securi Backend Audit — Master Index
 
-Production-grade backend audit and redesign for SecuriSphere SIEM platform.
+Production-grade backend audit and redesign for Securi SIEM platform.
 
 **Version:** 2.0.0  
 **Date:** 2026-06-21  

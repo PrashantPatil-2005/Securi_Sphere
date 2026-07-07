@@ -2,6 +2,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { Bell } from "lucide-react";
+import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
+import { useKeyboardListNav } from "@/lib/hooks/useKeyboardListNav";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePaginatedResource, useHostsList, useAlertStatusMutation, useAlertBulkMutation } from "@/lib/hooks/useApiQuery";
@@ -9,13 +11,11 @@ import { useUser } from "@/lib/hooks/useUser";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
-import { rowKeyById } from "@/lib/rowKey";
-import { cn } from "@/lib/utils/cn";
 import ExportMenu from "@/components/ExportMenu";
 import PaginationBar from "@/components/PaginationBar";
 import SortSelect from "@/components/SortSelect";
 import TimeRangeBar from "@/components/TimeRangeBar";
-import { VirtualList } from "@/components/VirtualList";
+import { VirtualDataTable, type Column } from "@/components/VirtualDataTable";
 import { AlertInvestigationPane } from "@/components/AlertInvestigationPane";
 import { PageHeader } from "@/components/ui/Panel";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
@@ -29,6 +29,7 @@ import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { useToast } from "@/components/ui/Toast";
 
 interface Alert {
   id: string;
@@ -43,58 +44,6 @@ interface Alert {
 
 const STATUSES = ["open", "investigating", "resolved", "closed"];
 
-const AlertRow = memo(function AlertRow({
-  alert,
-  selected,
-  checked,
-  showCheckbox,
-  onSelect,
-  onToggle,
-}: {
-  alert: Alert;
-  selected: boolean;
-  checked: boolean;
-  showCheckbox: boolean;
-  onSelect: (id: string) => void;
-  onToggle: (id: string, next: boolean) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "alert-row w-full text-left transition-colors flex gap-3 items-start",
-        selected && "ring-1 ring-accent/40 bg-accent/5",
-      )}
-    >
-      {showCheckbox && (
-        <input
-          type="checkbox"
-          checked={checked}
-          aria-label={`Select alert ${alert.title}`}
-          onChange={(e) => onToggle(alert.id, e.target.checked)}
-          onClick={(e) => e.stopPropagation()}
-          className="mt-3 shrink-0"
-        />
-      )}
-      <button type="button" onClick={() => onSelect(alert.id)} className="flex-1 min-w-0 text-left">
-        <div className="flex justify-between items-start gap-4">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <SeverityBadge severity={alert.severity} />
-              <span className="font-medium text-sm">{alert.title}</span>
-              <span className="text-[11px] text-[var(--muted)] capitalize">{alert.status}</span>
-              {alert.confidence != null && (
-                <span className="text-[11px] text-[var(--muted)]">{alert.confidence.toFixed(0)}% conf</span>
-              )}
-            </div>
-            {alert.description && <p className="text-sm text-[var(--muted)] truncate">{alert.description}</p>}
-            <p className="text-[11px] text-[var(--muted)] mt-1 tabular-nums">{new Date(alert.created_at).toLocaleString()}</p>
-          </div>
-        </div>
-      </button>
-    </div>
-  );
-});
-
 export default function AlertsPage() {
   return (
     <Suspense fallback={<TableSkeleton rows={6} />}>
@@ -106,6 +55,7 @@ export default function AlertsPage() {
 function AlertsPageContent() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const { queryParams } = useTimeRange();
   const listHeight = useMemo(
     () => (typeof window !== "undefined" ? Math.min(640, Math.max(320, window.innerHeight - 320)) : 480),
@@ -114,21 +64,23 @@ function AlertsPageContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
-  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("selected"));
+  const [selectedId, setSelectedId] = useDeepLinkedSelection();
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
-  const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "" });
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "", mitre_technique_id: "" });
   const debouncedQ = useDebounce(filters.q, 400);
   const debouncedRule = useDebounce(filters.rule_name, 400);
   const queryFilters = { ...filters, q: debouncedQ, rule_name: debouncedRule };
 
   useEffect(() => {
-    const id = searchParams.get("selected");
-    if (id) setSelectedId(id);
     const q = searchParams.get("q");
     if (q && !searchParams.get("selected")) setFilters((prev) => ({ ...prev, q }));
+    const mitre = searchParams.get("mitre_technique_id");
+    if (mitre) setFilters((prev) => ({ ...prev, mitre_technique_id: mitre }));
   }, [searchParams]);
 
   const { data: hosts = [] } = useHostsList();
+  const hostNames = useMemo(() => Object.fromEntries(hosts.map((h) => [h.id, h.name])), [hosts]);
   const { data: user } = useUser();
   const canMutate = user?.role.name === "admin" || user?.role.name === "analyst";
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -149,6 +101,11 @@ function AlertsPageContent() {
   });
 
   const pageItems = data?.items ?? [];
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [page, pageSize, sort, queryFilters.status, queryFilters.severity, queryFilters.host_id, debouncedQ, debouncedRule]);
+
   const allOnPageSelected = pageItems.length > 0 && pageItems.every((a) => checkedIds.has(a.id));
   const someOnPageSelected = pageItems.some((a) => checkedIds.has(a.id));
 
@@ -177,9 +134,44 @@ function AlertsPageContent() {
     (payload: { status?: string; assigned_to?: string }) => {
       const ids = Array.from(checkedIds);
       if (!ids.length) return;
-      bulkMutation.mutate({ alert_ids: ids, ...payload });
+      bulkMutation.mutate(
+        { alert_ids: ids, ...payload },
+        {
+          onSuccess: (res) => {
+            toast("success", `Updated ${res.updated} alert(s)`);
+            if (res.not_found?.length) {
+              toast("warning", `${res.not_found.length} alert(s) not found`);
+            }
+          },
+          onError: (e: Error) => toast("error", "Bulk update failed", e.message),
+        },
+      );
     },
-    [bulkMutation, checkedIds],
+    [bulkMutation, checkedIds, toast],
+  );
+
+  const bulkFromFocus = useCallback(
+    (status: string) => {
+      const alert = pageItems[activeIndex];
+      if (!alert) return;
+      if (checkedIds.size > 0) {
+        runBulk({ status, ...(status === "investigating" && user?.id ? { assigned_to: user.id } : {}) });
+      } else {
+        setCheckedIds(new Set([alert.id]));
+        bulkMutation.mutate(
+          {
+            alert_ids: [alert.id],
+            status,
+            ...(status === "investigating" && user?.id ? { assigned_to: user.id } : {}),
+          },
+          {
+            onSuccess: () => toast("success", "Alert updated"),
+            onError: (e: Error) => toast("error", "Update failed", e.message),
+          },
+        );
+      }
+    },
+    [pageItems, activeIndex, checkedIds, runBulk, bulkMutation, user?.id, toast],
   );
 
   const setStatus = useCallback(
@@ -187,19 +179,66 @@ function AlertsPageContent() {
     [statusMutation],
   );
 
-  const renderAlert = useCallback(
-    (alert: Alert) => (
-      <AlertRow
-        alert={alert}
-        selected={selectedId === alert.id}
-        checked={checkedIds.has(alert.id)}
-        showCheckbox={!!canMutate}
-        onSelect={setSelectedId}
-        onToggle={toggleChecked}
-      />
-    ),
-    [selectedId, checkedIds, toggleChecked, canMutate],
-  );
+  useKeyboardListNav({
+    enabled: pageItems.length > 0 && isDesktop,
+    itemCount: pageItems.length,
+    activeIndex,
+    setActiveIndex,
+    onActivate: (idx) => {
+      const alert = pageItems[idx];
+      if (alert) setSelectedId(alert.id);
+    },
+    onToggle: canMutate
+      ? (idx) => {
+          const alert = pageItems[idx];
+          if (alert) toggleChecked(alert.id, !checkedIds.has(alert.id));
+        }
+      : undefined,
+    onBulkResolve: canMutate ? () => bulkFromFocus("resolved") : undefined,
+    onBulkInvestigate: canMutate ? () => bulkFromFocus("investigating") : undefined,
+  });
+
+  const columns = useMemo((): Column<Alert>[] => {
+    const cols: Column<Alert>[] = [];
+    if (canMutate) {
+      cols.push({
+        key: "select",
+        header: "",
+        width: "36px",
+        render: (alert) => (
+          <input
+            type="checkbox"
+            checked={checkedIds.has(alert.id)}
+            aria-label={`Select ${alert.title}`}
+            onChange={(e) => toggleChecked(alert.id, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+      });
+    }
+    cols.push(
+      { key: "severity", header: "Severity", width: "100px", render: (a) => <SeverityBadge severity={a.severity} /> },
+      {
+        key: "title",
+        header: "Alert",
+        width: "2fr",
+        render: (a) => (
+          <div className="min-w-0">
+            <p className="font-medium truncate">{a.title}</p>
+            {a.description && <p className="text-xs text-muted truncate">{a.description}</p>}
+          </div>
+        ),
+      },
+      { key: "status", header: "Status", width: "110px", render: (a) => <span className="capitalize text-xs">{a.status}</span> },
+      { key: "host", header: "Host", width: "120px", render: (a) => <span className="text-xs truncate">{hostNames[a.host_id] ?? "—"}</span> },
+      {
+        key: "time",
+        header: "Created",
+        width: "140px",
+        render: (a) => <span className="text-xs tabular-nums text-muted">{new Date(a.created_at).toLocaleString()}</span> },
+    );
+    return cols;
+  }, [canMutate, checkedIds, toggleChecked, hostNames]);
 
   const secondaryFilterCount = [filters.host_id, filters.rule_name, filters.q].filter(Boolean).length;
 
@@ -209,10 +248,10 @@ function AlertsPageContent() {
         title={
           <span className="inline-flex items-center gap-2">
             Alerts
-            <HelpTooltip content="Select an alert to open the investigation pane. Use bulk actions or Ask AI for triage guidance and auto-generated summaries." />
+            <HelpTooltip content="Virtualized table with keyboard nav: j/k move, Enter open, Space select, i investigate, r resolve. Bulk actions when rows are checked." />
           </span>
         }
-        subtitle="Detection alerts with investigation workspace"
+        subtitle="Detection alerts with case workspace triage"
         action={<ExportMenu resource="alerts" query={buildQuery({ sort, ...queryFilters }, queryParams)} />}
       />
       <TimeRangeBar />
@@ -268,6 +307,15 @@ function AlertsPageContent() {
                 variant="ghost"
                 size="sm"
                 disabled={bulkMutation.isPending}
+                onClick={() => runBulk({ status: "investigating" })}
+              >
+                Investigate
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={bulkMutation.isPending}
                 onClick={() => runBulk({ status: "investigating", assigned_to: user?.id })}
               >
                 Assign to me
@@ -309,6 +357,11 @@ function AlertsPageContent() {
               Select all on page
             </label>
           )}
+          {isDesktop && pageItems.length > 0 && (
+            <p className="mb-2 text-[10px] text-muted">
+              Keyboard: j/k navigate · Enter open · Space select · i investigate · r resolve
+            </p>
+          )}
           {isLoading ? (
             <TableSkeleton rows={6} />
           ) : isError ? (
@@ -324,13 +377,26 @@ function AlertsPageContent() {
                   actionLabel="Run simulation"
                 />
               ) : (
-                <VirtualList
-                  items={data?.items ?? []}
-                  rowKey={rowKeyById}
-                  renderItem={renderAlert}
+                <VirtualDataTable
+                  rows={pageItems}
+                  columns={columns}
+                  rowKey={(alert) => alert.id}
                   height={listHeight}
-                  estimateSize={88}
-                  emptyMessage="No alerts"
+                  rowHeight={52}
+                  activeIndex={activeIndex}
+                  selectedKey={selectedId ?? undefined}
+                  onRowClick={(alert) => setSelectedId(alert.id)}
+                  renderMobileCard={(alert) => (
+                    <MobileAlertCard
+                      alert={alert}
+                      hostName={hostNames[alert.host_id]}
+                      selected={selectedId === alert.id}
+                      checked={checkedIds.has(alert.id)}
+                      showCheckbox={!!canMutate}
+                      onSelect={setSelectedId}
+                      onToggle={toggleChecked}
+                    />
+                  )}
                 />
               )}
             </div>
@@ -365,3 +431,48 @@ function AlertsPageContent() {
     </div>
   );
 }
+
+const MobileAlertCard = memo(function MobileAlertCard({
+  alert,
+  hostName,
+  selected,
+  checked,
+  showCheckbox,
+  onSelect,
+  onToggle,
+}: {
+  alert: Alert;
+  hostName?: string;
+  selected: boolean;
+  checked: boolean;
+  showCheckbox: boolean;
+  onSelect: (id: string) => void;
+  onToggle: (id: string, next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(alert.id)}
+      className={`w-full text-left ${selected ? "ring-1 ring-accent/40 rounded-md p-1 -m-1" : ""}`}
+    >
+      <div className="flex gap-2 items-start">
+        {showCheckbox && (
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onToggle(alert.id, e.target.checked)}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1"
+          />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <SeverityBadge severity={alert.severity} />
+            <span className="font-medium text-sm">{alert.title}</span>
+          </div>
+          <p className="text-xs text-muted capitalize">{alert.status}{hostName ? ` · ${hostName}` : ""}</p>
+        </div>
+      </div>
+    </button>
+  );
+});

@@ -10,7 +10,9 @@ from app.dependencies import get_current_user
 from app.models.event import Event
 from app.models.mitre import MitreTechnique
 from app.models.user import User
+from app.schemas.mitre import MitreDrilldownResponse
 from app.services.mitre import get_matrix_summary
+from app.services.mitre_drilldown import get_technique_drilldown
 from app.utils.query import ListParams, resolve_time_range, apply_time_range
 
 router = APIRouter(prefix="/mitre", tags=["mitre"])
@@ -27,6 +29,19 @@ class TechniqueResponse(BaseModel):
 @router.get("/techniques", response_model=list[TechniqueResponse])
 async def list_techniques(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     return list((await db.execute(select(MitreTechnique))).scalars().all())
+
+
+@router.get("/techniques/{technique_id}/drilldown", response_model=MitreDrilldownResponse)
+async def technique_drilldown(
+    technique_id: str,
+    preset: str | None = ListParams.preset(),
+    from_time: datetime | None = ListParams.from_time(),
+    to_time: datetime | None = ListParams.to_time(),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    tr = resolve_time_range(preset, from_time, to_time)
+    return await get_technique_drilldown(db, tr, technique_id)
 
 
 @router.get("/matrix")

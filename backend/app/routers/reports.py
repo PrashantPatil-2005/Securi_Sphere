@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
@@ -16,21 +16,16 @@ from app.models.siem import GeneratedReport
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
 from app.services import siem_analytics
-from app.services.export_service import export_csv, export_pdf
+from app.services.compliance_report import build_compliance_report, export_compliance_pdf, get_templates
+from app.services.executive_report import build_executive_report_data, export_executive_pdf, period_bounds
+from app.services.export_service import export_csv
 from app.utils.query import resolve_time_range
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 def _period_bounds(report_type: str) -> tuple[datetime, datetime]:
-    now = datetime.now(timezone.utc)
-    if report_type == "daily":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif report_type == "weekly":
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return start, now
+    return period_bounds(report_type)
 
 
 async def _build_report_data(db: AsyncSession, report_type: str) -> dict:
@@ -81,6 +76,71 @@ async def report_summary(
     return data
 
 
+@router.get("/executive")
+async def executive_report(
+    report_type: str = Query("weekly", pattern="^(daily|weekly|monthly)$"),
+    format: str = Query("pdf", pattern="^(json|pdf)$"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Executive-ready PDF with KPIs, MITRE, UEBA, and recommendations."""
+    data = await build_executive_report_data(db, report_type)
+    start, end = _period_bounds(report_type)
+
+    report_row = GeneratedReport(
+        user_id=user.id,
+        report_type=f"executive_{report_type}",
+        period_start=start,
+        period_end=end,
+        format=format,
+        summary=data,
+    )
+    db.add(report_row)
+    await db.commit()
+
+    filename = f"securi_executive_{report_type}.pdf"
+    if format == "pdf":
+        return export_executive_pdf(data, filename)
+    return data
+
+
+@router.get("/compliance/templates")
+async def compliance_templates(user: User = Depends(get_current_user)):
+    return get_templates()
+
+
+@router.get("/compliance")
+async def compliance_report(
+    framework: str = Query("soc2", pattern="^(soc2|iso27001)$"),
+    report_type: str = Query("monthly", pattern="^(daily|weekly|monthly)$"),
+    format: str = Query("pdf", pattern="^(json|pdf)$"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """SOC 2 / ISO 27001 control assessment with platform evidence."""
+    try:
+        data = await build_compliance_report(db, framework, report_type)
+    except ValueError as exc:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    start, end = _period_bounds(report_type)
+    report_row = GeneratedReport(
+        user_id=user.id,
+        report_type=f"compliance_{framework}_{report_type}",
+        period_start=start,
+        period_end=end,
+        format=format,
+        summary=data,
+    )
+    db.add(report_row)
+    await db.commit()
+
+    if format == "pdf":
+        return export_compliance_pdf(data, f"securi_compliance_{framework}_{report_type}.pdf")
+    return data
+
+
 @router.get("/generate")
 async def generate_report(
     report_type: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
@@ -102,7 +162,7 @@ async def generate_report(
     db.add(report_row)
     await db.commit()
 
-    filename = f"securisphere_{report_type}_report"
+    filename = f"securi_{report_type}_report"
     if format == "csv":
         rows = [
             {"metric": "total_events", "value": data["total_events"]},
@@ -112,11 +172,6 @@ async def generate_report(
             rows.append({"metric": f"risk_{h['host_name']}", "value": h["risk_score"]})
         return export_csv(rows, f"{filename}.csv")
     if format == "pdf":
-        rows = [
-            {"metric": "Total Events", "value": data["total_events"]},
-            {"metric": "Total Alerts", "value": data["total_alerts"]},
-        ]
-        for h in data["top_hosts"][:10]:
-            rows.append({"Host": h["host_name"], "Risk Score": h["risk_score"], "Alerts": h["active_alerts"]})
-        return export_pdf(rows, f"SecuriSphere {report_type.title()} Security Report", f"{filename}.pdf")
+        exec_data = await build_executive_report_data(db, report_type)
+        return export_executive_pdf(exec_data, f"{filename}.pdf")
     return data

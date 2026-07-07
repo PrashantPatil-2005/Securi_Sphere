@@ -97,8 +97,8 @@ X-Agent-Signature: HMAC-SHA256(api_key, timestamp.nonce.body)
 | Password storage | bcrypt | OK |
 | API key storage | SHA-256 hash | OK — consider pepper |
 | PII in events | username, source_ip stored | Define retention policy |
-| Audit logs | Append-only | Add tamper detection |
-| Database encryption | Not in app | Enable PostgreSQL TDE/at-rest encryption |
+| Audit logs | Append-only + hash chain | `docs/IMMUTABLE_AUDIT_STORE.md` |
+| Database encryption | Not in app | `docs/DB_ENCRYPTION_AT_REST.md` |
 | Secrets in .env | Required | Move to secrets manager |
 
 ---

@@ -1,0 +1,53 @@
+{{- $workerName := printf "%s-worker" (include "securi.fullname" .) }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $workerName }}
+  labels:
+    {{- include "securi.labels" . | nindent 4 }}
+    app.kubernetes.io/component: jobs
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "securi.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "securi.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+      initContainers:
+        {{- if .Values.postgresql.enabled }}
+        - name: wait-for-postgres
+          image: {{ .Values.init.image | quote }}
+          command: ["sh", "-c", "until nc -z {{ include "securi.postgresHost" . }} 5432; do sleep 2; done"]
+        {{- end }}
+        {{- if .Values.redis.enabled }}
+        - name: wait-for-redis
+          image: {{ .Values.init.image | quote }}
+          command: ["sh", "-c", "until nc -z {{ include "securi.redisHost" . }} 6379; do sleep 2; done"]
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: worker
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command: ["python", "-m", "app.jobs.worker"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "securi.configMapName" . }}
+            - secretRef:
+                name: {{ include "securi.secretName" . }}
+          env:
+            - name: JOB_QUEUE_RUN_WORKERS
+              value: "true"
+          livenessProbe:
+            exec:
+              command: ["python", "-m", "app.worker_health"]
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

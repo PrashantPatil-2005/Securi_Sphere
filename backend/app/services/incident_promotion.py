@@ -96,6 +96,9 @@ async def promote_offense_to_incident(
         details={"offense_id": str(offense.id), "linked_alerts": linked},
     )
 
+    from app.services.playbooks import schedule_playbook_dispatch
+    await schedule_playbook_dispatch("incident_created", "incident", incident.id)
+
     return {
         "incident_id": str(incident.id),
         "linked_alert_count": linked,

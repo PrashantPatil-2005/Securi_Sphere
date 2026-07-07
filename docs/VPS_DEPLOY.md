@@ -45,17 +45,25 @@ Restart: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
 
 ## Backups
 
-Postgres data lives in Docker volume `securi_pg_data`.
+Automated backups are built in — see [BACKUP_AUTOMATION.md](BACKUP_AUTOMATION.md). For minute-level recovery, see [PITR_RUNBOOK.md](PITR_RUNBOOK.md).
+
+Quick manual backup:
 
 ```bash
-# Backup
-docker exec securi-postgres pg_dump -U securi securi > securi_backup_$(date +%Y%m%d).sql
-
-# Restore (empty DB)
-cat securi_backup.sql | docker exec -i securi-postgres psql -U securi -d securi
+./scripts/backup-postgres.sh
 ```
 
-Schedule daily backups via cron on the VPS.
+Legacy one-liner:
+
+```bash
+docker exec securi-postgres pg_dump -U securi securi | gzip > securi_backup_$(date +%Y%m%d).sql.gz
+```
+
+Restore (empty DB):
+
+```bash
+gunzip -c securi_backup.sql.gz | docker exec -i securi-postgres psql -U securi -d securi
+```
 
 ## Agent install (monitored hosts)
 

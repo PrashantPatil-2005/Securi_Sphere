@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { PageHeader, Panel } from "@/components/ui/Panel";
+import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -142,7 +143,15 @@ export default function RulesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Detection Rules" subtitle="Threshold rules and correlation rule visibility" />
+      <PageHeader
+        title="Detection Rules"
+        subtitle="Threshold rules and correlation rule visibility"
+        action={
+          <Link href="/intel" className="btn-ghost text-sm">
+            Threat Intel →
+          </Link>
+        }
+      />
       <div className="flex gap-2">
         {(["detection", "correlation"] as const).map((t) => (
           <button
@@ -173,6 +182,9 @@ export default function RulesPage() {
           </Panel>
           <Panel title="Detection rules" subtitle={isLoading ? "Loading…" : `${rules.length} rule${rules.length === 1 ? "" : "s"}`}>
             {isLoading && <TableSkeleton rows={4} />}
+            {!isLoading && rules.length === 0 && (
+              <EmptyState title="No detection rules" description="Default rules seed on first startup. Add a custom rule above." />
+            )}
             <div className="space-y-2">
               {rules.map((r) => (
                 <div key={r.id} className="flex items-center justify-between p-3 glass-panel">
@@ -194,6 +206,9 @@ export default function RulesPage() {
         <Panel title="Correlation rules" subtitle="System rules are read-only except enable/disable; admins can add custom rules">
           {corrLoading && <TableSkeleton rows={4} />}
           {isError && <QueryError onRetry={() => refetch()} />}
+          {!corrLoading && corrRules.length === 0 && (
+            <EmptyState title="No correlation rules" description="System rules seed on first startup." />
+          )}
           <form
             onSubmit={(e) => {
               e.preventDefault();

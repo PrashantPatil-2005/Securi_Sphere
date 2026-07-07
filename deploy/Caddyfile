@@ -1,4 +1,5 @@
-# Replace securi.example.com with your domain or use :80 for LAN-only HTTP.
+# Replace admin@example.com with your domain or use :80 for LAN-only HTTP.
+# Kubernetes: use docs/KUBERNETES_INGRESS.md (nginx + cert-manager) instead of this file.
 # Place TLS certs via Caddy automatic HTTPS, or use your own.
 
 {$SECURI_DOMAIN:localhost} {

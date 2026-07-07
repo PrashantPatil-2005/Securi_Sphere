@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/Input";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Panel";
+import ExportMenu from "@/components/ExportMenu";
+import { AuditIntegrityPanel } from "@/components/AuditIntegrityPanel";
 
 interface AuditEntry {
   id: string;
@@ -51,7 +53,17 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Audit Log" subtitle="Administrative actions and security-relevant changes" />
+      <PageHeader
+        title="Audit Log"
+        subtitle="Administrative actions and security-relevant changes"
+        action={
+          <ExportMenu
+            resource="audit"
+            query={debouncedFilter ? `?action=${encodeURIComponent(debouncedFilter)}` : ""}
+          />
+        }
+      />
+      <AuditIntegrityPanel />
       <FilterBar activeCount={filter ? 1 : 0}>
         <Input
           label="Action filter"

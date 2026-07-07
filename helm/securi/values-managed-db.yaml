@@ -1,0 +1,19 @@
+# Managed PostgreSQL — disable in-cluster Postgres, set external DATABASE_URL.
+postgresql:
+  enabled: false
+
+secrets:
+  postgresPassword: ""  # unused when postgresql.enabled=false
+  databaseUrl: postgresql+asyncpg://user:pass@rds-host:5432/securi?ssl=require
+
+config:
+  serverUrl: https://securi.example.com
+  frontendUrl: https://securi.example.com
+
+image:
+  backend:
+    repository: ghcr.io/YOUR_ORG/Securi/backend
+    tag: latest
+  frontend:
+    repository: ghcr.io/YOUR_ORG/Securi/frontend
+    tag: latest

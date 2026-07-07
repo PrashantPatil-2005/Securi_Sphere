@@ -57,7 +57,7 @@ async def find_or_create_offense(
     host_id: UUID,
     title: str,
     risk_level: str = "medium",
-) -> Offense:
+) -> tuple[Offense, bool]:
     since = datetime.now(timezone.utc) - OFFENSE_WINDOW
     existing = (
         await db.execute(
@@ -75,7 +75,7 @@ async def find_or_create_offense(
     if existing:
         existing.updated_at = datetime.now(timezone.utc)
         existing.risk_level = _max_risk(existing.risk_level, risk_level)
-        return existing
+        return existing, False
 
     offense = Offense(
         offense_number=await _next_offense_number(db),
@@ -106,11 +106,13 @@ async def find_or_create_offense(
     if risk_level in ("critical", "high"):
         from app.jobs.queue import job_queue
         await job_queue.enqueue("notify_offense", {"offense_id": str(offense.id)})
-    return offense
+    from app.services.playbooks import schedule_playbook_dispatch
+    await schedule_playbook_dispatch("offense_created", "offense", offense.id)
+    return offense, True
 
 
 async def link_alert_to_offense(db: AsyncSession, alert: Alert) -> Offense:
-    offense = await find_or_create_offense(
+    offense, _created = await find_or_create_offense(
         db,
         alert.host_id,
         title=alert.title,
@@ -153,7 +155,7 @@ async def link_event_to_offense(db: AsyncSession, event: Event) -> Offense | Non
         return None
 
     risk = "high" if event.event_type in ("ssh_login_failure", "root_login", "service_stop") else "medium"
-    offense = await find_or_create_offense(
+    offense, _created = await find_or_create_offense(
         db,
         event.host_id,
         title=f"Security activity: {event.event_type}",

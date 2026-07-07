@@ -35,6 +35,10 @@ VIRUSTOTAL_API_KEY=
 AGENT_MTLS_ENABLED=true
 AGENT_MTLS_CA_CERT_PATH=/etc/securi/certs/agent-ca.pem
 TRUSTED_PROXY=true
+
+# Database — encryption at rest is infrastructure-level; see docs/DB_ENCRYPTION_AT_REST.md
+# Use TLS in transit for managed Postgres:
+# DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/securi?ssl=require
 ```
 
 Generate RS256 keys:
@@ -43,3 +47,13 @@ Generate RS256 keys:
 openssl genrsa -out jwt-private.pem 2048
 openssl rsa -in jwt-private.pem -pubout -out jwt-public.pem
 ```
+
+## Database encryption
+
+Securi does not encrypt database files inside the application. Before production:
+
+1. Run PostgreSQL on **encrypted storage** (managed RDS/Cloud SQL or LUKS/EBS).
+2. Use **private networking** — `docker-compose.prod.yml` removes public Postgres ports.
+3. Enable **TLS to Postgres** when the database is not on localhost.
+
+Full runbook: [docs/DB_ENCRYPTION_AT_REST.md](DB_ENCRYPTION_AT_REST.md)

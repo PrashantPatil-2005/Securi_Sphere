@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill OpenSearch indices from PostgreSQL (spike / dev tool)."""
+"""Backfill OpenSearch indices from PostgreSQL (bulk batches)."""
 
 import asyncio
 import sys
@@ -14,7 +14,9 @@ from app.database import async_session
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
-from app.search.indexer import index_alert, index_event, index_host
+from app.search.bulk import chunk_iterable
+from app.search.indexer import event_to_doc, index_alerts_batch, index_hosts_batch
+from app.search.opensearch_client import bulk_index_event_docs
 
 
 async def main(limit: int = 10_000) -> None:
@@ -22,23 +24,32 @@ async def main(limit: int = 10_000) -> None:
         print("Set OPENSEARCH_URL in .env")
         return
     settings.search_backend = "opensearch"
+    batch_size = settings.opensearch_bulk_size
 
     async with async_session() as db:
-        hosts = {h.id: h for h in (await db.execute(select(Host))).scalars().all()}
-        for host in hosts.values():
-            await index_host(host)
+        hosts = list((await db.execute(select(Host))).scalars().all())
+        host_map = {h.id: h.name for h in hosts}
+        host_indexed = await index_hosts_batch(hosts)
+        print(f"Indexed {host_indexed} hosts")
 
-        events = list((await db.execute(select(Event).order_by(Event.timestamp.desc()).limit(limit))).scalars().all())
-        for event in events:
-            host = hosts.get(event.host_id)
-            await index_event(event, host.name if host else "?")
+        events = list(
+            (await db.execute(select(Event).order_by(Event.timestamp.desc()).limit(limit))).scalars().all()
+        )
+        event_docs = [event_to_doc(e, host_map.get(e.host_id, "?")) for e in events]
+        events_indexed = 0
+        for chunk in chunk_iterable(event_docs, batch_size):
+            events_indexed += await bulk_index_event_docs(chunk)
+        print(f"Indexed {events_indexed} events (from {len(events)} rows)")
 
-        alerts = list((await db.execute(select(Alert).order_by(Alert.created_at.desc()).limit(min(limit, 5000)))).scalars().all())
-        for alert in alerts:
-            host = hosts.get(alert.host_id)
-            await index_alert(alert, host.name if host else "")
+        alerts = list(
+            (
+                await db.execute(select(Alert).order_by(Alert.created_at.desc()).limit(min(limit, 5000)))
+            ).scalars().all()
+        )
+        alerts_indexed = await index_alerts_batch(alerts, host_map)
+        print(f"Indexed {alerts_indexed} alerts (from {len(alerts)} rows)")
 
-    print(f"Indexed {len(hosts)} hosts, {len(events)} events, {len(alerts)} alerts")
+    print("Backfill complete")
 
 
 if __name__ == "__main__":

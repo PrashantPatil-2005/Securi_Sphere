@@ -1,10 +1,10 @@
-# SecuriSphere SIEM Pipeline (QRadar-style)
+# Securi SIEM Pipeline (QRadar-style)
 
-SecuriSphere follows the same **3-layer SIEM model** as IBM QRadar, adapted for a small Linux fleet.
+Securi follows the same **3-layer SIEM model** as IBM QRadar, adapted for a small Linux fleet.
 
-## QRadar diagram → SecuriSphere
+## QRadar diagram → Securi
 
-| QRadar | SecuriSphere | What it does |
+| QRadar | Securi | What it does |
 |--------|--------------|--------------|
 | **Event data** (firewall, syslog, Windows) | **Agent `POST /agent/events`** + **`POST /agent/windows-events`** | Host logs & Windows forwarder |
 | **Flow data** (router, switch) | **Agent `POST /agent/flows`** | Network connection summaries |
@@ -38,7 +38,7 @@ flowchart TB
     S[SIEM + Global search]
   end
 
-  C[SecuriSphere Console]
+  C[Securi Console]
 
   E --> EC
   F --> FC
@@ -100,7 +100,7 @@ Windows event IDs are mapped to normalized types (e.g. `4625` → `ssh_login_fai
 - **Search** — let analysts hunt with SIEM field syntax
 - **Console** — single pane for triage and reporting
 
-## Not yet in SecuriSphere (full QRadar parity)
+## Not yet in Securi (full QRadar parity)
 
 - Dedicated flow processor appliances
 - Packet capture / forensics store

@@ -6,7 +6,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.11-slim
 
-RUN useradd -m -u 1000 securi
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1000 securi
 WORKDIR /app
 
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
@@ -21,4 +24,4 @@ RUN python -c "import sys; sys.path.insert(0, '/app'); from pathlib import Path;
 USER securi
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "30"]

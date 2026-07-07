@@ -4,3 +4,13 @@ services:
 
   redis:
     ports: []
+
+  backend:
+    volumes:
+      - securi_backups:/var/backups/securi
+    environment:
+      BACKUP_DIRECTORY: /var/backups/securi
+      BACKUP_ENABLED: "true"
+
+volumes:
+  securi_backups:

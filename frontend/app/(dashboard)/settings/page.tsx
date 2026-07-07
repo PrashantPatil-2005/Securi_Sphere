@@ -8,17 +8,15 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { useTheme } from "@/lib/theme/ThemeProvider";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils/cn";
 import { NotificationSettingsPanel } from "@/components/NotificationSettingsPanel";
+import { NotificationRulesPanel } from "@/components/settings/NotificationRulesPanel";
+import { TeamManagementPanel } from "@/components/settings/TeamManagementPanel";
+import { PlaybooksPanel } from "@/components/settings/PlaybooksPanel";
 import { QueryError } from "@/components/ui/QueryError";
+import { Tabs, TabPanel } from "@/components/ui/Tabs";
+import { useUser } from "@/lib/hooks/useUser";
 
-type Category = "appearance" | "notifications" | "system";
-
-const categories: { id: Category; label: string }[] = [
-  { id: "appearance", label: "Appearance" },
-  { id: "notifications", label: "Notifications" },
-  { id: "system", label: "System" },
-];
+type Category = "appearance" | "notifications" | "system" | "automation" | "team";
 
 const AppearanceSettings = memo(function AppearanceSettings() {
   const { theme, setTheme, reducedMotion, setReducedMotion } = useTheme();
@@ -94,6 +92,25 @@ const SystemSettings = memo(function SystemSettings({
 export default function SettingsPage() {
   const [active, setActive] = useState<Category>("appearance");
   const [search, setSearch] = useState("");
+  const { data: user } = useUser();
+  const isAdmin = user?.role?.name === "admin";
+  const isAnalyst = user?.role?.name === "analyst" || isAdmin;
+
+  const categories = useMemo(() => {
+    const base: { id: Category; label: string }[] = [
+      { id: "appearance", label: "Appearance" },
+      { id: "notifications", label: "Notifications" },
+      { id: "system", label: "System" },
+    ];
+    if (isAnalyst) base.push({ id: "automation", label: "Playbooks" });
+    if (isAdmin) base.push({ id: "team", label: "Team" });
+    return base;
+  }, [isAdmin, isAnalyst]);
+
+  const tabItems = useMemo(
+    () => categories.map((c) => ({ id: c.id, label: c.label, panelId: `settings-panel-${c.id}` })),
+    [categories],
+  );
 
   const { data: publicConfig, isError, refetch } = useQuery({
     queryKey: ["settings", "public"],
@@ -105,7 +122,7 @@ export default function SettingsPage() {
     if (!search.trim()) return categories;
     const q = search.toLowerCase();
     return categories.filter((c) => c.label.toLowerCase().includes(q));
-  }, [search]);
+  }, [search, categories]);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -122,27 +139,26 @@ export default function SettingsPage() {
         />
       </div>
       <div className="flex flex-col lg:flex-row gap-6">
-        <nav className="lg:w-48 shrink-0 flex lg:flex-col gap-1" role="tablist">
-          {filtered.map((cat) => (
-            <button
-              key={cat.id}
-              role="tab"
-              aria-selected={active === cat.id}
-              onClick={() => setActive(cat.id)}
-              className={cn(
-                "px-3 py-2 rounded-md text-body font-medium text-left whitespace-nowrap transition-colors",
-                active === cat.id ? "bg-[var(--sidebar-active)] text-accent" : "text-muted hover:text-foreground hover:bg-[var(--sidebar-hover)]",
-              )}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </nav>
-        <div className="flex-1 min-w-0">
+        <Tabs
+          tabs={filtered.length ? tabItems.filter((t) => filtered.some((c) => c.id === t.id)) : tabItems}
+          active={active}
+          onChange={setActive}
+          variant="sidebar"
+          ariaLabel="Settings categories"
+          className="lg:w-48 shrink-0"
+        />
+        <TabPanel id={`settings-panel-${active}`} labelledBy={`tab-${active}`} className="flex-1 min-w-0">
           {active === "appearance" && <AppearanceSettings />}
-          {active === "notifications" && <NotificationSettingsPanel />}
+          {active === "notifications" && (
+            <div className="space-y-6">
+              <NotificationSettingsPanel />
+              <NotificationRulesPanel />
+            </div>
+          )}
           {active === "system" && (isError ? <QueryError onRetry={() => refetch()} /> : <SystemSettings publicConfig={publicConfig} />)}
-        </div>
+          {active === "automation" && isAnalyst && <PlaybooksPanel isAdmin={isAdmin} />}
+          {active === "team" && isAdmin && <TeamManagementPanel />}
+        </TabPanel>
       </div>
     </div>
   );

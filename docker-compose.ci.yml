@@ -1,0 +1,57 @@
+# CI smoke stack — Postgres + Redis + backend (no OpenSearch/frontend).
+# Usage: docker compose -f docker-compose.ci.yml up -d --build --wait
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: securi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smokepass}
+      POSTGRES_DB: securi
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securi -d securi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://securi:${POSTGRES_PASSWORD:-smokepass}@postgres:5432/securi
+      JWT_SECRET: ${JWT_SECRET:-ci-smoke-test-secret-key-minimum-length}
+      REDIS_URL: redis://redis:6379/0
+      JOB_QUEUE_BACKEND: redis
+      JOB_QUEUE_RUN_WORKERS: "false"
+      WS_PUBSUB_BACKEND: redis
+      SEARCH_BACKEND: postgres
+      ENVIRONMENT: production
+      DEBUG: "false"
+      ALLOW_REGISTRATION: "true"
+      ENABLE_SIMULATION: "true"
+      ASYNC_EVENT_PIPELINE: "false"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

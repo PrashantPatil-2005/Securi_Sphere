@@ -1,0 +1,116 @@
+# Default values for SecuriSphere Helm chart.
+# See docs/HELM.md for install instructions.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  backend:
+    repository: ghcr.io/example/securi/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: ghcr.io/example/securi/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+
+postgresql:
+  enabled: true
+  image: postgres:16-alpine
+  auth:
+    username: securi
+    database: securi
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  # When enabled: false, set externalUrl e.g. redis://elasticache:6379/0
+  externalUrl: ""
+
+backend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+worker:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+frontend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+backup:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+
+secrets:
+  # Set create: false and existingSecret when using External Secrets / Sealed Secrets
+  create: true
+  existingSecret: ""
+  postgresPassword: changeme
+  jwtSecret: changeme-use-at-least-32-random-characters
+  # Leave empty to auto-build from in-cluster Postgres settings
+  databaseUrl: ""
+
+config:
+  environment: production
+  debug: false
+  allowRegistration: false
+  enableSimulation: false
+  excludeSimulatedFromDashboard: true
+  trustedProxy: true
+  serverUrl: https://securi.example.com
+  frontendUrl: https://securi.example.com
+  searchBackend: postgres
+  retentionDays: 90
+  asyncEventPipeline: true
+  eventPartitioningEnabled: false
+  jwtAlgorithm: HS256
+  jobQueueBackend: redis
+  jobQueueWorkers: "2"
+  jobQueueRunWorkers: false
+  wsPubsubBackend: redis
+  backupEnabled: true
+  backupDirectory: /var/backups/securi
+  backupRetentionDays: 30
+  backupScheduleHour: 1
+
+init:
+  image: busybox:1.36
+
+gracefulShutdown:
+  terminationGracePeriodSeconds: 45
+  preStopSleepSeconds: 5
+
+ingress:
+  enabled: false
+  className: nginx
+  host: securi.example.com
+  annotations: {}
+  tls:
+    enabled: true
+    secretName: ""
+  certManager:
+    # Set cluster issuer name; install ClusterIssuer separately (deploy/cert-manager/)
+    clusterIssuer: letsencrypt-prod
+  stickySessions: true

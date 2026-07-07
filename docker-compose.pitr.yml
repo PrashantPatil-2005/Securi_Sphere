@@ -1,0 +1,21 @@
+# Optional overlay — enable PostgreSQL WAL archiving for self-hosted PITR.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.pitr.yml up -d postgres
+# Verify: ./scripts/pitr-check.sh
+services:
+  postgres:
+    volumes:
+      - securi_wal_archive:/var/lib/postgresql/wal_archive
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f
+      - -c
+      - wal_keep_size=1GB
+
+volumes:
+  securi_wal_archive:

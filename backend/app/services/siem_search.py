@@ -1,13 +1,14 @@
-"""SIEM-style query parser: host:web01 severity:critical event_type:failed_login"""
+"""SIEM-style query parser: host:web01 severity:critical source_ip:ref:bad_ips"""
 import re
 from datetime import datetime
 
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
+from app.services.reference_sets import resolve_ref_filters
 from app.utils.query import TIME_PRESETS, resolve_time_range
 
 FIELD_ALIASES = {
@@ -79,6 +80,7 @@ async def execute_siem_search(
     limit: int = 50,
 ) -> dict:
     parsed = parse_siem_query(query)
+    parsed = await resolve_ref_filters(db, parsed)
     tr = resolve_time_range(parsed.get("preset") or preset, from_time, to_time)
 
     from app.search.opensearch_client import siem_search_opensearch
@@ -128,6 +130,17 @@ async def execute_siem_search(
                 Event.metadata_["username"].astext.ilike(username_filter),
             )
         )
+    elif "username" in parsed.get("in_filters", {}):
+        values = parsed["in_filters"]["username"]
+        if not values:
+            event_clauses.append(false())
+        else:
+            event_clauses.append(
+                or_(
+                    Event.username.in_(values),
+                    Event.metadata_["username"].astext.in_(values),
+                )
+            )
     if "source_ip" in parsed["filters"]:
         ip_filter = parsed["filters"]["source_ip"]
         event_clauses.append(
@@ -136,6 +149,17 @@ async def execute_siem_search(
                 Event.metadata_["source_ip"].astext == ip_filter,
             )
         )
+    elif "source_ip" in parsed.get("in_filters", {}):
+        values = parsed["in_filters"]["source_ip"]
+        if not values:
+            event_clauses.append(false())
+        else:
+            event_clauses.append(
+                or_(
+                    Event.source_ip.in_(values),
+                    Event.metadata_["source_ip"].astext.in_(values),
+                )
+            )
     if parsed["free_text"]:
         pattern = f"%{parsed['free_text']}%"
         event_clauses.append(

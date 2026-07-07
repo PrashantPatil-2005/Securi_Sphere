@@ -1,4 +1,4 @@
-# Next Sprint Plan — SecuriSphere
+# Next Sprint Plan — Securi
 
 **Duration:** 2 weeks (10 working days)  
 **Goal:** Close the investigation workflow gap, harden frontend data layer, add real API tests, and validate OpenSearch as the search backend.

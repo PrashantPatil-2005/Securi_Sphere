@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { Drawer } from "@/components/ui/Drawer";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { QueryError } from "@/components/ui/QueryError";
+import { HostRiskHistoryChart } from "@/components/charts/HostRiskHistoryChart";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 
 interface RiskData {
@@ -73,16 +74,7 @@ export function HostRiskDrawer({
           {data.history.length > 0 && (
             <div>
               <h3 className="text-subheading mb-3">Score history</h3>
-              <div className="flex items-end gap-1 h-24">
-                {data.history.map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 bg-danger/60 rounded-t min-h-[4px]"
-                    style={{ height: `${Math.max(8, h.risk_score)}%` }}
-                    title={`${h.risk_score} — ${new Date(h.recorded_at).toLocaleDateString()}`}
-                  />
-                ))}
-              </div>
+              <HostRiskHistoryChart history={data.history} />
             </div>
           )}
         </div>

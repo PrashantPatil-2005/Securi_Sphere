@@ -1,0 +1,19 @@
+SecuriSphere has been deployed.
+
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Backend API:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "securi.fullname" . }}-backend 8000:8000
+  curl http://localhost:8000/health/ready
+
+Frontend:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "securi.fullname" . }}-frontend 3000:3000
+  open http://localhost:3000
+
+{{- if .Values.ingress.enabled }}
+Public URL: https://{{ .Values.ingress.host }}
+  kubectl -n {{ .Release.Namespace }} get ingress,certificate
+{{- end }}
+
+Docs: docs/HELM.md · Ingress/TLS: docs/KUBERNETES_INGRESS.md

@@ -43,6 +43,7 @@ async def query_events(
     cursor: str | None = None,
     count_only: bool = False,
     include_simulated: bool | None = None,
+    mitre_technique_id: str | None = None,
 ):
     query = select(Event)
     count_q = select(func.count()).select_from(Event)
@@ -73,6 +74,10 @@ async def query_events(
         )
     if status:
         clauses.append(Event.metadata_["status"].astext.ilike(status if exact else f"%{status}%"))
+    if mitre_technique_id:
+        from app.services.mitre import event_technique_clause
+
+        clauses.append(event_technique_clause(mitre_technique_id))
     if q:
         if exact:
             clauses.append(
@@ -177,6 +182,7 @@ async def query_alerts(
     sort: SortOrder = SortOrder.newest,
     page: int = 1,
     page_size: int = 50,
+    mitre_technique_id: str | None = None,
 ):
     query = select(Alert).outerjoin(AlertRule, Alert.rule_id == AlertRule.id)
     count_q = select(func.count()).select_from(Alert).outerjoin(AlertRule, Alert.rule_id == AlertRule.id)
@@ -192,6 +198,8 @@ async def query_alerts(
         clauses.append(Alert.assigned_to == assigned_to)
     if rule_name:
         clauses.append(AlertRule.name.ilike(f"%{rule_name}%"))
+    if mitre_technique_id:
+        clauses.append(Alert.mitre_technique_id == mitre_technique_id)
     if q:
         if exact:
             clauses.append(or_(Alert.title == q, Alert.description == q))

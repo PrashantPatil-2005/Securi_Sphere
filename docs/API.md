@@ -64,6 +64,10 @@ Static: `GET /install.sh` â€” agent installer script
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | GET | `/audit` | admin | Audit log entries |
+| GET | `/audit/export` | admin | Export audit log (csv/json/pdf) |
+| GET | `/audit/integrity` | admin | Verify audit hash chain |
+| GET | `/backups` | admin | List Postgres backups |
+| POST | `/backups/run` | admin | Trigger manual backup |
 | GET | `/mitre/matrix` | all | MITRE ATT&CK matrix from events |
 | GET | `/mitre/techniques` | all | Seeded MITRE techniques |
 | GET/POST/PATCH/DELETE | `/alert-rules` | admin/analyst | Detection rule CRUD |

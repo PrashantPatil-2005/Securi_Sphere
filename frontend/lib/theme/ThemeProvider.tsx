@@ -4,8 +4,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "securisphere-theme";
-const REDUCED_MOTION_KEY = "securisphere-reduced-motion";
+const STORAGE_KEY = "securi-theme";
+const LEGACY_THEME_KEY = "securisphere-theme";
+const REDUCED_MOTION_KEY = "securi-reduced-motion";
+const LEGACY_REDUCED_MOTION_KEY = "securisphere-reduced-motion";
+
+function readStoredTheme(): Theme {
+  const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_THEME_KEY);
+  return stored === "light" ? "light" : "dark";
+}
 
 interface ThemeContextValue {
   theme: Theme;
@@ -32,12 +39,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [reducedMotion, setReducedMotionState] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const resolved = stored === "light" ? "light" : "dark";
+    const resolved = readStoredTheme();
     setThemeState(resolved);
     applyTheme(resolved);
 
-    const motionStored = localStorage.getItem(REDUCED_MOTION_KEY);
+    const motionStored =
+      localStorage.getItem(REDUCED_MOTION_KEY) ?? localStorage.getItem(LEGACY_REDUCED_MOTION_KEY);
     const motionResolved =
       motionStored === "true"
         ? true

@@ -79,6 +79,8 @@ async def register_agent(body: AgentRegisterRequest, db: AsyncSession = Depends(
         await check_agent_integrity(db, host, body.agent_hash, body.agent_version)
 
     await db.flush()
+    from app.search.indexer import index_host
+    await index_host(host)
     await broadcast_host_update(host, "host_enrolled" if not was_enrolled else "host_status")
 
     return AgentRegisterResponse(api_key=api_key, host_id=host.id)
@@ -94,10 +96,15 @@ async def heartbeat(
     host.last_seen = datetime.now(timezone.utc)
 
     payload = HeartbeatPayload.model_validate(auth.parse_json()) if auth.raw_body else HeartbeatPayload()
+    status_changed = False
     if host.status in ("offline", "critical", "warning"):
         host.status = "online"
+        status_changed = True
     if payload.agent_hash or payload.agent_version:
         await check_agent_integrity(db, host, payload.agent_hash, payload.agent_version)
+    if status_changed:
+        from app.search.indexer import index_host
+        await index_host(host)
     return {"status": "ok"}
 
 

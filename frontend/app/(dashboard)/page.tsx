@@ -1,16 +1,22 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Server, Activity, Shield } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Server, Activity, Shield, LayoutGrid } from "lucide-react";
+import { api } from "@/lib/api";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
+import { DashboardCustomizer } from "@/components/dashboard/DashboardCustomizer";
+import { SavedSearchWidget } from "@/components/dashboard/SavedSearchWidget";
+import { savedSearchIdFromWidget } from "@/lib/dashboardWidgets";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
+import { Button } from "@/components/ui/Button";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -157,7 +163,7 @@ const AttackTimelines = memo(function AttackTimelines() {
       {data.slice(0, 5).map((t) => (
         <Link
           key={t.id}
-          href="/timeline"
+          href={`/timeline?timeline=${t.id}`}
           className="block p-3 rounded-lg border border-border-subtle hover:border-border hover:bg-[var(--sidebar-hover)] transition-all duration-fast"
         >
           <div className="flex items-center justify-between gap-2">
@@ -173,37 +179,97 @@ const AttackTimelines = memo(function AttackTimelines() {
   );
 });
 
+function renderWidget(
+  id: string,
+  riskHostId: string | null,
+  setRiskHostId: (id: string | null) => void,
+) {
+  switch (id) {
+    case "kpis":
+      return <ExecutiveKpis key={id} />;
+    case "onboarding":
+      return <OnboardingChecklist key={id} />;
+    case "timeline":
+      return (
+        <Panel key={id} title="Security timeline" subtitle="Event volume over selected period">
+          <SecurityTimeline />
+        </Panel>
+      );
+    case "risky_hosts":
+      return (
+        <Panel key={id} title="Host risk ranking" subtitle="Highest risk scores in your environment">
+          <RiskyHostsWidget onSelect={setRiskHostId} />
+        </Panel>
+      );
+    case "attack_timelines":
+      return (
+        <Panel key={id} title="Active attack timelines" subtitle="Correlated threat sequences">
+          <AttackTimelines />
+        </Panel>
+      );
+    case "live_feed":
+      return (
+        <Panel key={id} title="Live security feed" subtitle="Real-time events via WebSocket">
+          <LiveSecurityFeed initial={[]} />
+        </Panel>
+      );
+    default: {
+      const searchId = savedSearchIdFromWidget(id);
+      if (searchId) return <SavedSearchWidget key={id} searchId={searchId} />;
+      return null;
+    }
+  }
+}
+
 export default function ExecutiveDashboard() {
   const [riskHostId, setRiskHostId] = useState<string | null>(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+
+  const { data: layout } = useQuery({
+    queryKey: ["dashboard-layout"],
+    queryFn: () => api<{ widgets: { id: string; visible: boolean }[] }>("/api/v1/dashboard/layout"),
+    staleTime: 120_000,
+  });
+
+  const visibleWidgets = (layout?.widgets ?? []).filter((w) => w.visible);
+  const blocks: ReactNode[] = [];
+  let i = 0;
+  while (i < visibleWidgets.length) {
+    const current = visibleWidgets[i];
+    const next = visibleWidgets[i + 1];
+    if (current.id === "risky_hosts" && next?.id === "attack_timelines") {
+      blocks.push(
+        <div key="risk-row" className="grid lg:grid-cols-2 gap-6">
+          {renderWidget("risky_hosts", riskHostId, setRiskHostId)}
+          {renderWidget("attack_timelines", riskHostId, setRiskHostId)}
+        </div>,
+      );
+      i += 2;
+      continue;
+    }
+    blocks.push(renderWidget(current.id, riskHostId, setRiskHostId));
+    i += 1;
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Security Operations"
         subtitle="Real-time overview of your security posture"
-        action={<TimeRangeBar />}
+        action={
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setCustomizeOpen(true)}>
+              <LayoutGrid className="w-4 h-4" />
+              Customize
+            </Button>
+            <TimeRangeBar />
+          </div>
+        }
       />
 
-      <ExecutiveKpis />
-
-      <OnboardingChecklist />
-
-      <Panel title="Security timeline" subtitle="Event volume over selected period">
-        <SecurityTimeline />
-      </Panel>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Panel title="Host risk ranking" subtitle="Highest risk scores in your environment">
-          <RiskyHostsWidget onSelect={setRiskHostId} />
-        </Panel>
-        <Panel title="Active attack timelines" subtitle="Correlated threat sequences">
-          <AttackTimelines />
-        </Panel>
-      </div>
-
-      <Panel title="Live security feed" subtitle="Real-time events via WebSocket">
-        <LiveSecurityFeed initial={[]} />
-      </Panel>
+      {blocks}
       <HostRiskDrawer hostId={riskHostId} onClose={() => setRiskHostId(null)} />
+      <DashboardCustomizer open={customizeOpen} onClose={() => setCustomizeOpen(false)} />
     </div>
   );
 }

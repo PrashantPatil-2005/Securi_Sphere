@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { api } from "@/lib/api";
+import { MfaSecurityPanel } from "@/components/profile/MfaSecurityPanel";
 import type { UserMe } from "@/lib/hooks/useUser";
 
 export default function ProfilePage() {
@@ -166,6 +167,8 @@ export default function ProfilePage() {
               </Button>
             </form>
           </Panel>
+
+          <MfaSecurityPanel />
         </div>
       </div>
     </div>

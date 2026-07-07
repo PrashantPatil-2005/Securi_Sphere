@@ -1,4 +1,4 @@
-# SecuriSphere Production Transformation
+# Securi Production Transformation
 
 This document consolidates Phases 1–15 of the production-grade transformation: audit findings, implemented improvements, and the enterprise roadmap.
 

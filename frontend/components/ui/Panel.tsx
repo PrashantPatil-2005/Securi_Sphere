@@ -2,7 +2,7 @@ import { memo, type ReactNode } from "react";
 import Link from "next/link";
 
 interface PanelProps {
-  title?: string;
+  title?: ReactNode;
   subtitle?: string;
   action?: ReactNode;
   children: ReactNode;

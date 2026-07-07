@@ -18,6 +18,7 @@ import {
 import { useWsMessages } from "@/lib/websocket";
 import { cn } from "@/lib/utils/cn";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { DemoModeBanner } from "./DemoModeBanner";
 
 function NotificationCenter() {
   const queryClient = useQueryClient();
@@ -268,6 +269,7 @@ export function TopNav({ onMenuClick, showMenu }: TopNavProps) {
         </div>
       </div>
       <ConnectionBanner />
+      <DemoModeBanner />
     </header>
   );
 }

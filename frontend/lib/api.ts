@@ -89,6 +89,7 @@ function parseApiError(body: unknown, status: number): string {
     }
   }
   if (status === 403) return "Insufficient permissions — admin or analyst role required";
+  if (status === 429) return "Too many attempts. Please wait a few minutes and try again.";
   if (status === 401) return "Not logged in — please sign in again";
   if (status >= 500) return "Server error — check backend logs";
   return "Request failed";

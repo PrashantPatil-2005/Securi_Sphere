@@ -17,3 +17,7 @@ build/
 *.egg-info/
 .pytest_cache/
 securi_pg_data/
+backend/data/backups/
+data/backups/
+data/pitr/
+k8s/secret.yaml

@@ -8,7 +8,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 # Must be set before app import so Settings and lifespan behave for tests.
-os.environ.setdefault("TESTING", "true")
+os.environ["TESTING"] = "true"
+os.environ["REDIS_URL"] = ""
+os.environ["JOB_QUEUE_BACKEND"] = "memory"
+os.environ["WS_PUBSUB_BACKEND"] = "memory"
 os.environ.setdefault("JWT_SECRET", "test-secret-key-minimum-length-required")
 os.environ.setdefault("ASYNC_EVENT_PIPELINE", "false")
 
@@ -28,41 +31,50 @@ TEST_USERS = {
 TEST_PASSWORD = "testpass123"
 
 
-@pytest_asyncio.fixture(scope="session")
+_db_seeded = False
+
+
+@pytest_asyncio.fixture
 async def prepare_database():
+    global _db_seeded
+    from app.database import engine
+
+    await engine.dispose()
     try:
-        await migrate_schema()
+        if not _db_seeded:
+            await migrate_schema()
+            async with async_session() as db:
+                await seed_roles(db)
+                roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
+                for email, role_name in TEST_USERS.items():
+                    existing = (
+                        await db.execute(select(User).where(User.email == email))
+                    ).scalar_one_or_none()
+                    if existing:
+                        existing.hashed_password = hash_password(TEST_PASSWORD)
+                        existing.role_id = roles[role_name].id
+                        existing.is_active = True
+                        existing.failed_login_attempts = 0
+                        existing.locked_until = None
+                    else:
+                        db.add(
+                            User(
+                                email=email,
+                                hashed_password=hash_password(TEST_PASSWORD),
+                                role_id=roles[role_name].id,
+                                full_name=role_name.capitalize(),
+                            )
+                        )
+                await db.commit()
+            _db_seeded = True
     except Exception as exc:
         pytest.skip(f"Database unavailable for integration tests: {exc}")
-    async with async_session() as db:
-        await seed_roles(db)
-        roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
-        for email, role_name in TEST_USERS.items():
-            existing = (
-                await db.execute(select(User).where(User.email == email))
-            ).scalar_one_or_none()
-            if existing:
-                existing.hashed_password = hash_password(TEST_PASSWORD)
-                existing.role_id = roles[role_name].id
-                existing.is_active = True
-                existing.failed_login_attempts = 0
-                existing.locked_until = None
-            else:
-                db.add(
-                    User(
-                        email=email,
-                        hashed_password=hash_password(TEST_PASSWORD),
-                        role_id=roles[role_name].id,
-                        full_name=role_name.capitalize(),
-                    )
-                )
-        await db.commit()
     yield
 
 
 @pytest_asyncio.fixture
 async def client(prepare_database):
-    transport = ASGITransport(app=app, lifespan="auto")
+    transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
 

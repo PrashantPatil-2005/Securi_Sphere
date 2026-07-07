@@ -1,11 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth_cookies import clear_auth_cookies, set_auth_cookies
+from app.auth_cookies import clear_auth_cookies
+from app.services.auth_session import issue_auth_tokens
 from app.config import settings
 from app.database import get_db
 from app.dependencies import client_ip, get_current_user
@@ -18,7 +21,14 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    LoginResponse,
     LogoutRequest,
+    MfaDisableRequest,
+    MfaEnableRequest,
+    MfaEnableResponse,
+    MfaSetupResponse,
+    MfaStatusResponse,
+    MfaVerifyRequest,
     ProfileUpdateRequest,
     RefreshRequest,
     RegisterRequest,
@@ -27,16 +37,30 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.security import (
-    create_access_token,
-    create_refresh_token,
+    create_mfa_pending_token,
+    decode_mfa_pending_token,
     decode_token,
     generate_reset_token,
     hash_password,
     hash_token,
     verify_password,
 )
+from app.services.mfa import (
+    generate_backup_codes,
+    generate_totp_secret,
+    hash_backup_codes,
+    totp_provisioning_uri,
+    verify_backup_code,
+    verify_totp,
+)
 from app.services.audit import log_audit
 from app.services.notifications import send_email
+from app.services.recovery_rate_limit import (
+    check_forgot_password,
+    check_mfa_verify,
+    check_reset_password,
+    record_reset_token_failure,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -52,6 +76,9 @@ DEV_USERS = {
     "viewer@test.local": "viewer",
 }
 DEV_USER_PASSWORD = "testpass123"
+
+DEMO_USER_EMAIL = "demo@securi.local"
+DEMO_USER_PASSWORD = "Demo1234!"
 
 
 async def seed_roles(db: AsyncSession) -> None:
@@ -92,32 +119,33 @@ async def seed_dev_users(db: AsyncSession) -> None:
             )
 
 
-async def _issue_tokens(
-    db: AsyncSession,
-    user: User,
-    request: Request,
-    response: Response,
-) -> TokenResponse:
-    now = datetime.now(timezone.utc)
-    access = create_access_token(str(user.id), user.role.name)
-    refresh = create_refresh_token(str(user.id))
-    refresh_hash = hash_token(refresh)
-    db.add(RefreshToken(
-        user_id=user.id,
-        token_hash=refresh_hash,
-        expires_at=now + timedelta(days=settings.jwt_refresh_expire_days),
-        created_at=now,
-    ))
-    db.add(UserSession(
-        user_id=user.id,
-        refresh_token_hash=refresh_hash,
-        device_name=request.headers.get("X-Device-Name"),
-        ip_address=client_ip(request),
-        user_agent=request.headers.get("User-Agent", "")[:512],
-        expires_at=now + timedelta(days=settings.jwt_refresh_expire_days),
-    ))
-    set_auth_cookies(response, access, refresh)
-    return TokenResponse(access_token=access, refresh_token=refresh)
+async def seed_demo_users(db: AsyncSession) -> None:
+    """Seed pilot demo admin when DEMO_MODE=true (any environment)."""
+    if not settings.demo_mode or settings.testing:
+        return
+    roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
+    admin = roles.get("admin")
+    if not admin:
+        return
+    existing = (
+        await db.execute(select(User).where(User.email == DEMO_USER_EMAIL))
+    ).scalar_one_or_none()
+    if existing:
+        existing.hashed_password = hash_password(DEMO_USER_PASSWORD)
+        existing.role_id = admin.id
+        existing.is_active = True
+        existing.full_name = existing.full_name or "Demo Admin"
+        existing.failed_login_attempts = 0
+        existing.locked_until = None
+    else:
+        db.add(
+            User(
+                email=DEMO_USER_EMAIL,
+                hashed_password=hash_password(DEMO_USER_PASSWORD),
+                role_id=admin.id,
+                full_name="Demo Admin",
+            )
+        )
 
 
 @router.post("/register", response_model=UserResponse)
@@ -146,7 +174,7 @@ async def register(body: RegisterRequest, request: Request, db: AsyncSession = D
     return result.scalar_one()
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=LoginResponse)
 async def login(
     body: LoginRequest,
     request: Request,
@@ -165,7 +193,7 @@ async def login(
             detail=f"Account locked until {user.locked_until.isoformat()}",
         )
 
-    if not user or not verify_password(body.password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(body.password, user.hashed_password):
         if user:
             user.failed_login_attempts += 1
             if user.failed_login_attempts >= settings.account_lockout_attempts:
@@ -176,9 +204,133 @@ async def login(
 
     user.failed_login_attempts = 0
     user.locked_until = None
+
+    if user.mfa_enabled and user.mfa_secret:
+        mfa_token = create_mfa_pending_token(str(user.id))
+        await log_audit(db, "mfa_challenge", user_id=user.id, ip_address=client_ip(request))
+        return LoginResponse(mfa_required=True, mfa_token=mfa_token)
+
     user.last_login = now
     await log_audit(db, "login", user_id=user.id, ip_address=client_ip(request))
-    return await _issue_tokens(db, user, request, response)
+    tokens = await issue_auth_tokens(db, user, request, response)
+    return LoginResponse(access_token=tokens.access_token, refresh_token=tokens.refresh_token)
+
+
+@router.post("/mfa/verify", response_model=TokenResponse)
+async def verify_mfa_login(
+    body: MfaVerifyRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    await check_mfa_verify(client_ip(request))
+    try:
+        payload = decode_mfa_pending_token(body.mfa_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
+
+    user_id = payload.get("sub")
+    try:
+        uid = UUID(str(user_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=401, detail="Invalid MFA session")
+    result = await db.execute(
+        select(User).options(selectinload(User.role)).where(User.id == uid)
+    )
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active or not user.mfa_enabled or not user.mfa_secret:
+        raise HTTPException(status_code=401, detail="MFA not configured")
+
+    ok = verify_totp(user.mfa_secret, body.code)
+    backup_used = False
+    if not ok:
+        matched, remaining = verify_backup_code(user.mfa_backup_codes or [], body.code)
+        if matched:
+            user.mfa_backup_codes = remaining
+            backup_used = True
+            ok = True
+    if not ok:
+        await log_audit(db, "mfa_failed", user_id=user.id, ip_address=client_ip(request))
+        raise HTTPException(status_code=401, detail="Invalid authentication code")
+
+    user.last_login = datetime.now(timezone.utc)
+    await log_audit(
+        db,
+        "login",
+        user_id=user.id,
+        ip_address=client_ip(request),
+        details={"mfa": True, "backup_code": backup_used},
+    )
+    return await issue_auth_tokens(db, user, request, response)
+
+
+@router.get("/mfa/status", response_model=MfaStatusResponse)
+async def mfa_status(user: User = Depends(get_current_user)):
+    return MfaStatusResponse(
+        enabled=bool(user.mfa_enabled),
+        backup_codes_remaining=len(user.mfa_backup_codes or []),
+    )
+
+
+@router.post("/mfa/setup", response_model=MfaSetupResponse)
+async def mfa_setup(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA is already enabled")
+    secret = generate_totp_secret()
+    user.mfa_pending_secret = secret
+    await db.flush()
+    return MfaSetupResponse(secret=secret, otpauth_url=totp_provisioning_uri(secret, user.email))
+
+
+@router.post("/mfa/enable", response_model=MfaEnableResponse)
+async def mfa_enable(
+    body: MfaEnableRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA is already enabled")
+    if not user.mfa_pending_secret:
+        raise HTTPException(status_code=400, detail="Run MFA setup first")
+    if not verify_totp(user.mfa_pending_secret, body.code):
+        raise HTTPException(status_code=400, detail="Invalid authentication code")
+    plain_codes = generate_backup_codes()
+    user.mfa_secret = user.mfa_pending_secret
+    user.mfa_pending_secret = None
+    user.mfa_enabled = True
+    user.mfa_backup_codes = hash_backup_codes(plain_codes)
+    await log_audit(db, "mfa_enabled", user_id=user.id, ip_address=client_ip(request))
+    return MfaEnableResponse(enabled=True, backup_codes=plain_codes)
+
+
+@router.post("/mfa/disable")
+async def mfa_disable(
+    body: MfaDisableRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not user.mfa_enabled or not user.mfa_secret:
+        raise HTTPException(status_code=400, detail="MFA is not enabled")
+    if user.hashed_password:
+        if not body.password or not verify_password(body.password, user.hashed_password):
+            raise HTTPException(status_code=400, detail="Password is incorrect")
+    ok = verify_totp(user.mfa_secret, body.code)
+    if not ok:
+        matched, _ = verify_backup_code(user.mfa_backup_codes or [], body.code)
+        ok = matched
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid authentication code")
+    user.mfa_enabled = False
+    user.mfa_secret = None
+    user.mfa_pending_secret = None
+    user.mfa_backup_codes = []
+    await log_audit(db, "mfa_disabled", user_id=user.id, ip_address=client_ip(request))
+    return {"ok": True}
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -230,7 +382,7 @@ async def refresh(
 
     await db.delete(stored)
     session.revoked_at = datetime.now(timezone.utc)
-    return await _issue_tokens(db, user, request, response)
+    return await issue_auth_tokens(db, user, request, response)
 
 
 @router.post("/logout")
@@ -267,7 +419,12 @@ async def logout(
 
 
 @router.post("/forgot-password")
-async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await check_forgot_password(client_ip(request), body.email)
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if not user:
@@ -281,11 +438,17 @@ async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depend
     ))
     reset_url = f"{settings.frontend_url}/reset-password?token={token}"
     await send_email(user.email, "Password Reset", f"<p>Reset your password: <a href='{reset_url}'>{reset_url}</a></p>")
+    await log_audit(db, "password_reset_requested", user_id=user.id, ip_address=client_ip(request))
     return {"message": "If the email exists, a reset link has been sent"}
 
 
 @router.post("/reset-password")
-async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    await check_reset_password(client_ip(request))
     token_hash = hash_token(body.token)
     result = await db.execute(
         select(PasswordResetToken).where(
@@ -296,6 +459,7 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     )
     reset_token = result.scalar_one_or_none()
     if not reset_token:
+        await record_reset_token_failure(body.token)
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user_result = await db.execute(select(User).where(User.id == reset_token.user_id))
@@ -333,6 +497,8 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if not user.hashed_password:
+        raise HTTPException(status_code=400, detail="SSO account — change password via your identity provider")
     if not verify_password(body.current_password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     if body.current_password == body.new_password:

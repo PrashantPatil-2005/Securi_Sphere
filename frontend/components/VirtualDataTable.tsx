@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useMemo, useRef, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { EmptyState } from "@/components/ui/Panel";
+import { cn } from "@/lib/utils/cn";
 
 export interface Column<T> {
   key: string;
@@ -24,6 +25,10 @@ interface Props<T> {
   emptyAction?: string;
   emptyActionLabel?: string;
   renderMobileCard?: (row: T) => ReactNode;
+  activeIndex?: number;
+  selectedKey?: string;
+  onRowClick?: (row: T, index: number) => void;
+  onRowDoubleClick?: (row: T, index: number) => void;
 }
 
 function VirtualDataTableInner<T>({
@@ -38,6 +43,10 @@ function VirtualDataTableInner<T>({
   emptyAction,
   emptyActionLabel,
   renderMobileCard,
+  activeIndex,
+  selectedKey,
+  onRowClick,
+  onRowDoubleClick,
 }: Props<T>) {
   const isMobile = useMediaQuery("(max-width: 767px)");
   const parentRef = useRef<HTMLDivElement>(null);
@@ -48,6 +57,11 @@ function VirtualDataTableInner<T>({
     estimateSize: () => rowHeight,
     overscan: 8,
   });
+
+  useEffect(() => {
+    if (activeIndex == null || activeIndex < 0 || activeIndex >= rows.length) return;
+    virtualizer.scrollToIndex(activeIndex, { align: "auto" });
+  }, [activeIndex, rows.length, virtualizer]);
 
   if (rows.length === 0) {
     if (emptyTitle || emptyIcon) {
@@ -94,7 +108,15 @@ function VirtualDataTableInner<T>({
             return (
               <div
                 key={rowKey(row)}
-                className="data-table-row"
+                role="row"
+                tabIndex={activeIndex === vRow.index ? 0 : -1}
+                className={cn(
+                  "data-table-row cursor-pointer",
+                  activeIndex === vRow.index && "ring-1 ring-inset ring-accent/50 bg-accent/5",
+                  selectedKey === rowKey(row) && "bg-accent/10",
+                )}
+                onClick={() => onRowClick?.(row, vRow.index)}
+                onDoubleClick={() => onRowDoubleClick?.(row, vRow.index)}
                 style={{
                   display: "grid",
                   gridTemplateColumns: gridCols,

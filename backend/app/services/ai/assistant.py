@@ -5,6 +5,7 @@ import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
+from app.brand import PRODUCT_NAME
 from app.services.ai.context import load_alert_context, load_offense_context
 from app.services.ai.llm import call_llm, resolve_provider
 from app.services.ai.nl_search import nl_to_siem_query_local
@@ -139,7 +140,7 @@ def _local_chat_reply(message: str, ctx: dict | None, siem_query: str | None) ->
 
     if any(w in lower for w in ("hello", "hi", "help")):
         return (
-            "I'm the SecuriSphere AI assistant. I can explain alerts, suggest investigation steps, "
+            f"I'm the {PRODUCT_NAME} AI assistant. I can explain alerts, suggest investigation steps, "
             "convert natural language to SIEM queries, and summarize offenses. "
             "Open me from an alert investigation or ask anything about your SOC workflow.",
             [
@@ -187,7 +188,7 @@ async def chat(
 
     if provider != "local":
         system = (
-            "You are SecuriSphere SOC assistant. Answer concisely in markdown. "
+            f"You are {PRODUCT_NAME} SOC assistant. Answer concisely in markdown. "
             "Use only provided context; do not invent incidents. "
             "Suggest practical next steps for analysts."
         )

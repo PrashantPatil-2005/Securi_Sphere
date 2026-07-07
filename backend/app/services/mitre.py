@@ -75,6 +75,22 @@ def enrich_event(event) -> None:
     event.metadata_ = meta
 
 
+def event_types_for_technique(technique_id: str) -> list[str]:
+    return [et for et, m in EVENT_MITRE_MAP.items() if m.get("technique_id") == technique_id]
+
+
+def event_technique_clause(technique_id: str):
+    from sqlalchemy import or_
+
+    from app.models.event import Event
+
+    parts = [Event.mitre_technique_id == technique_id]
+    types = event_types_for_technique(technique_id)
+    if types:
+        parts.append(Event.event_type.in_(types))
+    return or_(*parts)
+
+
 def get_matrix_summary(events: list) -> dict:
     summary: dict[str, dict] = {}
     for e in events:

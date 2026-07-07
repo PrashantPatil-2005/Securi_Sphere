@@ -40,6 +40,16 @@ curl -fsSL http://192.168.0.105:8000/install.sh | sudo bash -s -- \
   --token ENROLL_TOKEN --server http://192.168.0.105:8000
 ```
 
+### Windows event forwarder (preview)
+
+Securi includes a **lab preview** Windows event forwarder API (`POST /api/v1/agent/windows-events`). It is intended for SOC lab scenarios and Windows LAN pilots — not a full production Windows agent yet.
+
+- Forward Windows Security / Sysmon-style events from a script or lightweight collector on a Windows host.
+- Events are normalized and ingested through the same Layer 1 pipeline as Linux agent data.
+- For production Windows coverage, continue using the Linux agent on servers and network flow collection; treat the Windows forwarder as experimental.
+
+See [ROADMAP_STATUS.md](ROADMAP_STATUS.md) for current collector maturity.
+
 Use `.\scripts\agent-install-help.ps1` to print the exact command after enrolling a host.
 
 ---

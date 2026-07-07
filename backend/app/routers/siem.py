@@ -92,6 +92,22 @@ async def host_risk(
     return await analytics.host_risk_dashboard(db, tr, _host_id(host_id))
 
 
+@router.get("/risk-score-trends")
+async def risk_score_trends(
+    preset: str | None = ListParams.preset(),
+    from_time: datetime | None = ListParams.from_time(),
+    to_time: datetime | None = ListParams.to_time(),
+    host_id: str | None = None,
+    limit: int = Query(8, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.services.risk_trends import risk_score_trends as build_trends
+
+    tr = resolve_time_range(preset, from_time, to_time)
+    return await build_trends(db, tr, _host_id(host_id), limit)
+
+
 @router.get("/host-health")
 async def host_health(
     db: AsyncSession = Depends(get_db),

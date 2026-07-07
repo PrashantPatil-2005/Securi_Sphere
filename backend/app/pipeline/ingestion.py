@@ -105,6 +105,8 @@ async def ingest_event_batch(
             raw_log=event.raw_log,
             metadata=event.metadata_,
         )
+        from app.services.reference_intel_detection import check_reference_intel_on_event
+        await check_reference_intel_on_event(db, host, event)
 
     host.last_seen = datetime.now(timezone.utc)
 
@@ -120,8 +122,6 @@ async def ingest_event_batch(
 
     for event in ingested:
         await link_event_to_offense(db, event)
-        from app.search.indexer import index_event
-        await index_event(event, host.name)
         await ws_manager.broadcast({
             "type": "security_feed",
             "data": {
@@ -138,6 +138,10 @@ async def ingest_event_batch(
                 "normalized_event": event.normalized_event,
             },
         })
+
+    from app.search.indexer import index_events_batch
+
+    await index_events_batch(ingested, {host.id: host.name})
 
     logger.info(
         "events ingested",

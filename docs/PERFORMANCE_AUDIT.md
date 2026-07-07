@@ -1,4 +1,4 @@
-# SecuriSphere Frontend Performance & UX Audit
+# Securi Frontend Performance & UX Audit
 
 **Date:** June 2025  
 **Scope:** Next.js 14 dashboard (`frontend/`)

@@ -100,6 +100,8 @@ async def create_alert(
     await process_new_alert(db, alert)
     from app.jobs.queue import job_queue
     await job_queue.enqueue("notify_alert", {"alert_id": str(alert.id)})
+    from app.services.playbooks import schedule_playbook_dispatch
+    await schedule_playbook_dispatch("alert_created", "alert", alert.id)
     await ws_manager.broadcast({
         "type": "new_alert",
         "data": {

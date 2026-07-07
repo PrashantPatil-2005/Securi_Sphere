@@ -91,5 +91,36 @@ def decode_token(token: str) -> dict:
     return jwt.decode(token, _verify_key(), algorithms=[jwt_algorithm()])
 
 
+def create_oidc_state_token(*, next_path: str, nonce: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    return _encode(
+        {
+            "type": "oidc_state",
+            "next": next_path[:512],
+            "nonce": nonce,
+            "exp": expire,
+        }
+    )
+
+
+def create_mfa_pending_token(subject: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    return _encode({"sub": subject, "type": "mfa_pending", "exp": expire})
+
+
+def decode_mfa_pending_token(token: str) -> dict:
+    payload = decode_token(token)
+    if payload.get("type") != "mfa_pending":
+        raise ValueError("Invalid MFA token")
+    return payload
+
+
+def decode_oidc_state_token(state: str) -> dict:
+    payload = decode_token(state)
+    if payload.get("type") != "oidc_state":
+        raise ValueError("Invalid OIDC state")
+    return payload
+
+
 def new_uuid() -> uuid.UUID:
     return uuid.uuid4()
