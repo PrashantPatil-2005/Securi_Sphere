@@ -95,7 +95,10 @@ export function useCursorPaginatedResource<T>({
   includeTimeRange = true,
 }: CursorPaginatedParams) {
   const { queryParams } = useTimeRange();
-  const timeParams = includeTimeRange ? queryParams : {};
+  const timeParams = useMemo(
+    () => (includeTimeRange ? queryParams : {}),
+    [includeTimeRange, queryParams],
+  );
   const [page, setPage] = useState(1);
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
 

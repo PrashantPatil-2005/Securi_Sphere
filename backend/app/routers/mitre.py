@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import get_current_user
 from app.models.event import Event
 from app.models.mitre import MitreTechnique
@@ -27,7 +27,7 @@ class TechniqueResponse(BaseModel):
 
 
 @router.get("/techniques", response_model=list[TechniqueResponse])
-async def list_techniques(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_techniques(db: AsyncSession = Depends(get_db_read), user: User = Depends(get_current_user)):
     return list((await db.execute(select(MitreTechnique))).scalars().all())
 
 
@@ -37,7 +37,7 @@ async def technique_drilldown(
     preset: str | None = ListParams.preset(),
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -49,7 +49,7 @@ async def get_matrix(
     preset: str | None = ListParams.preset(),
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)

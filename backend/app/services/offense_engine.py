@@ -1,5 +1,6 @@
 """QRadar-style offense grouping with related entities and timeline."""
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -28,8 +29,20 @@ AUTH_EVENT_TYPES = frozenset({
 
 
 async def _next_offense_number(db: AsyncSession) -> int:
+    max_int32 = 2_147_483_647
+    for _ in range(8):
+        candidate = secrets.randbelow(max_int32 - 1000) + 1000
+        exists = (
+            await db.execute(
+                select(Offense.id).where(Offense.offense_number == candidate).limit(1)
+            )
+        ).scalar_one_or_none()
+        if not exists:
+            return candidate
+
     current = (await db.execute(select(func.max(Offense.offense_number)))).scalar_one()
-    return (current or 100) + 1
+    nxt = (current or 100) + 1
+    return nxt if nxt <= max_int32 else 1000
 
 
 def _max_risk(a: str, b: str) -> str:

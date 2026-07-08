@@ -128,6 +128,16 @@ function Resolve-ApiBase {
     return $Preferred
 }
 
+function Sync-FrontendApiEnv {
+    param(
+        [string]$ApiBase,
+        [string]$ProjectRoot = $Root
+    )
+    if (-not $ApiBase) { return }
+    $envFile = Join-Path $ProjectRoot "frontend\.env.local"
+    Set-Content -Encoding utf8 $envFile "NEXT_PUBLIC_API_URL=$ApiBase"
+}
+
 if ($MyInvocation.InvocationName -ne '.') {
     $result = Ensure-DockerEnv
     Write-Host "Docker env ready: $($result.Path) (user=$($result.User), db=$($result.Database))"

@@ -67,6 +67,17 @@ async def readiness() -> dict:
             os_health = await opensearch_cluster_health()
             checks["opensearch"] = os_health.get("status", "unknown") if os_health else "error"
 
+    if settings.read_replica_enabled:
+        from app.core.read_replica import read_replica_status
+
+        replica = await read_replica_status()
+        if replica.get("healthy"):
+            checks["read_replica"] = "ok"
+            if replica.get("lag_warn"):
+                checks["read_replica_lag"] = f"warn:{replica.get('lag_seconds')}s"
+        else:
+            checks["read_replica"] = replica.get("error", "error")
+
     ready = checks["database"] == "ok" and (
         checks.get("job_broker") == "ok"
         or checks.get("ws_pubsub") == "ok"

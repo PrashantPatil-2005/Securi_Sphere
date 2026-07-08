@@ -9,9 +9,8 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 
-# Keep Next.js API rewrites aligned with the backend under test.
-$envFile = Join-Path $Root "frontend\.env.local"
-Set-Content -Encoding utf8 $envFile "NEXT_PUBLIC_API_URL=$ApiBase"
+. "$PSScriptRoot\ensure-docker-env.ps1"
+Sync-FrontendApiEnv -ApiBase $ApiBase -ProjectRoot $Root
 
 function Test-Endpoint {
     param([string]$Url, [string]$Label)

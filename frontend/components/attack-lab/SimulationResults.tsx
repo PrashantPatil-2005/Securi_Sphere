@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CheckCircle2, ExternalLink } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { EmotionBanner } from "@/components/ui/EmotionState";
 import { GuidedInvestigationBar } from "@/components/attack-lab/GuidedInvestigationBar";
 import type { SimulationRunResult } from "@/lib/types/simulation";
 
@@ -42,6 +43,11 @@ export function SimulationResults({ result, onRunAgain }: Props) {
 
   return (
     <GlassPanel className="space-y-4">
+      <EmotionBanner
+        tone="success"
+        title="Simulation complete — your SOC is alive"
+        message={`${result.events} events generated across detection, correlation, and timelines.`}
+      />
       <div className="flex items-start gap-3">
         <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
         <div>

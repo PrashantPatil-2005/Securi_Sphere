@@ -386,6 +386,17 @@ async def mitre_stats(db: AsyncSession, tr: TimeRange, host_id: UUID | None = No
 
 
 async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
+    from app.services.analytics.materialized_views import (
+        materialized_views_enabled,
+        query_historical_from_materialized_views,
+    )
+
+    if materialized_views_enabled():
+        try:
+            return await query_historical_from_materialized_views(db, view)
+        except Exception:
+            pass
+
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=90)
     if view == "daily":

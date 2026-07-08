@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brand import PRODUCT_NAME
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import get_current_user, require_roles
 from app.models.user import User
 from app.schemas.event import EventListResponse, EventResponse
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 @router.get("", response_model=EventListResponse)
 async def list_events(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
     host_id: UUID | None = None,
     severity: str | None = None,
@@ -58,7 +58,7 @@ async def list_events(
 
 
 @router.get("/types")
-async def list_event_types(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def list_event_types(db: AsyncSession = Depends(get_db_read), user: User = Depends(get_current_user)):
     from sqlalchemy import select, func
     from app.models.event import Event
     result = await db.execute(select(Event.event_type, func.count()).group_by(Event.event_type).order_by(Event.event_type))

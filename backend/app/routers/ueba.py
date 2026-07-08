@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import get_current_user, require_roles
 from app.models.ueba import UEBA_STATUSES, UebaAnomaly
 from app.models.user import User
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/ueba", tags=["ueba"])
 
 
 @router.get("/summary", response_model=UebaSummaryResponse)
-async def ueba_summary(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def ueba_summary(db: AsyncSession = Depends(get_db_read), user: User = Depends(get_current_user)):
     rows = (
         await db.execute(
             select(UebaAnomaly.severity, func.count())
@@ -48,7 +48,7 @@ async def list_anomalies(
     severity: str | None = Query(None),
     entity_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     q = select(UebaAnomaly).order_by(UebaAnomaly.detected_at.desc()).limit(limit)

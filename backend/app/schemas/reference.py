@@ -19,6 +19,12 @@ class ReferenceSetResponse(BaseModel):
     description: str | None
     set_type: str
     enabled: bool
+    source_type: str = "manual"
+    feed_url: str | None = None
+    feed_format: str | None = None
+    feed_last_sync_at: datetime | None = None
+    feed_last_sync_status: str | None = None
+    feed_last_sync_error: str | None = None
     entry_count: int = 0
     created_at: datetime
 
@@ -30,11 +36,17 @@ class ReferenceSetCreate(BaseModel):
     description: str | None = None
     set_type: str = "ip"
     enabled: bool = True
+    source_type: str = "manual"
+    feed_url: str | None = Field(default=None, max_length=2000)
+    feed_format: str | None = Field(default=None, pattern="^(txt|csv|json)$")
 
 
 class ReferenceSetUpdate(BaseModel):
     description: str | None = None
     enabled: bool | None = None
+    source_type: str | None = None
+    feed_url: str | None = Field(default=None, max_length=2000)
+    feed_format: str | None = Field(default=None, pattern="^(txt|csv|json)$")
 
 
 class ReferenceSetEntriesBulk(BaseModel):

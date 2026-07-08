@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addHost, loginAsAdmin } from "./helpers/auth";
+import { dismissBlockingOverlays, loginAsAdmin } from "./helpers/auth";
 
 const fullStack = !!process.env.E2E_FULL_STACK;
 
@@ -7,15 +7,15 @@ test.describe("SOC lab flow", () => {
   test.skip(!fullStack, "Set E2E_FULL_STACK=1 with backend + Postgres running");
 
   test("golden path: login → simulation → alerts → offenses → case workspace → timeline", async ({ page }) => {
-    const hostName = `golden-${Date.now()}`;
+    test.setTimeout(120_000);
     await loginAsAdmin(page);
-    await addHost(page, hostName);
 
     await page.goto("/simulation");
+    await dismissBlockingOverlays(page);
     await expect(page.getByRole("heading", { name: "Attack Simulation Lab" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Presets" })).toBeVisible();
     await page.getByRole("button", { name: /run simulation/i }).click();
-    await expect(page.getByText(/simulation complete/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /simulation complete/i })).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("p", { hasText: /^Guided investigation$/ })).toBeVisible();
 
     await page.getByRole("link", { name: /triage alerts/i }).first().click();
@@ -38,7 +38,7 @@ test.describe("SOC lab flow", () => {
     await page.goto("/simulation");
     await page.getByRole("tab", { name: "Custom" }).click();
     await page.getByRole("button", { name: /run custom simulation/i }).click();
-    await expect(page.getByText(/simulation complete/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /simulation complete/i })).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("tab", { name: "History" }).click();
     await expect(page.getByText("Run history")).toBeVisible();

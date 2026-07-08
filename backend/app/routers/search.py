@@ -8,7 +8,7 @@ from sqlalchemy.types import String
 
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import get_current_user
 from app.models.alert import Alert
 from app.models.event import Event
@@ -29,7 +29,7 @@ async def global_search(
     preset: str | None = Query(None),
     from_time: datetime | None = Query(None, alias="from"),
     to_time: datetime | None = Query(None, alias="to"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -139,7 +139,7 @@ async def siem_search(
     from_time: datetime | None = Query(None, alias="from"),
     to_time: datetime | None = Query(None, alias="to"),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     from app.services.siem_search import execute_siem_search

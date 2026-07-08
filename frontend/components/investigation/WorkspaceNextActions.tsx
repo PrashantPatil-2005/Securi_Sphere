@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import type { InvestigationWorkspace } from "@/lib/types/investigation";
 import { Panel } from "@/components/ui/Panel";
+import { EmotionBanner } from "@/components/ui/EmotionState";
 
 interface Props {
   data: InvestigationWorkspace;
@@ -89,6 +90,14 @@ export function WorkspaceNextActions({ data, onPromote, promotePending, onAskAi 
 
   return (
     <Panel title="Next actions" subtitle="Recommended steps for this case">
+      {offense && !offense.incident_id && (
+        <EmotionBanner
+          tone="confidence"
+          title="You're one step from incident response"
+          message="Promoting this offense creates a tracked incident your team can collaborate on."
+          className="mb-3"
+        />
+      )}
       <div className="flex flex-wrap gap-2">
         {actions.map((action) =>
           action.type === "link" ? (

@@ -7,18 +7,13 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.host import Host
 from app.models.siem import Offense
+from tests.integration.helpers import create_test_host
 
 
 @pytest.mark.asyncio
 async def test_simulation_creates_offense_and_promotes(analyst_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="sim-pipeline-host", hostname="sim-pipeline", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("sim-pipeline-host", hostname="sim-pipeline")
 
     sim = await analyst_client.post(f"/api/v1/simulation/run/brute_force?host_id={host_id}")
     if sim.status_code == 403:

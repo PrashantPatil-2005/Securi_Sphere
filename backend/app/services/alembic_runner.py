@@ -30,8 +30,8 @@ def alembic_config() -> Config:
 
 
 def upgrade_head() -> None:
-    command.upgrade(alembic_config(), "head")
-    logger.info("Alembic upgrade head complete")
+    command.upgrade(alembic_config(), "heads")
+    logger.info("Alembic upgrade heads complete")
 
 
 def current_revision() -> str | None:

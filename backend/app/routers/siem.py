@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db_read
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.services import siem_analytics as analytics
@@ -23,7 +23,7 @@ async def events_trend(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -36,7 +36,7 @@ async def failed_logins(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -50,7 +50,7 @@ async def severity_distribution(
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
     status: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -63,7 +63,7 @@ async def event_types(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -73,7 +73,7 @@ async def event_types(
 @router.get("/top-risky-hosts")
 async def top_risky_hosts(
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     return await analytics.top_risky_hosts(db, limit)
@@ -85,7 +85,7 @@ async def host_risk(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -99,7 +99,7 @@ async def risk_score_trends(
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
     limit: int = Query(8, ge=1, le=20),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     from app.services.risk_trends import risk_score_trends as build_trends
@@ -110,7 +110,7 @@ async def risk_score_trends(
 
 @router.get("/host-health")
 async def host_health(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     return await analytics.host_health_monitoring(db)
@@ -121,7 +121,7 @@ async def executive(
     preset: str | None = ListParams.preset(),
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -134,7 +134,7 @@ async def mitre_stats(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
@@ -144,7 +144,7 @@ async def mitre_stats(
 @router.get("/historical")
 async def historical(
     view: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     return await analytics.historical_analytics(db, view)
@@ -156,7 +156,7 @@ async def attack_timelines(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)

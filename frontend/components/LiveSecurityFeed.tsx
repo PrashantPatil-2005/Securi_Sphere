@@ -3,6 +3,8 @@
 import { memo, useEffect } from "react";
 import { useSecurityFeedStore, useFeedItems } from "@/lib/websocket";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
+import { VitalityPulse } from "@/components/ui/EmotionState";
+import { useUxEnabled } from "@/lib/featureFlags";
 
 export interface FeedItem {
   id?: string;
@@ -14,6 +16,7 @@ export interface FeedItem {
   description?: string | null;
   title?: string;
   _type?: string;
+  _ts?: number;
 }
 
 interface Props {
@@ -21,12 +24,12 @@ interface Props {
   maxItems?: number;
 }
 
-function FeedRow({ item }: { item: FeedItem }) {
+function FeedRow({ item, highlight }: { item: FeedItem; highlight?: boolean }) {
   const ts = item.timestamp || new Date().toISOString();
   const label = item.event_type || (item._type === "new_alert" ? "alert" : "event");
   const text = item.description || item.title || "";
   return (
-    <div className="flex gap-3 py-1.5 border-b border-[var(--border-subtle)]/60 text-[13px] font-mono">
+    <div className={`flex gap-3 py-1.5 border-b border-[var(--border-subtle)]/60 text-[13px] font-mono ${highlight ? "feed-row-new" : ""}`}>
       <span className="text-[var(--muted)] shrink-0 w-16">{new Date(ts).toLocaleTimeString()}</span>
       <span className="text-[var(--accent)] shrink-0 w-20 truncate">{item.host_name || item.host_id?.slice(0, 8)}</span>
       <SeverityBadge severity={item.severity || "info"} />
@@ -35,9 +38,12 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-const FeedRowMemo = memo(FeedRow);
+const FeedRowMemo = memo(function FeedRowMemo({ item, highlight }: { item: FeedItem; highlight?: boolean }) {
+  return <FeedRow item={item} highlight={highlight} />;
+});
 
 function LiveSecurityFeedInner({ initial = [], maxItems = 50 }: Props) {
+  const vitalityEnabled = useUxEnabled("ux_dashboard_vitality_enabled");
   const { subscribe, getSnapshot, prepend } = useSecurityFeedStore(maxItems);
   const liveItems = useFeedItems(subscribe, getSnapshot) as FeedItem[];
 
@@ -53,8 +59,16 @@ function LiveSecurityFeedInner({ initial = [], maxItems = 50 }: Props) {
 
   return (
     <div className="max-h-80 overflow-y-auto">
+      <div className="flex items-center gap-2 text-xs text-muted mb-2">
+        <VitalityPulse active={vitalityEnabled && liveItems.length > 0} />
+        {vitalityEnabled ? "Live updates highlighted as they arrive" : "Real-time security events"}
+      </div>
       {items.map((e, i) => (
-        <FeedRowMemo key={e.id || `feed-${i}`} item={e} />
+        <FeedRowMemo
+          key={e.id || `feed-${i}`}
+          item={e}
+          highlight={vitalityEnabled && !!e._ts && Date.now() - e._ts < 5000}
+        />
       ))}
     </div>
   );

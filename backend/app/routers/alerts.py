@@ -22,6 +22,7 @@ from app.schemas.assistant import AlertAISummaryResponse
 from app.schemas.alert import (
     AlertBulkUpdate,
     AlertBulkUpdateResponse,
+    AlertFeedbackUpdate,
     AlertInvestigationHost,
     AlertInvestigationResponse,
     AlertInvestigationTimeline,
@@ -34,6 +35,11 @@ from app.services.ai.summaries import generate_alert_summary
 from app.services.audit import log_audit
 from app.services.detection import update_host_statuses
 from app.services.export_service import export_csv, export_json, export_pdf
+from app.services.feedback_loop import (
+    VALID_FEEDBACK_LABELS,
+    apply_feedback_to_alert,
+    apply_feedback_to_rule,
+)
 from app.services.query_builders import query_alerts
 from app.utils.query import ListParams, SortOrder, resolve_time_range
 from app.websocket.manager import ws_manager
@@ -41,6 +47,7 @@ from app.websocket.manager import ws_manager
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 VALID_STATUSES = {"open", "investigating", "resolved", "closed"}
+VALID_FEEDBACK = set(VALID_FEEDBACK_LABELS)
 
 
 def _to_response(alert: Alert) -> AlertResponse:
@@ -312,4 +319,46 @@ async def update_alert_status(
             old_status=old_status,
             new_status=body.status,
         )
+    return _to_response(alert)
+
+
+@router.patch("/{alert_id}/feedback", response_model=AlertResponse)
+async def update_alert_feedback(
+    alert_id: UUID,
+    body: AlertFeedbackUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    if body.label is not None and body.label not in VALID_FEEDBACK:
+        raise HTTPException(status_code=400, detail=f"label must be one of {sorted(VALID_FEEDBACK)}")
+
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+    alert = result.scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    previous_label = alert.feedback_label
+    apply_feedback_to_alert(alert, label=body.label, note=body.note, user_id=user.id)
+
+    if alert.rule_id:
+        rule = (await db.execute(select(AlertRule).where(AlertRule.id == alert.rule_id))).scalar_one_or_none()
+        apply_feedback_to_rule(rule, previous_label=previous_label, new_label=body.label)
+
+    if body.label == "false_positive" and alert.status in ("open", "investigating"):
+        alert.status = "closed"
+        alert.resolved_at = datetime.now(timezone.utc)
+        alert.resolved_by = user.id
+        await update_host_statuses(db)
+
+    await log_audit(
+        db,
+        "alert_feedback_update",
+        user_id=user.id,
+        resource_type="alert",
+        resource_id=alert_id,
+        details={"label": body.label, "has_note": bool((body.note or "").strip())},
+    )
+    await ws_manager.broadcast(
+        {"type": "alert_feedback", "data": {"id": str(alert.id), "feedback_label": alert.feedback_label}}
+    )
     return _to_response(alert)

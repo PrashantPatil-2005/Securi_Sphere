@@ -5,6 +5,8 @@ import Link from "next/link";
 import { CheckCircle2, Circle, ListChecks } from "lucide-react";
 import { Panel } from "@/components/ui/Panel";
 import { ONBOARDING_DISMISSED_KEY } from "@/lib/onboarding";
+import { track } from "@/lib/telemetry";
+import { OnboardingWizardTrigger } from "@/components/onboarding/OnboardingWizard";
 import { useOnboardingProgress } from "@/lib/hooks/useOnboardingProgress";
 
 export function OnboardingChecklist() {
@@ -22,16 +24,20 @@ export function OnboardingChecklist() {
       title="Getting started"
       subtitle={`${completedCount}/${totalSteps} complete — SOC lab walkthrough (no agent required for simulation)`}
       action={
-        <button
-          type="button"
-          className="btn-ghost text-xs"
-          onClick={() => {
-            localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
-            setDismissed(true);
-          }}
-        >
-          Dismiss
-        </button>
+        <div className="flex items-center gap-2">
+          <OnboardingWizardTrigger />
+          <button
+            type="button"
+            className="btn-ghost text-xs"
+            onClick={() => {
+              localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
+              track("onboarding_dismissed", { completed_count: completedCount });
+              setDismissed(true);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
       }
     >
       <ul className="space-y-2">
@@ -42,6 +48,7 @@ export function OnboardingChecklist() {
               <Link
                 href={step.href}
                 className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--sidebar-hover)] transition-colors"
+                onClick={() => track("onboarding_step_viewed", { step_id: step.id })}
               >
                 {done ? (
                   <CheckCircle2 className="w-4 h-4 text-success shrink-0" />

@@ -16,8 +16,7 @@ from app.core.errors import http_exception_handler, validation_exception_handler
 from app.core.health import liveness, readiness, startup
 from app.core.lifecycle import shutdown_application
 from app.core.logging import configure_logging
-from app.core.logging import configure_logging
-from app.database import async_session, engine
+from app.database import async_session, read_session_factory, engine
 from app.jobs.handlers import register_job_handlers
 from app.jobs.queue import job_queue
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -27,7 +26,7 @@ from app.middleware.request_context import RequestContextMiddleware
 from app.routers import (
     agent, alerts, analytics, audit, auth, alert_rules, assistant, backups, correlation_rules, events, hosts, incidents,
     investigation, ioc, maintenance, metrics, mitre, network, notifications, offenses, oidc, playbooks, reference_sets, building_blocks, reports, saved_searches, dashboard, search, siem,
-    simulation, threat_scores, timeline, ueba, settings as settings_router, system, users,
+    simulation, telemetry, threat_scores, timeline, ueba, settings as settings_router, system, users,
 )
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -84,6 +83,16 @@ async def analytics_job() -> None:
         await db.commit()
 
 
+async def analytics_mv_job() -> None:
+    if not settings.analytics_materialized_views_enabled:
+        return
+    from app.services.analytics.materialized_views import refresh_analytics_materialized_views
+
+    async with async_session() as db:
+        await refresh_analytics_materialized_views(db)
+        await db.commit()
+
+
 async def cross_host_correlation_job() -> None:
     async with async_session() as db:
         await run_cross_host_correlation(db)
@@ -98,6 +107,16 @@ async def ueba_scan_job() -> None:
 
 async def backup_job() -> None:
     await run_scheduled_backup()
+
+
+async def threat_intel_feed_job() -> None:
+    if not settings.threat_intel_feeds_enabled:
+        return
+    from app.services.threat_intel_feeds import sync_all_enabled_feeds
+
+    async with async_session() as db:
+        await sync_all_enabled_feeds(db)
+        await db.commit()
 
 
 @asynccontextmanager
@@ -118,6 +137,18 @@ async def lifespan(app: FastAPI):
         scheduler.add_job(run_retention, "cron", hour=2, id="retention")
         scheduler.add_job(backup_job, "cron", hour=settings.backup_schedule_hour, id="postgres_backup")
         scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
+        scheduler.add_job(
+            analytics_mv_job,
+            "interval",
+            minutes=settings.analytics_mv_refresh_interval_minutes,
+            id="analytics_materialized_views",
+        )
+        scheduler.add_job(
+            threat_intel_feed_job,
+            "interval",
+            minutes=settings.threat_intel_feed_sync_minutes,
+            id="threat_intel_feed_sync",
+        )
         scheduler.add_job(ueba_scan_job, "interval", minutes=settings.ueba_scan_interval_minutes, id="ueba_scan")
         scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts")
         scheduler.start()
@@ -126,7 +157,9 @@ async def lifespan(app: FastAPI):
     if not settings.testing:
         await shutdown_application(scheduler=scheduler, job_queue=job_queue, ws_manager=ws_manager)
     else:
-        await engine.dispose()
+        from app.database import dispose_engines
+
+        await dispose_engines()
     logger.info(f"{PRODUCT_NAME} backend shutdown complete")
 
 
@@ -197,6 +230,7 @@ app.include_router(reference_sets.router, prefix=prefix)
 app.include_router(building_blocks.router, prefix=prefix)
 app.include_router(playbooks.router, prefix=prefix)
 app.include_router(ueba.router, prefix=prefix)
+app.include_router(telemetry.router, prefix=prefix)
 
 
 @app.get("/health")
@@ -229,7 +263,7 @@ async def overview(user: User = Depends(get_current_user)):
     from app.models.alert import Alert
     from app.models.host import Host
 
-    async with async_session() as db:
+    async with read_session_factory()() as db:
         total = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
         online = (await db.execute(select(func.count()).select_from(Host).where(Host.status == "online"))).scalar_one()
         offline = (await db.execute(select(func.count()).select_from(Host).where(Host.status.in_(["offline", "critical"])))).scalar_one()

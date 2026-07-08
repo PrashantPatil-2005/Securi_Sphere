@@ -5,8 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.host import Host
 from app.models.simulation_run import SimulationRun
+from tests.integration.helpers import create_test_host
 
 
 @pytest.mark.asyncio
@@ -40,12 +40,7 @@ async def test_event_types_list(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_simulation_run_returns_ids(admin_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="sim-api-host", hostname="sim-api", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("sim-api-host", hostname="sim-api")
 
     res = await admin_client.post(f"/api/v1/simulation/run/brute_force?host_id={host_id}")
     if res.status_code == 403:
@@ -73,12 +68,7 @@ async def test_simulation_run_returns_ids(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_custom_simulation_run(admin_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="sim-custom-host", hostname="sim-custom", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("sim-custom-host", hostname="sim-custom")
 
     res = await admin_client.post(
         "/api/v1/simulation/custom",
@@ -107,12 +97,7 @@ async def test_custom_simulation_run(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_custom_simulation_invalid_event_type(admin_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="sim-bad-host", hostname="sim-bad", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("sim-bad-host", hostname="sim-bad")
 
     res = await admin_client.post(
         "/api/v1/simulation/custom",
@@ -129,12 +114,7 @@ async def test_custom_simulation_invalid_event_type(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_analyst_can_run_simulation(analyst_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="sim-analyst-host", hostname="sim-analyst", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("sim-analyst-host", hostname="sim-analyst")
 
     scenarios = await analyst_client.get("/api/v1/simulation/scenarios")
     assert scenarios.status_code == 200

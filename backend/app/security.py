@@ -79,7 +79,14 @@ def create_access_token(subject: str, role: str) -> str:
 
 def create_refresh_token(subject: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.jwt_refresh_expire_days)
-    return _encode({"sub": subject, "type": "refresh", "exp": expire})
+    return _encode(
+        {
+            "sub": subject,
+            "type": "refresh",
+            "exp": expire,
+            "jti": secrets.token_urlsafe(16),
+        }
+    )
 
 
 def create_ws_ticket(subject: str) -> str:

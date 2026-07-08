@@ -28,6 +28,22 @@ Enabled reference sets are checked on **every ingested event**. Matching values 
 
 Matched sets are also stored in event `metadata.intel_matches` for investigation.
 
+### Feed-backed sets
+
+Reference sets can be created with `source_type=feed` to sync indicators from remote URLs (`txt`, `csv`, `json`).
+
+- Manual sync: `POST /api/v1/reference-sets/{id}/sync-feed`
+- Scheduled sync: APScheduler job (`THREAT_INTEL_FEEDS_ENABLED=true`)
+
+Config:
+
+```env
+THREAT_INTEL_FEEDS_ENABLED=true
+THREAT_INTEL_FEED_SYNC_MINUTES=60
+```
+
+Feed sync metadata is stored on each set (`feed_last_sync_at`, `feed_last_sync_status`, `feed_last_sync_error`).
+
 ## Building blocks
 
 Saved SIEM queries analysts can run from **Threat Intel → Building blocks** or link to Search. Building blocks are **search templates only** — they do not create detection rules.
@@ -48,6 +64,7 @@ Demo data seeds on first startup (`bad_ips`, `privileged_users`, two sample bloc
 | GET/POST | `/api/v1/reference-sets` |
 | GET | `/api/v1/reference-sets/lookup?value=&set_type=` |
 | GET/POST | `/api/v1/reference-sets/{id}/entries` |
+| POST | `/api/v1/reference-sets/{id}/sync-feed` |
 | GET/POST | `/api/v1/building-blocks` |
 
 Analysts can create sets and blocks; delete reference sets is admin-only.

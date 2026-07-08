@@ -154,6 +154,18 @@ export function useOnboardingProgress() {
 
   const completedCount = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).length;
 
+  useEffect(() => {
+    const key = "securi_onboarding_completed_steps";
+    const prev = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[];
+    const now = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).map((s) => s.id);
+    for (const id of now) {
+      if (!prev.includes(id)) {
+        import("@/lib/telemetry").then(({ track }) => track("onboarding_step_completed", { step_id: id }));
+      }
+    }
+    sessionStorage.setItem(key, JSON.stringify(now));
+  }, [progress]);
+
   return {
     progress,
     steps: ONBOARDING_STEPS,

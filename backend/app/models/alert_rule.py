@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Float, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,5 +18,8 @@ class AlertRule(Base):
     window_minutes: Mapped[int | None] = mapped_column(Integer)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    false_positive_count: Mapped[int] = mapped_column(Integer, default=0)
+    true_positive_count: Mapped[int] = mapped_column(Integer, default=0)
+    feedback_last_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     alerts: Mapped[list["Alert"]] = relationship("Alert", back_populates="rule")

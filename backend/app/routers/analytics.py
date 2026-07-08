@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import get_current_user
 from app.models.alert import Alert
 from app.models.event import Event
@@ -26,7 +26,7 @@ def _start_of_month(dt: datetime) -> datetime:
 
 
 @router.get("/summary")
-async def analytics_summary(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def analytics_summary(db: AsyncSession = Depends(get_db_read), user: User = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     day = _start_of_day(now)
     week = _start_of_week(now)
@@ -51,12 +51,25 @@ async def analytics_summary(db: AsyncSession = Depends(get_db), user: User = Dep
 @router.get("/retention")
 async def retention_view(
     view: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     """Bucket counts for the last 90 days (daily/weekly/monthly)."""
+    from app.services.analytics.materialized_views import (
+        materialized_views_enabled,
+        query_retention_from_materialized_views,
+    )
+
     now = datetime.now(timezone.utc)
-    since = now - timedelta(days=90)
+    since = now.date() - timedelta(days=90)
+
+    if materialized_views_enabled():
+        try:
+            return await query_retention_from_materialized_views(db, view, since=since)
+        except Exception:
+            pass
+
+    since_dt = now - timedelta(days=90)
 
     if view == "daily":
         event_bucket = func.date_trunc("day", Event.timestamp)
@@ -70,19 +83,19 @@ async def retention_view(
 
     events = await db.execute(
         select(event_bucket.label("period"), func.count())
-        .where(Event.timestamp >= since)
+        .where(Event.timestamp >= since_dt)
         .group_by(event_bucket)
         .order_by(event_bucket)
     )
     alerts = await db.execute(
         select(alert_bucket.label("period"), func.count())
-        .where(Alert.created_at >= since)
+        .where(Alert.created_at >= since_dt)
         .group_by(alert_bucket)
         .order_by(alert_bucket)
     )
     return {
         "view": view,
-        "since": since.isoformat(),
+        "since": since_dt.isoformat(),
         "events": [{"period": str(r[0]), "count": r[1]} for r in events.all()],
         "alerts": [{"period": str(r[0]), "count": r[1]} for r in alerts.all()],
     }

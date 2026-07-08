@@ -21,6 +21,10 @@ class AlertResponse(BaseModel):
     created_at: datetime
     resolved_at: datetime | None
     resolved_by: UUID | None
+    feedback_label: str | None = None
+    feedback_note: str | None = None
+    feedback_at: datetime | None = None
+    feedback_by: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -35,6 +39,11 @@ class AlertListResponse(BaseModel):
 class AlertStatusUpdate(BaseModel):
     status: str
     assigned_to: UUID | None = None
+
+
+class AlertFeedbackUpdate(BaseModel):
+    label: str | None = None
+    note: str | None = None
 
 
 class AlertBulkUpdate(BaseModel):

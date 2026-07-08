@@ -7,8 +7,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.host import Host
 from app.models.siem import Offense
+from tests.integration.helpers import create_test_host
 
 
 @pytest.mark.asyncio
@@ -21,13 +21,11 @@ async def test_viewer_cannot_promote_offense(viewer_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_promote_offense_creates_incident(analyst_client: AsyncClient):
+    host_id = await create_test_host("promo-test-host", hostname="promo-test")
     async with async_session() as db:
-        host = Host(name="promo-test-host", hostname="promo-test", status="online")
-        db.add(host)
-        await db.flush()
         offense = Offense(
             offense_number=int(datetime.now().timestamp()) % 1_000_000,
-            host_id=host.id,
+            host_id=host_id,
             title="Test promotion offense",
             description="Integration test",
             risk_level="high",

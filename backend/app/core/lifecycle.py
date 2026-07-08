@@ -9,7 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config import settings
 from app.core.shutdown import shutdown_state
-from app.database import engine
+from app.database import dispose_engines
 from app.jobs.queue import JobQueue
 from app.websocket.manager import ConnectionManager
 
@@ -39,5 +39,5 @@ async def shutdown_application(
     except asyncio.TimeoutError:
         logger.warning("job queue stop timed out during shutdown")
 
-    await engine.dispose()
+    await dispose_engines()
     logger.info("graceful shutdown complete")

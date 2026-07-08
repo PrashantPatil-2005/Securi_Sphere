@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
@@ -15,6 +15,8 @@ import { SavedSearchWidget } from "@/components/dashboard/SavedSearchWidget";
 import { savedSearchIdFromWidget } from "@/lib/dashboardWidgets";
 import { CardSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
+import { EmotionBanner } from "@/components/ui/EmotionState";
+import { useUxEnabled } from "@/lib/featureFlags";
 import { QueryError } from "@/components/ui/QueryError";
 import { Button } from "@/components/ui/Button";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
@@ -25,7 +27,10 @@ const LiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), 
   ssr: false,
 });
 
+const KPI_SNAPSHOT_KEY = "securi_kpi_snapshot";
+
 const ExecutiveKpis = memo(function ExecutiveKpis() {
+  const vitalityEnabled = useUxEnabled("ux_dashboard_vitality_enabled");
   const { data, isLoading, isError, refetch } = useSiemQuery<{
     total_hosts: number;
     online_hosts: number;
@@ -33,6 +38,29 @@ const ExecutiveKpis = memo(function ExecutiveKpis() {
     critical_alerts: number;
     average_risk_score: number;
   }>("executive");
+
+  const [deltas, setDeltas] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!vitalityEnabled || !data) return;
+    const prevRaw = sessionStorage.getItem(KPI_SNAPSHOT_KEY);
+    const prev = prevRaw ? (JSON.parse(prevRaw) as Record<string, number>) : null;
+    if (prev) {
+      setDeltas({
+        active_alerts: (data.active_alerts ?? 0) - (prev.active_alerts ?? 0),
+        critical_alerts: (data.critical_alerts ?? 0) - (prev.critical_alerts ?? 0),
+        online_hosts: (data.online_hosts ?? 0) - (prev.online_hosts ?? 0),
+      });
+    }
+    sessionStorage.setItem(
+      KPI_SNAPSHOT_KEY,
+      JSON.stringify({
+        active_alerts: data.active_alerts,
+        critical_alerts: data.critical_alerts,
+        online_hosts: data.online_hosts,
+      }),
+    );
+  }, [data, vitalityEnabled]);
 
   if (isLoading) {
     return (
@@ -45,15 +73,25 @@ const ExecutiveKpis = memo(function ExecutiveKpis() {
   if (isError) return <QueryError onRetry={() => refetch()} />;
 
   const healthPct = data?.total_hosts ? Math.round((data.online_hosts / data.total_hosts) * 100) : 0;
+  const showVitality = vitalityEnabled && (data?.total_hosts ?? 0) > 0;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-      <StatCard label="Total hosts" value={data?.total_hosts} tone="info" href="/hosts" />
-      <StatCard label="Host health" value={`${healthPct}%`} tone={healthPct >= 80 ? "success" : healthPct >= 50 ? "warning" : "danger"} href="/hosts" />
-      <StatCard label="Active alerts" value={data?.active_alerts} tone="warning" href="/alerts" />
-      <StatCard label="Critical alerts" value={data?.critical_alerts} tone="danger" href="/alerts" />
-      <StatCard label="Threat score" value={data?.average_risk_score} tone="warning" href="/analytics" />
-      <StatCard label="Online hosts" value={`${data?.online_hosts ?? 0}/${data?.total_hosts ?? 0}`} tone="success" href="/hosts" />
+    <div className="space-y-4">
+      {vitalityEnabled && (data?.total_hosts ?? 0) === 0 && (
+        <EmotionBanner
+          tone="calm"
+          title="Your dashboard is ready — add your first signal"
+          message="Run Attack Lab for an instant demo, or enroll a host for live telemetry."
+        />
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <StatCard label="Total hosts" value={data?.total_hosts} tone="info" href="/hosts" vital={showVitality} />
+      <StatCard label="Host health" value={`${healthPct}%`} tone={healthPct >= 80 ? "success" : healthPct >= 50 ? "warning" : "danger"} href="/hosts" vital={showVitality} />
+      <StatCard label="Active alerts" value={data?.active_alerts} tone="warning" href="/alerts" vital={showVitality} delta={showVitality ? deltas.active_alerts : undefined} deltaLabel="since last visit" />
+      <StatCard label="Critical alerts" value={data?.critical_alerts} tone="danger" href="/alerts" vital={showVitality} delta={showVitality ? deltas.critical_alerts : undefined} deltaLabel="since last visit" />
+      <StatCard label="Threat score" value={data?.average_risk_score} tone="warning" href="/analytics" vital={showVitality} />
+      <StatCard label="Online hosts" value={`${data?.online_hosts ?? 0}/${data?.total_hosts ?? 0}`} tone="success" href="/hosts" vital={showVitality} delta={showVitality ? deltas.online_hosts : undefined} deltaLabel="since last visit" />
+      </div>
     </div>
   );
 });

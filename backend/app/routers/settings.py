@@ -21,4 +21,14 @@ async def public_settings():
         "ai_assistant_enabled": settings.ai_assistant_enabled,
         "ai_provider": resolve_provider(),
         "search_backend": "opensearch" if settings.opensearch_url and settings.search_backend == "opensearch" else "postgres",
+        "telemetry_enabled": settings.telemetry_enabled,
+        "ux_flags": {
+            "dynamic_ux_enabled": settings.dynamic_ux_enabled,
+            "ux_activation_coach_enabled": settings.ux_activation_coach_enabled,
+            "ux_live_simulation_enabled": settings.ux_live_simulation_enabled,
+            "ux_enrollment_handshake_enabled": settings.ux_enrollment_handshake_enabled,
+            "ux_guided_triage_enabled": settings.ux_guided_triage_enabled,
+            "ux_dashboard_vitality_enabled": settings.ux_dashboard_vitality_enabled,
+            "ux_admin_ops_console_enabled": settings.ux_admin_ops_console_enabled,
+        },
     }

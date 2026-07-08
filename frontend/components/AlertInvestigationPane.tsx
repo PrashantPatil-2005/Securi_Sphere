@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAssistant } from "@/lib/assistant/AssistantProvider";
@@ -12,6 +12,11 @@ import { Panel, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
+import { TriageStepper } from "@/components/alerts/TriageStepper";
+import { EmotionBanner } from "@/components/ui/EmotionState";
+import { useUxEnabled } from "@/lib/featureFlags";
+import { track } from "@/lib/telemetry";
 
 interface InvestigationData {
   alert: {
@@ -24,6 +29,8 @@ interface InvestigationData {
     confidence: number | null;
     mitre_technique_id: string | null;
     created_at: string;
+    feedback_label: string | null;
+    feedback_note: string | null;
   };
   host: {
     id: string;
@@ -60,6 +67,9 @@ export function AlertInvestigationPane({
   isUpdating?: boolean;
 }) {
   const { openWithContext } = useAssistant();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const guidedTriage = useUxEnabled("ux_guided_triage_enabled");
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["alerts", "investigation", alertId],
     queryFn: () => api<InvestigationData>(`/api/v1/alerts/${alertId}/investigation`),
@@ -78,6 +88,20 @@ export function AlertInvestigationPane({
     staleTime: 120_000,
   });
 
+  const feedbackMutation = useMutation({
+    mutationFn: (payload: { label: "false_positive" | "true_positive"; note?: string }) =>
+      api(`/api/v1/alerts/${alertId}/feedback`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts", "investigation", alertId] });
+      toast("success", vars.label === "false_positive" ? "Marked false positive" : "Marked true positive");
+    },
+    onError: (e: Error) => toast("error", "Feedback update failed", e.message),
+  });
+
   if (!alertId) {
     return (
       <Panel title="Investigation">
@@ -91,9 +115,34 @@ export function AlertInvestigationPane({
   if (!data) return null;
 
   const { alert, host, events, timelines } = data;
+  const severityTone = alert.severity === "critical" ? "urgency" : alert.severity === "high" ? "progress" : "calm";
 
   return (
     <div className="space-y-4">
+      {guidedTriage && (
+        <>
+          <EmotionBanner
+            tone={severityTone}
+            title={
+              alert.status === "resolved"
+                ? "Triage complete — nice work"
+                : alert.severity === "critical"
+                  ? "Critical alert needs your attention"
+                  : "Work through triage at your pace"
+            }
+            message={
+              alert.status === "open"
+                ? "Start investigation, review host context, then classify and resolve."
+                : undefined
+            }
+          />
+          <TriageStepper
+            status={alert.status}
+            severity={alert.severity}
+            hasFeedback={!!alert.feedback_label}
+          />
+        </>
+      )}
       <InvestigationTrail hostId={host.id} hostName={host.name} alertId={alert.id} />
       <Panel title="Alert details">
         <div className="space-y-3">
@@ -116,7 +165,10 @@ export function AlertInvestigationPane({
                 <button
                   type="button"
                   disabled={isUpdating}
-                  onClick={() => onStatus(alert.id, "investigating")}
+                  onClick={() => {
+                    track("alert_triage_started", { alert_id: alert.id, severity: alert.severity });
+                    onStatus(alert.id, "investigating");
+                  }}
                   className="btn-ghost text-xs"
                 >
                   Start investigation
@@ -124,7 +176,10 @@ export function AlertInvestigationPane({
                 <button
                   type="button"
                   disabled={isUpdating}
-                  onClick={() => onStatus(alert.id, "resolved")}
+                  onClick={() => {
+                    track("alert_triage_resolved", { alert_id: alert.id, severity: alert.severity });
+                    onStatus(alert.id, "resolved");
+                  }}
                   className="btn-ghost text-xs text-success"
                 >
                   Resolve
@@ -135,7 +190,10 @@ export function AlertInvestigationPane({
               <button
                 type="button"
                 disabled={isUpdating}
-                onClick={() => onStatus(alert.id, "resolved")}
+                onClick={() => {
+                  track("alert_triage_resolved", { alert_id: alert.id, severity: alert.severity });
+                  onStatus(alert.id, "resolved");
+                }}
                 className="btn-ghost text-xs text-success"
               >
                 Resolve
@@ -163,7 +221,29 @@ export function AlertInvestigationPane({
               <Sparkles className="w-3 h-3" />
               Ask AI about this alert
             </button>
+            <button
+              type="button"
+              disabled={feedbackMutation.isPending}
+              onClick={() => feedbackMutation.mutate({ label: "false_positive" })}
+              className="btn-ghost text-xs"
+            >
+              Mark false positive
+            </button>
+            <button
+              type="button"
+              disabled={feedbackMutation.isPending}
+              onClick={() => feedbackMutation.mutate({ label: "true_positive" })}
+              className="btn-ghost text-xs"
+            >
+              Mark true positive
+            </button>
           </div>
+          {alert.feedback_label && (
+            <p className="text-caption normal-case text-muted">
+              Feedback: <span className="font-medium capitalize">{alert.feedback_label.replace("_", " ")}</span>
+              {alert.feedback_note ? ` · ${alert.feedback_note}` : ""}
+            </p>
+          )}
         </div>
       </Panel>
 

@@ -125,9 +125,10 @@ async def compliance_report(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     start, end = _period_bounds(report_type)
+    report_type_value = f"compliance_{framework}_{report_type}"
     report_row = GeneratedReport(
         user_id=user.id,
-        report_type=f"compliance_{framework}_{report_type}",
+        report_type=report_type_value,
         period_start=start,
         period_end=end,
         format=format,

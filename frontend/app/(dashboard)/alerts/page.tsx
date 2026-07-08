@@ -100,7 +100,7 @@ function AlertsPageContent() {
     queryClient.invalidateQueries({ queryKey: ["alerts", "investigation", selectedId] });
   });
 
-  const pageItems = data?.items ?? [];
+  const pageItems = useMemo(() => data?.items ?? [], [data?.items]);
 
   useEffect(() => {
     setActiveIndex(0);

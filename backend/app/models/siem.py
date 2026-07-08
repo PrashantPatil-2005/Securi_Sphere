@@ -96,7 +96,7 @@ class GeneratedReport(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), index=True)
-    report_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(64), nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     format: Mapped[str] = mapped_column(String(10), default="json")

@@ -58,6 +58,43 @@ async def test_admin_correlation_rule_crud(admin_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_correlation_rules_meta(admin_client: AsyncClient):
+    res = await admin_client.get("/api/v1/correlation-rules/meta")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert "rule_types" in body
+    assert "event_types" in body
+    assert "templates" in body
+
+
+@pytest.mark.asyncio
+async def test_correlation_rule_validate_and_preview(admin_client: AsyncClient):
+    validate = await admin_client.post(
+        "/api/v1/correlation-rules/validate",
+        json={
+            "rule_type": "sequence",
+            "event_sequence": ["ssh_login_failure", "sudo_usage"],
+            "min_occurrences": {"ssh_login_failure": 2},
+        },
+    )
+    assert validate.status_code == 200, validate.text
+    assert validate.json()["valid"] is True
+
+    preview = await admin_client.post(
+        "/api/v1/correlation-rules/preview",
+        json={
+            "rule_type": "sequence",
+            "event_sequence": ["ssh_login_failure"],
+            "window_minutes": 60,
+        },
+    )
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["valid"] is True
+    assert "matched" in body
+
+
+@pytest.mark.asyncio
 async def test_system_correlation_rule_cannot_be_deleted(admin_client: AsyncClient):
     listed = await admin_client.get("/api/v1/correlation-rules")
     assert listed.status_code == 200

@@ -17,13 +17,19 @@ def engine_options() -> dict[str, Any]:
     }
 
 
-def database_pool_status() -> dict[str, Any]:
-    from app.database import engine
+def database_pool_status(*, role: str = "primary") -> dict[str, Any]:
+    from app.database import engine, read_engine
 
-    pool = engine.pool
+    target = read_engine if role == "read" else engine
+    if target is None:
+        return {"role": role, "configured": False}
+
+    pool = target.pool
     capacity = settings.db_pool_size + settings.db_max_overflow
     checked_out = pool.checkedout()
     return {
+        "role": role,
+        "configured": True,
         "pool_size": settings.db_pool_size,
         "max_overflow": settings.db_max_overflow,
         "pool_timeout_seconds": settings.db_pool_timeout,

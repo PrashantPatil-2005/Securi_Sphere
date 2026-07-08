@@ -1,8 +1,37 @@
 """Shared helpers for HTTP integration tests."""
 
+import uuid
 from datetime import datetime, timezone
 
 from httpx import AsyncClient
+from sqlalchemy import select
+
+from app.database import async_session
+from app.models.host import Host
+from app.models.user import User
+
+
+async def admin_user_id() -> uuid.UUID:
+    async with async_session() as db:
+        user = (
+            await db.execute(select(User).where(User.email == "admin@test.local"))
+        ).scalar_one()
+        return user.id
+
+
+async def create_test_host(name: str, *, hostname: str | None = None) -> uuid.UUID:
+    created_by = await admin_user_id()
+    async with async_session() as db:
+        host = Host(
+            name=name,
+            hostname=hostname or name,
+            status="online",
+            created_by=created_by,
+        )
+        db.add(host)
+        await db.commit()
+        await db.refresh(host)
+        return host.id
 
 
 async def enroll_test_host(client: AsyncClient, name: str) -> tuple[str, str]:

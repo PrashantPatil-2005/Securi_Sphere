@@ -28,6 +28,7 @@ from app.models.reference import BuildingBlock, ReferenceSet, ReferenceSetEntry
 from app.models.playbook import Playbook, PlaybookRun
 from app.models.ueba import UebaAnomaly
 from app.models.dashboard import DashboardLayout
+from app.models.telemetry_event import TelemetryEvent
 from app.models.siem import (
     GeneratedReport,
     HostRiskHistory,
@@ -47,5 +48,5 @@ __all__ = [
     "InAppNotification", "InAppNotificationRead", "MaintenanceWindow", "SimulationRun", "UserInvite",
     "ReferenceSet", "ReferenceSetEntry", "BuildingBlock",
     "Playbook", "PlaybookRun",
-    "UebaAnomaly", "NotificationRule", "DashboardLayout",
+    "UebaAnomaly", "NotificationRule", "DashboardLayout", "TelemetryEvent",
 ]

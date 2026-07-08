@@ -124,6 +124,7 @@ if ($failures.Count -eq 0) {
     if ($demoMode -eq "true") {
         Write-Host "  Demo login: demo@securi.local / Demo1234!"
     }
+    Write-Host "  Demo dry-run: .\scripts\validate-demo-flow.ps1"
     exit 0
 }
 

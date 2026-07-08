@@ -20,6 +20,8 @@ def test_engine_uses_queue_pool():
 
 def test_database_pool_status_shape():
     status = database_pool_status()
+    assert status["configured"] is True
+    assert status["role"] == "primary"
     assert status["pool_size"] == settings.db_pool_size
     assert status["capacity"] == settings.db_pool_size + settings.db_max_overflow
     assert "utilization" in status

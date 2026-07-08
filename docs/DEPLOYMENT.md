@@ -221,7 +221,9 @@ For HTTPS servers, use `https://securi.yourdomain.com` as `--server`.
 | Administration | Rules, Reports, Audit, Simulation, System Health | Admin/analyst RBAC |
 | Settings | Theme, notifications, system info | Theme + notifications wired |
 
-**Not yet in UI:** correlation rules editor. Maintenance windows are at **Operations → Maintenance** (`/maintenance`).
+**Correlation rules:** full editor at **Rules → Correlation** (`/rules`). See [CORRELATION_RULE_EDITOR.md](CORRELATION_RULE_EDITOR.md).
+
+Maintenance windows are at **Operations → Maintenance** (`/maintenance`).
 
 ---
 

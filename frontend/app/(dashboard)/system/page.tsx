@@ -7,6 +7,7 @@ import { QueryError } from "@/components/ui/QueryError";
 import { cn } from "@/lib/utils/cn";
 import { api } from "@/lib/api";
 import { BackupPanel } from "@/components/BackupPanel";
+import { SystemOpsConsole } from "@/components/admin/SystemOpsConsole";
 
 interface Health {
   status: string;
@@ -90,6 +91,7 @@ export default function SystemHealthPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="System Health" subtitle="QRadar-style pipeline status and platform metrics (admin)" />
+      <SystemOpsConsole />
       <div className="grid md:grid-cols-4 gap-4">
         <StatCard label="Hosts online" value={`${stats?.hosts_online ?? 0}/${stats?.hosts_total ?? 0}`} tone="success" href="/hosts" />
         <StatCard label="Open alerts" value={stats?.alerts_open} tone="warning" href="/alerts" />

@@ -88,6 +88,8 @@ export function CommandPalette() {
       { id: "reports", label: "Go to Reports", path: "/reports", icon: FileText, action: () => navigate("/reports"), keywords: ["compliance", "executive", "pdf"] },
       { id: "audit", label: "Go to Audit Log", path: "/audit", icon: ScrollText, action: () => navigate("/audit"), keywords: ["admin", "activity"] },
       { id: "system", label: "Go to System Health", path: "/system", icon: Activity, action: () => navigate("/system"), keywords: ["health", "pipeline", "status"] },
+      { id: "system-ops", label: "Open ops console", path: "/system", icon: Activity, action: () => navigate("/system"), keywords: ["admin", "circuits", "replica", "mv refresh", "ops"] },
+      { id: "rules-tuning", label: "Rule tuning insights", path: "/rules", icon: Shield, action: () => navigate("/rules"), keywords: ["false positive", "feedback", "tuning"] },
       { id: "settings", label: "Go to Settings", path: "/settings", icon: Settings, action: () => navigate("/settings"), keywords: ["team", "notifications", "playbooks"] },
       { id: "profile", label: "Go to Profile", path: "/profile", icon: User, action: () => navigate("/profile"), keywords: ["account", "password"] },
     ];

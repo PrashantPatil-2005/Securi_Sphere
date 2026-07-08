@@ -15,14 +15,16 @@ The platform supports register/invite → Attack Lab → offenses → investigat
 - Correlation rule CRUD, OpenSearch SIEM search with live host indexing
 - Reference sets in **search and real-time detection**
 - Redis job queue + worker, Redis WebSocket pub/sub
-- Alembic migrations **001–013** (OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, simulation runs, reference intel)
+- Alembic migrations **001–015** (OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, simulation runs, reference intel, immutable audit)
 - Event partition auto-drop on retention
-- k6 load smoke + Playwright smoke + **SOC lab E2E** (invite, offense promotion, maintenance, intel CRUD) in CI
+- k6 load smoke + Playwright smoke + **SOC lab golden-path E2E** in CI (`scripts/validate-demo-flow.ps1` locally)
 - Compose smoke job (`docker-compose.ci.yml`) + release workflow publishing images on `v*` tags
 - Unified **Securi** product branding in UI and user-facing API strings
 
 ### Security & ops
 - RS256 JWT support (configurable)
+- **PostgreSQL read replicas** (`docs/READ_REPLICAS.md`) — optional `DATABASE_READ_URL` routes analytics/search/SIEM reads
+- **Analytics materialized views** (`docs/MATERIALIZED_VIEWS_ANALYTICS.md`) — daily rollups for SIEM historical + retention charts
 - **OIDC SSO** (`docs/OIDC_SSO.md`) — Google/Azure AD style IdP login
 - User invites and provisioning (`docs/USER_PROVISIONING.md`)
 - Production security checklist (`docs/PRODUCTION_SECURITY.md`)
@@ -44,6 +46,7 @@ The platform supports register/invite → Attack Lab → offenses → investigat
 - Threat Intel full CRUD UI, notification channel status in Settings
 - Dedicated `/threat-scores` page with factor breakdown and host risk drawer
 - Global error/404 pages, `/accept-invite` public route fix
+- **FLOW-1–7** analyst workflow polish (Case Workspace naming, guided investigation, RBAC route guard, demo banner) — see `docs/UI_IMPROVEMENT_PLAN.md`
 - System page OpenSearch index stats (doc counts, ISM retention, oldest event index)
 - Search NL panel shows local-mode chip and disabled state when AI is off
 

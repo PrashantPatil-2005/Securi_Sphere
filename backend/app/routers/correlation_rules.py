@@ -12,6 +12,14 @@ from app.dependencies import get_current_user, require_roles
 from app.models.correlation import CorrelationRule
 from app.models.user import User
 from app.services.audit import log_audit
+from app.services.correlation.validation import (
+    RuleDraft,
+    correlation_meta,
+    description_for_type,
+    preview_rule,
+    rule_type_from_description,
+    validate_rule_draft,
+)
 
 router = APIRouter(prefix="/correlation-rules", tags=["correlation-rules"])
 
@@ -47,6 +55,7 @@ class CorrelationRuleCreate(BaseModel):
 class CorrelationRuleUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
+    rule_type: str | None = None
     event_sequence: list[str] | None = Field(default=None, min_length=1)
     window_minutes: int | None = Field(default=None, ge=1, le=1440)
     min_occurrences: dict | None = None
@@ -55,13 +64,36 @@ class CorrelationRuleUpdate(BaseModel):
     enabled: bool | None = None
 
 
+class CorrelationRuleValidateRequest(BaseModel):
+    rule_type: str = "sequence"
+    event_sequence: list[str] = Field(min_length=1)
+    window_minutes: int = Field(default=20, ge=1, le=1440)
+    min_occurrences: dict = Field(default_factory=dict)
+    severity: str = "high"
+    confidence_base: float = Field(default=0.75, ge=0.0, le=1.0)
+
+
+class CorrelationRulePreviewRequest(CorrelationRuleValidateRequest):
+    host_id: UUID | None = None
+
+
 def _rule_type(rule: CorrelationRule) -> str:
-    desc = rule.description or ""
-    if desc.startswith("[cross_host]"):
-        return "cross_host"
-    if desc.startswith("[co_occurrence]"):
-        return "co_occurrence"
-    return "sequence"
+    return rule_type_from_description(rule.description)
+
+
+def _to_draft(body: CorrelationRuleValidateRequest) -> RuleDraft:
+    return RuleDraft(
+        rule_type=body.rule_type,
+        event_sequence=body.event_sequence,
+        window_minutes=body.window_minutes,
+        min_occurrences=body.min_occurrences,
+        severity=body.severity,
+        confidence_base=body.confidence_base,
+    )
+
+
+def _description_for_type(description: str | None, rule_type: str) -> str | None:
+    return description_for_type(description, rule_type)
 
 
 def _to_response(rule: CorrelationRule) -> CorrelationRuleResponse:
@@ -80,33 +112,67 @@ def _to_response(rule: CorrelationRule) -> CorrelationRuleResponse:
     )
 
 
-def _description_for_type(description: str | None, rule_type: str) -> str | None:
-    text = (description or "").strip()
-    for prefix in ("[cross_host]", "[co_occurrence]"):
-        if text.lower().startswith(prefix):
-            text = text[len(prefix):].strip()
-    if rule_type == "co_occurrence":
-        return f"[co_occurrence] {text}".strip() if text else "[co_occurrence]"
-    if rule_type == "cross_host":
-        return f"[cross_host] {text}".strip() if text else "[cross_host]"
-    return text or None
-
-
 def _validate_create(body: CorrelationRuleCreate) -> None:
-    if body.rule_type not in VALID_RULE_TYPES:
-        raise HTTPException(status_code=400, detail=f"rule_type must be one of {sorted(VALID_RULE_TYPES)}")
-    if body.severity not in VALID_SEVERITIES:
-        raise HTTPException(status_code=400, detail=f"severity must be one of {sorted(VALID_SEVERITIES)}")
-    if body.rule_type == "co_occurrence" and len(body.event_sequence) < 2:
-        raise HTTPException(status_code=400, detail="co_occurrence rules require at least 2 event types")
-    if not all(isinstance(item, str) and item.strip() for item in body.event_sequence):
-        raise HTTPException(status_code=400, detail="event_sequence entries must be non-empty strings")
+    errors = validate_rule_draft(
+        RuleDraft(
+            rule_type=body.rule_type,
+            event_sequence=body.event_sequence,
+            window_minutes=body.window_minutes,
+            min_occurrences=body.min_occurrences,
+            severity=body.severity,
+            confidence_base=body.confidence_base,
+            name=body.name,
+            description=body.description,
+        )
+    )
+    if errors:
+        raise HTTPException(status_code=400, detail="; ".join(errors))
+
+
+@router.get("/meta")
+async def correlation_rules_meta(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return await correlation_meta(db)
+
+
+@router.post("/validate")
+async def validate_correlation_rule(
+    body: CorrelationRuleValidateRequest,
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    errors = validate_rule_draft(_to_draft(body))
+    return {"valid": not errors, "errors": errors}
+
+
+@router.post("/preview")
+async def preview_correlation_rule(
+    body: CorrelationRulePreviewRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    draft = _to_draft(body)
+    result = await preview_rule(db, draft, host_id=body.host_id)
+    return result
 
 
 @router.get("", response_model=list[CorrelationRuleResponse])
 async def list_correlation_rules(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     rules = (await db.execute(select(CorrelationRule).order_by(CorrelationRule.name))).scalars().all()
     return [_to_response(r) for r in rules]
+
+
+@router.get("/{rule_id}", response_model=CorrelationRuleResponse)
+async def get_correlation_rule(
+    rule_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rule = (await db.execute(select(CorrelationRule).where(CorrelationRule.id == rule_id))).scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Correlation rule not found")
+    return _to_response(rule)
 
 
 @router.post("", response_model=CorrelationRuleResponse)
@@ -187,7 +253,11 @@ async def update_correlation_rule(
         updates["name"] = name
 
     if "description" in updates and not rule.is_system:
-        updates["description"] = _description_for_type(updates["description"], _rule_type(rule))
+        rule_type = updates.pop("rule_type", None) or _rule_type(rule)
+        updates["description"] = _description_for_type(updates["description"], rule_type)
+    elif "rule_type" in updates and not rule.is_system:
+        rule_type = updates.pop("rule_type")
+        updates["description"] = _description_for_type(rule.description, rule_type)
 
     for key, value in updates.items():
         setattr(rule, key, value)

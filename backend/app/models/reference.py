@@ -20,6 +20,12 @@ class ReferenceSet(Base):
     description: Mapped[str | None] = mapped_column(Text)
     set_type: Mapped[str] = mapped_column(String(32), nullable=False, default="ip")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    source_type: Mapped[str] = mapped_column(String(16), default="manual")
+    feed_url: Mapped[str | None] = mapped_column(Text)
+    feed_format: Mapped[str | None] = mapped_column(String(16))
+    feed_last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    feed_last_sync_status: Mapped[str | None] = mapped_column(String(16))
+    feed_last_sync_error: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

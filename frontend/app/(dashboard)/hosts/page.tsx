@@ -22,6 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Dialog } from "@/components/ui/Dialog";
+import { HostEnrollmentHandshake } from "@/components/hosts/HostEnrollmentHandshake";
 import { useUser } from "@/lib/hooks/useUser";
 
 interface Host {
@@ -37,6 +38,7 @@ interface Host {
 }
 
 interface EnrollmentModal {
+  host_id: string;
   token: string;
   install_command: string;
   expires_at: string;
@@ -127,7 +129,7 @@ export default function HostsPage() {
     setEnrolling(true);
     try {
       const token = await api<EnrollmentModal>(`/api/v1/hosts/${host.id}/enrollment-token`, { method: "POST" });
-      setEnrollment({ ...token, host_name: host.name });
+      setEnrollment({ ...token, host_id: host.id, host_name: host.name });
     } catch (e) {
       toast("error", "Enrollment failed", e instanceof Error ? e.message : "Could not create token");
     } finally {
@@ -315,6 +317,11 @@ export default function HostsPage() {
       >
         {enrollment && (
           <div className="space-y-4">
+            <HostEnrollmentHandshake
+              hostId={enrollment.host_id}
+              hostName={enrollment.host_name}
+              onSuccess={() => refetch()}
+            />
             <div className="rounded-lg border border-accent/25 bg-accent/5 p-4 space-y-3">
               <div className="flex items-start gap-2">
                 <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" aria-hidden />

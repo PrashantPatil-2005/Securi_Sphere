@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.host import Host
+from tests.integration.helpers import create_test_host
 
 
 @pytest.mark.asyncio
@@ -16,12 +16,7 @@ async def test_workspace_requires_single_anchor(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_workspace_from_alert_after_simulation(admin_client: AsyncClient):
-    async with async_session() as db:
-        host = Host(name="ws-host", hostname="ws-host", status="online")
-        db.add(host)
-        await db.commit()
-        await db.refresh(host)
-        host_id = host.id
+    host_id = await create_test_host("ws-host", hostname="ws-host")
 
     sim = await admin_client.post(f"/api/v1/simulation/run/brute_force_only?host_id={host_id}")
     if sim.status_code == 403:

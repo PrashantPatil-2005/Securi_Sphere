@@ -21,8 +21,17 @@ from app.schemas.reference import (
 )
 from app.services.audit import log_audit
 from app.services.reference_sets import lookup_value, validate_set_type
+from app.services.threat_intel_feeds import sync_reference_set_feed
 
 router = APIRouter(prefix="/reference-sets", tags=["reference-sets"])
+VALID_SOURCE_TYPES = {"manual", "feed"}
+
+
+def _validate_feed_fields(*, source_type: str, feed_url: str | None, feed_format: str | None) -> None:
+    if source_type == "feed" and not (feed_url or "").strip():
+        raise HTTPException(status_code=400, detail="feed_url is required for source_type=feed")
+    if source_type != "feed" and (feed_url or feed_format):
+        raise HTTPException(status_code=400, detail="feed_url/feed_format are only valid for source_type=feed")
 
 
 def _set_response(rs: ReferenceSet, entry_count: int | None = None) -> ReferenceSetResponse:
@@ -32,6 +41,12 @@ def _set_response(rs: ReferenceSet, entry_count: int | None = None) -> Reference
         description=rs.description,
         set_type=rs.set_type,
         enabled=rs.enabled,
+        source_type=rs.source_type,
+        feed_url=rs.feed_url,
+        feed_format=rs.feed_format,
+        feed_last_sync_at=rs.feed_last_sync_at,
+        feed_last_sync_status=rs.feed_last_sync_status,
+        feed_last_sync_error=rs.feed_last_sync_error,
         entry_count=entry_count if entry_count is not None else len(rs.entries),
         created_at=rs.created_at,
     )
@@ -61,6 +76,9 @@ async def create_reference_set(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles("admin", "analyst")),
 ):
+    if body.source_type not in VALID_SOURCE_TYPES:
+        raise HTTPException(status_code=400, detail=f"source_type must be one of {sorted(VALID_SOURCE_TYPES)}")
+    _validate_feed_fields(source_type=body.source_type, feed_url=body.feed_url, feed_format=body.feed_format)
     try:
         validate_set_type(body.set_type)
     except ValueError as exc:
@@ -77,6 +95,9 @@ async def create_reference_set(
         description=body.description,
         set_type=body.set_type,
         enabled=body.enabled,
+        source_type=body.source_type,
+        feed_url=(body.feed_url or "").strip() or None,
+        feed_format=body.feed_format,
     )
     db.add(rs)
     await db.flush()
@@ -155,8 +176,44 @@ async def update_reference_set(
         rs.description = body.description
     if body.enabled is not None:
         rs.enabled = body.enabled
+    if body.source_type is not None:
+        if body.source_type not in VALID_SOURCE_TYPES:
+            raise HTTPException(status_code=400, detail=f"source_type must be one of {sorted(VALID_SOURCE_TYPES)}")
+        rs.source_type = body.source_type
+        if body.source_type == "manual":
+            rs.feed_url = None
+            rs.feed_format = None
+    if body.feed_url is not None:
+        rs.feed_url = (body.feed_url or "").strip() or None
+    if body.feed_format is not None:
+        rs.feed_format = body.feed_format
+    _validate_feed_fields(source_type=rs.source_type, feed_url=rs.feed_url, feed_format=rs.feed_format)
     await db.flush()
     return _set_response(rs)
+
+
+@router.post("/{set_id}/sync-feed")
+async def sync_feed(
+    set_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    rs = (await db.execute(select(ReferenceSet).where(ReferenceSet.id == set_id))).scalar_one_or_none()
+    if not rs:
+        raise HTTPException(status_code=404, detail="Reference set not found")
+    if rs.source_type != "feed":
+        raise HTTPException(status_code=400, detail="Reference set is not feed-backed")
+    try:
+        result = await sync_reference_set_feed(db, rs)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Feed sync failed: {exc}") from exc
+    await log_audit(
+        db,
+        "reference_set_feed_sync",
+        user_id=user.id,
+        details={"set_id": str(rs.id), "set_name": rs.name, **result},
+    )
+    return {"set_id": str(rs.id), **result}
 
 
 @router.post("/{set_id}/entries", response_model=list[ReferenceSetEntryResponse])

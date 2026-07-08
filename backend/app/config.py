@@ -6,6 +6,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = ""
+    database_read_url: str = ""
+    read_replica_lag_warn_seconds: float = 30.0
+    analytics_materialized_views_enabled: bool = True
+    analytics_mv_refresh_interval_minutes: int = 60
+    threat_intel_feeds_enabled: bool = True
+    threat_intel_feed_sync_minutes: int = 60
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_private_key_path: str = ""
@@ -106,6 +112,14 @@ class Settings(BaseSettings):
     ueba_create_alerts: bool = True
     ueba_scan_interval_minutes: int = 60
     demo_mode: bool = False
+    telemetry_enabled: bool = True
+    dynamic_ux_enabled: bool = True
+    ux_activation_coach_enabled: bool = True
+    ux_live_simulation_enabled: bool = True
+    ux_enrollment_handshake_enabled: bool = True
+    ux_guided_triage_enabled: bool = True
+    ux_dashboard_vitality_enabled: bool = True
+    ux_admin_ops_console_enabled: bool = True
 
     @model_validator(mode="after")
     def apply_testing_env(self) -> "Settings":
@@ -114,6 +128,7 @@ class Settings(BaseSettings):
             self.testing = True
             self.debug = False
             self.backup_enabled = False
+            self.analytics_materialized_views_enabled = False
             self.db_pool_size = 5
             self.db_max_overflow = 5
         return self
@@ -129,6 +144,10 @@ class Settings(BaseSettings):
         ):
             raise ValueError("JWT key paths required for RS256")
         return self
+
+    @property
+    def read_replica_enabled(self) -> bool:
+        return bool(self.database_read_url.strip())
 
     @property
     def smtp_host(self) -> str:

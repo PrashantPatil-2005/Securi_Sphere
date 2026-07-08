@@ -27,8 +27,10 @@ Verify Postgres, Redis, and API health:
 ```powershell
 .\scripts\verify-local.ps1
 .\scripts\run-tests.ps1 -Quick          # fast backend smoke
+.\scripts\run-tests.ps1 -SearchGate     # OpenSearch admin + search fallback gate
 .\scripts\run-tests.ps1 -IntegrationOnly  # all integration tests
 .\scripts\run-e2e.ps1                   # Playwright E2E (stack must be running)
+.\scripts\validate-demo-flow.ps1        # demo-setup + golden-path E2E (full dry-run)
 ```
 
 **Demo / presentation mode** (faster page loads, no dev compilation):
@@ -144,6 +146,11 @@ curl -fsSL http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROL
 - [docs/CIRCUIT_BREAKERS.md](docs/CIRCUIT_BREAKERS.md) — External dependency circuit breakers
 - [docs/REQUEST_TIMEOUTS.md](docs/REQUEST_TIMEOUTS.md) — API and outbound HTTP timeouts
 - [docs/CONNECTION_POOLING.md](docs/CONNECTION_POOLING.md) — Postgres connection pool tuning
+- [docs/READ_REPLICAS.md](docs/READ_REPLICAS.md) — Optional read replica routing
+- [docs/MATERIALIZED_VIEWS_ANALYTICS.md](docs/MATERIALIZED_VIEWS_ANALYTICS.md) — Analytics materialized views
+- [docs/CORRELATION_RULE_EDITOR.md](docs/CORRELATION_RULE_EDITOR.md) — Correlation rule editor v2
+- [docs/FALSE_POSITIVE_FEEDBACK_LOOP.md](docs/FALSE_POSITIVE_FEEDBACK_LOOP.md) — Analyst feedback and rule tuning loop
+- [docs/ONBOARDING_WIZARD.md](docs/ONBOARDING_WIZARD.md) — First-run onboarding wizard
 - [docs/WRAP_UP.md](docs/WRAP_UP.md) — Feature checklist and handoff
 
 ### Features

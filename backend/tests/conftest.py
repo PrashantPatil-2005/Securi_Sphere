@@ -21,6 +21,7 @@ from app.models.role import Role  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.routers.auth import seed_roles  # noqa: E402
 from app.security import hash_password  # noqa: E402
+from app.services.detection import seed_alert_rules  # noqa: E402
 from app.services.migrate import migrate_schema  # noqa: E402
 
 TEST_USERS = {
@@ -37,36 +38,38 @@ _db_seeded = False
 @pytest_asyncio.fixture
 async def prepare_database():
     global _db_seeded
-    from app.database import engine
+    from app.database import dispose_engines, engine
 
-    await engine.dispose()
+    await dispose_engines()
     try:
         if not _db_seeded:
             await migrate_schema()
-            async with async_session() as db:
-                await seed_roles(db)
-                roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
-                for email, role_name in TEST_USERS.items():
-                    existing = (
-                        await db.execute(select(User).where(User.email == email))
-                    ).scalar_one_or_none()
-                    if existing:
-                        existing.hashed_password = hash_password(TEST_PASSWORD)
-                        existing.role_id = roles[role_name].id
-                        existing.is_active = True
-                        existing.failed_login_attempts = 0
-                        existing.locked_until = None
-                    else:
-                        db.add(
-                            User(
-                                email=email,
-                                hashed_password=hash_password(TEST_PASSWORD),
-                                role_id=roles[role_name].id,
-                                full_name=role_name.capitalize(),
-                            )
-                        )
-                await db.commit()
             _db_seeded = True
+
+        async with async_session() as db:
+            await seed_roles(db)
+            await seed_alert_rules(db)
+            roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
+            for email, role_name in TEST_USERS.items():
+                existing = (
+                    await db.execute(select(User).where(User.email == email))
+                ).scalar_one_or_none()
+                if existing:
+                    existing.hashed_password = hash_password(TEST_PASSWORD)
+                    existing.role_id = roles[role_name].id
+                    existing.is_active = True
+                    existing.failed_login_attempts = 0
+                    existing.locked_until = None
+                else:
+                    db.add(
+                        User(
+                            email=email,
+                            hashed_password=hash_password(TEST_PASSWORD),
+                            role_id=roles[role_name].id,
+                            full_name=role_name.capitalize(),
+                        )
+                    )
+            await db.commit()
     except Exception as exc:
         pytest.skip(f"Database unavailable for integration tests: {exc}")
     yield
@@ -88,16 +91,26 @@ async def _login(ac: AsyncClient, email: str) -> AsyncClient:
     return ac
 
 
-@pytest_asyncio.fixture
-async def admin_client(client: AsyncClient):
-    return await _login(client, "admin@test.local")
+async def _role_client(email: str):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        await _login(ac, email)
+        yield ac
 
 
 @pytest_asyncio.fixture
-async def analyst_client(client: AsyncClient):
-    return await _login(client, "analyst@test.local")
+async def admin_client(prepare_database):
+    async for ac in _role_client("admin@test.local"):
+        yield ac
 
 
 @pytest_asyncio.fixture
-async def viewer_client(client: AsyncClient):
-    return await _login(client, "viewer@test.local")
+async def analyst_client(prepare_database):
+    async for ac in _role_client("analyst@test.local"):
+        yield ac
+
+
+@pytest_asyncio.fixture
+async def viewer_client(prepare_database):
+    async for ac in _role_client("viewer@test.local"):
+        yield ac

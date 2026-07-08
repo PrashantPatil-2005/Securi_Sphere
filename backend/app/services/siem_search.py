@@ -2,7 +2,7 @@
 import re
 from datetime import datetime
 
-from sqlalchemy import false, or_, select
+from sqlalchemy import String, cast, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
@@ -145,7 +145,7 @@ async def execute_siem_search(
         ip_filter = parsed["filters"]["source_ip"]
         event_clauses.append(
             or_(
-                Event.source_ip == ip_filter,
+                cast(Event.source_ip, String) == ip_filter,
                 Event.metadata_["source_ip"].astext == ip_filter,
             )
         )
@@ -156,7 +156,7 @@ async def execute_siem_search(
         else:
             event_clauses.append(
                 or_(
-                    Event.source_ip.in_(values),
+                    cast(Event.source_ip, String).in_(values),
                     Event.metadata_["source_ip"].astext.in_(values),
                 )
             )

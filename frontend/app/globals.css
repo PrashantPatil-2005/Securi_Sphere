@@ -319,3 +319,86 @@ body {
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
+
+/* ─── Emotion-aware UX tokens ─── */
+:root,
+[data-theme="dark"] {
+  --emotion-calm-bg: rgba(59, 130, 246, 0.08);
+  --emotion-calm-border: rgba(59, 130, 246, 0.25);
+  --emotion-confidence-bg: rgba(34, 197, 94, 0.08);
+  --emotion-confidence-border: rgba(34, 197, 94, 0.25);
+  --emotion-urgency-bg: rgba(239, 68, 68, 0.1);
+  --emotion-urgency-border: rgba(239, 68, 68, 0.35);
+  --emotion-success-bg: rgba(34, 197, 94, 0.12);
+  --emotion-success-border: rgba(34, 197, 94, 0.35);
+  --emotion-progress-bg: rgba(234, 179, 8, 0.1);
+  --emotion-progress-border: rgba(234, 179, 8, 0.3);
+}
+
+.emotion-banner {
+  @apply rounded-lg border p-3;
+}
+.emotion-calm { background: var(--emotion-calm-bg); border-color: var(--emotion-calm-border); }
+.emotion-confidence { background: var(--emotion-confidence-bg); border-color: var(--emotion-confidence-border); }
+.emotion-urgency { background: var(--emotion-urgency-bg); border-color: var(--emotion-urgency-border); }
+.emotion-success { background: var(--emotion-success-bg); border-color: var(--emotion-success-border); }
+.emotion-progress { background: var(--emotion-progress-bg); border-color: var(--emotion-progress-border); }
+.emotion-banner-icon { @apply mt-0.5 text-accent; }
+.emotion-urgency .emotion-banner-icon { color: var(--danger); }
+.emotion-success .emotion-banner-icon { color: var(--success); }
+.emotion-progress .emotion-banner-icon { color: var(--warning); }
+
+.progress-steps {
+  @apply flex flex-wrap gap-2;
+}
+.progress-step {
+  @apply flex items-center gap-1.5 px-2 py-1 rounded-md border border-border-subtle text-muted;
+}
+.progress-step-done {
+  color: var(--success);
+  border-color: var(--emotion-success-border);
+  background: var(--emotion-success-bg);
+}
+.progress-step-active {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  animation: step-pulse 1.5s ease-in-out infinite;
+}
+.progress-step-dot {
+  @apply w-1.5 h-1.5 rounded-full bg-muted;
+}
+.progress-step-done .progress-step-dot { @apply bg-success; }
+.progress-step-active .progress-step-dot { @apply bg-accent; }
+
+@keyframes step-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+.vitality-pulse {
+  @apply inline-block w-2 h-2 rounded-full bg-accent;
+  animation: vitality-blink 1.2s ease-in-out infinite;
+}
+@keyframes vitality-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.feed-row-new {
+  animation: feed-highlight 2.5s ease-out;
+}
+@keyframes feed-highlight {
+  0% { background: var(--accent-subtle); }
+  100% { background: transparent; }
+}
+
+.stat-card-vital {
+  @apply relative overflow-hidden;
+}
+.stat-delta {
+  @apply text-[10px] font-medium mt-1 tabular-nums;
+}
+.stat-delta-up { color: var(--danger); }
+.stat-delta-down { color: var(--success); }
+.stat-delta-neutral { color: var(--muted); }

@@ -55,6 +55,47 @@ jobs:
       - run: pip install ruff
       - run: ruff check app tests
 
+  backend-opensearch-gate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: securi
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: securi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: OpenSearch admin + search fallback gate
+        run: >
+          pytest
+          tests/test_opensearch_scale.py
+          tests/test_siem_opensearch.py
+          tests/integration/test_system_admin_api.py
+          tests/integration/test_search.py
+          -q --tb=short
+        env:
+          TESTING: "true"
+          DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
+          JWT_SECRET: ci-test-secret-key-minimum-length
+          REDIS_URL: ""
+          JOB_QUEUE_BACKEND: memory
+          WS_PUBSUB_BACKEND: memory
+
   frontend-lint:
     runs-on: ubuntu-latest
     defaults:

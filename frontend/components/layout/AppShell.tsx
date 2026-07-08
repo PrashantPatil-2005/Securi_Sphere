@@ -6,6 +6,8 @@ import { TopNav } from "./TopNav";
 import { PageTransition } from "./PageTransition";
 import { AIAssistantPanel } from "@/components/AIAssistantPanel";
 import { CommandPalette } from "@/components/CommandPalette";
+import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
+import { ActivationCoach } from "@/components/onboarding/ActivationCoach";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -41,6 +43,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <CommandPalette />
+      <OnboardingWizard />
+      <ActivationCoach />
       <AIAssistantPanel />
     </div>
   );

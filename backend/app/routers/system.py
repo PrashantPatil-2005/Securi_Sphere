@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.brand import PRODUCT_NAME
 from app.config import settings
 from app.core.health import readiness
-from app.database import get_db
+from app.database import get_db, get_db_read
 from app.dependencies import require_roles
 from app.jobs.queue import job_queue
 from app.models.alert import Alert
@@ -43,7 +43,7 @@ async def system_health(user: User = Depends(require_roles("admin"))):
 
 
 @router.get("/pipeline")
-async def pipeline_status(db=Depends(get_db), user: User = Depends(require_roles("admin"))):
+async def pipeline_status(db=Depends(get_db_read), user: User = Depends(require_roles("admin"))):
     """QRadar-style 3-layer pipeline map for Securi."""
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     events_24h = (
@@ -121,7 +121,7 @@ async def pipeline_status(db=Depends(get_db), user: User = Depends(require_roles
 
 
 @router.get("/stats")
-async def system_stats(db=Depends(get_db), user: User = Depends(require_roles("admin"))):
+async def system_stats(db=Depends(get_db_read), user: User = Depends(require_roles("admin"))):
     hosts_total = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
     hosts_online = (
         await db.execute(select(func.count()).select_from(Host).where(Host.status == "online"))
@@ -185,12 +185,65 @@ async def database_pool_status_endpoint(
     from app.core.db_pool import database_pool_status, estimate_cluster_connections
 
     return {
-        **database_pool_status(),
+        "primary": database_pool_status(role="primary"),
+        "read": database_pool_status(role="read"),
         "cluster_estimate": estimate_cluster_connections(
             api_replicas=api_replicas,
             worker_replicas=worker_replicas,
         ),
     }
+
+
+@router.get("/replicas")
+async def read_replica_status_endpoint(user: User = Depends(require_roles("admin"))):
+    from app.core.read_replica import read_replica_status
+
+    status = await read_replica_status()
+    return {
+        **status,
+        "read_url_configured": settings.read_replica_enabled,
+        "routed_endpoints": [
+            "GET /api/v1/analytics/*",
+            "GET /api/v1/events",
+            "GET /api/v1/search",
+            "GET /api/v1/siem/*",
+            "GET /api/v1/threat-scores",
+            "GET /api/v1/mitre/*",
+            "GET /api/v1/ueba/summary",
+            "GET /api/v1/ueba/anomalies",
+            "GET /api/v1/overview",
+        ],
+    }
+
+
+@router.get("/analytics-mvs")
+async def analytics_materialized_view_status(
+    db=Depends(get_db_read),
+    user: User = Depends(require_roles("admin")),
+):
+    from app.services.analytics.materialized_views import MV_NAMES, materialized_view_status
+
+    views = await materialized_view_status(db)
+    return {
+        "enabled": settings.analytics_materialized_views_enabled,
+        "refresh_interval_minutes": settings.analytics_mv_refresh_interval_minutes,
+        "views": views,
+        "expected": list(MV_NAMES),
+    }
+
+
+@router.post("/analytics-mvs/refresh")
+async def refresh_analytics_materialized_views_endpoint(
+    db=Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+):
+    from app.services.analytics.materialized_views import refresh_analytics_materialized_views
+
+    if not settings.analytics_materialized_views_enabled:
+        raise HTTPException(status_code=400, detail="Analytics materialized views are disabled")
+    result = await refresh_analytics_materialized_views(db)
+    await db.commit()
+    return {"refreshed": result}
 
 
 @router.post("/opensearch/backfill")

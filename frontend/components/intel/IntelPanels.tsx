@@ -21,6 +21,12 @@ interface RefSet {
   set_type: string;
   enabled: boolean;
   entry_count: number;
+  source_type: "manual" | "feed";
+  feed_url: string | null;
+  feed_format: "txt" | "csv" | "json" | null;
+  feed_last_sync_at: string | null;
+  feed_last_sync_status: string | null;
+  feed_last_sync_error: string | null;
 }
 
 interface RefEntry {
@@ -37,7 +43,10 @@ export function ReferenceSetsPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [setType, setSetType] = useState<(typeof SET_TYPES)[number]>("ip");
+  const [sourceType, setSourceType] = useState<"manual" | "feed">("manual");
   const [description, setDescription] = useState("");
+  const [feedUrl, setFeedUrl] = useState("");
+  const [feedFormat, setFeedFormat] = useState<"txt" | "csv" | "json">("txt");
   const [bulkValues, setBulkValues] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
@@ -57,12 +66,22 @@ export function ReferenceSetsPanel() {
     mutationFn: () =>
       api<RefSet>("/api/v1/reference-sets", {
         method: "POST",
-        body: JSON.stringify({ name, set_type: setType, description: description || null }),
+        body: JSON.stringify({
+          name,
+          set_type: setType,
+          description: description || null,
+          source_type: sourceType,
+          feed_url: sourceType === "feed" ? feedUrl || null : null,
+          feed_format: sourceType === "feed" ? feedFormat : null,
+        }),
       }),
     onSuccess: (data) => {
       toast("success", "Reference set created");
       setName("");
       setDescription("");
+      setFeedUrl("");
+      setSourceType("manual");
+      setFeedFormat("txt");
       setSelectedId(data.id);
       queryClient.invalidateQueries({ queryKey: ["reference-sets"] });
     },
@@ -90,6 +109,16 @@ export function ReferenceSetsPanel() {
       queryClient.invalidateQueries({ queryKey: ["reference-sets"] });
     },
     onError: (e: Error) => toast("error", "Delete failed", e.message),
+  });
+
+  const syncFeedMutation = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/reference-sets/${id}/sync-feed`, { method: "POST" }),
+    onSuccess: () => {
+      toast("success", "Feed synchronized");
+      queryClient.invalidateQueries({ queryKey: ["reference-sets"] });
+      refetchEntries();
+    },
+    onError: (e: Error) => toast("error", "Feed sync failed", e.message),
   });
 
   const addEntriesMutation = useMutation({
@@ -142,7 +171,28 @@ export function ReferenceSetsPanel() {
                 <option key={t} value={t}>{t}</option>
               ))}
             </Select>
+            <Select label="Source" value={sourceType} onChange={(e) => setSourceType(e.target.value as "manual" | "feed")}>
+              <option value="manual">manual</option>
+              <option value="feed">feed</option>
+            </Select>
             <Input label="Description" value={description} onChange={(e) => setDescription(e.target.value)} className="sm:col-span-2" />
+            {sourceType === "feed" && (
+              <>
+                <Input
+                  label="Feed URL"
+                  required
+                  value={feedUrl}
+                  onChange={(e) => setFeedUrl(e.target.value)}
+                  placeholder="https://example.com/blocklist.txt"
+                  className="sm:col-span-2 font-mono"
+                />
+                <Select label="Feed format" value={feedFormat} onChange={(e) => setFeedFormat(e.target.value as "txt" | "csv" | "json")}>
+                  <option value="txt">txt</option>
+                  <option value="csv">csv</option>
+                  <option value="json">json</option>
+                </Select>
+              </>
+            )}
             <Button type="submit" loading={createMutation.isPending} className="sm:col-span-2">Create set</Button>
           </form>
         </Panel>
@@ -168,9 +218,15 @@ export function ReferenceSetsPanel() {
                       <span className="text-xs text-muted">{s.entry_count} entries</span>
                     </div>
                     <p className="text-xs text-muted mt-1">
-                      {s.set_type}{s.description ? ` · ${s.description}` : ""}
+                      {s.set_type} · {s.source_type}{s.description ? ` · ${s.description}` : ""}
                       {!s.enabled && " · disabled"}
                     </p>
+                    {s.source_type === "feed" && (
+                      <p className="text-xs text-muted mt-1">
+                        {s.feed_last_sync_status ? `sync: ${s.feed_last_sync_status}` : "sync: never"}
+                        {s.feed_last_sync_at ? ` · ${new Date(s.feed_last_sync_at).toLocaleString()}` : ""}
+                      </p>
+                    )}
                   </button>
                   <div className="flex gap-2 mt-2">
                     <button
@@ -180,6 +236,16 @@ export function ReferenceSetsPanel() {
                     >
                       {s.enabled ? "Disable" : "Enable"}
                     </button>
+                    {s.source_type === "feed" && (
+                      <button
+                        type="button"
+                        className="btn-ghost text-xs"
+                        onClick={() => syncFeedMutation.mutate(s.id)}
+                        disabled={syncFeedMutation.isPending}
+                      >
+                        Sync feed
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-ghost text-xs text-danger"
@@ -197,6 +263,16 @@ export function ReferenceSetsPanel() {
       <Panel title={selected ? `Entries · ${selected.name}` : "Select a set"} subtitle="Paste values separated by commas or newlines">
         {selected ? (
           <>
+            {selected.source_type === "feed" && (
+              <div className="mb-4 p-2 rounded border border-border-subtle text-xs text-muted">
+                Feed: <span className="font-mono">{selected.feed_url || "n/a"}</span>
+                {" · "}
+                format: {selected.feed_format || "auto"}
+                {" · "}
+                status: {selected.feed_last_sync_status || "never"}
+                {selected.feed_last_sync_error ? ` · ${selected.feed_last_sync_error}` : ""}
+              </div>
+            )}
             <form
               onSubmit={(e) => {
                 e.preventDefault();

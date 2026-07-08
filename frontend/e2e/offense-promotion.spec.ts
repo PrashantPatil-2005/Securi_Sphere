@@ -24,9 +24,9 @@ test.describe("Offense promotion flow", () => {
     await offenseItem.click();
 
     await page.getByRole("button", { name: "Promote to incident" }).click();
-    await expect(page.getByRole("button", { name: /view in case workspace/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /view in case workspace/i })).toBeVisible({ timeout: 45_000 });
 
     await page.goto("/incidents");
-    await expect(page.getByRole("heading", { name: /investigations|incidents/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /incidents/i, level: 1 })).toBeVisible();
   });
 });

@@ -44,16 +44,27 @@ export const StatCard = memo(function StatCard({
   value,
   tone = "default",
   href,
+  delta,
+  deltaLabel,
+  vital,
 }: {
   label: string;
   value: ReactNode;
   tone?: "default" | "success" | "warning" | "danger" | "info";
   href?: string;
+  delta?: number | null;
+  deltaLabel?: string;
+  vital?: boolean;
 }) {
   const card = (
-    <div className={`stat-card stat-${tone}`}>
+    <div className={`stat-card stat-${tone} ${vital ? "stat-card-vital" : ""}`}>
       <span className="stat-label">{label}</span>
       <span className="stat-value">{value ?? "—"}</span>
+      {delta != null && (
+        <span className={`stat-delta ${delta > 0 ? "stat-delta-up" : delta < 0 ? "stat-delta-down" : "stat-delta-neutral"}`}>
+          {delta > 0 ? "+" : ""}{delta}{deltaLabel ? ` ${deltaLabel}` : ""}
+        </span>
+      )}
     </div>
   );
   if (href) return <Link href={href} className="block">{card}</Link>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
@@ -13,6 +13,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { AttackLabHeader } from "@/components/attack-lab/AttackLabHeader";
 import { AttackLabTabs } from "@/components/attack-lab/AttackLabTabs";
 import { SimulationRunner } from "@/components/attack-lab/SimulationRunner";
+import { SimulationLiveProgress } from "@/components/attack-lab/SimulationLiveProgress";
 import { CustomEventBuilder } from "@/components/attack-lab/CustomEventBuilder";
 import { KillChainPreview } from "@/components/attack-lab/KillChainPreview";
 import { InvestigationGuide } from "@/components/attack-lab/InvestigationGuide";
@@ -29,6 +30,7 @@ import type {
   ScenariosResponse,
   SimulationRunResult,
 } from "@/lib/types/simulation";
+import { track } from "@/lib/telemetry";
 
 function detailToResult(detail: Awaited<ReturnType<typeof fetchSimulationRunDetail>>): SimulationRunResult {
   return {
@@ -63,7 +65,7 @@ export default function SimulationPage() {
     retry: false,
   });
 
-  const scenarios = scenariosData?.scenarios ?? [];
+  const scenarios = useMemo(() => scenariosData?.scenarios ?? [], [scenariosData?.scenarios]);
   const enabled = scenariosData?.enabled ?? false;
   const selectedScenario = scenarios.find((s) => s.id === scenarioId) ?? null;
   const showPurge = canPurgeSimulation(user?.role?.name);
@@ -99,6 +101,7 @@ export default function SimulationPage() {
       setLastResult(r);
       setSelectedRunId(r.run_id);
       invalidateAfterRun();
+      track("simulation_completed", { scenario_id: r.scenario, events: r.events, run_id: r.run_id });
       toast("success", `${r.message} (${r.events} events)`);
     },
     onError: (e: Error) => toast("error", "Simulation failed", e.message),
@@ -182,6 +185,7 @@ export default function SimulationPage() {
             <div className="space-y-6">
               {tab === "presets" && (
                 <>
+                  <SimulationLiveProgress running={running} scenarioName={selectedScenario?.name} />
                   <SimulationRunner
                     hosts={hosts}
                     scenarios={scenarios}

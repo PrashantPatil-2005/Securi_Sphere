@@ -47,6 +47,8 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/alerts` | List alerts |
 | GET | `/alerts/{id}` | Get alert |
 | PATCH | `/alerts/{id}/resolve` | Resolve alert |
+| PATCH | `/alerts/{id}/status` | Update alert status / assignment |
+| PATCH | `/alerts/{id}/feedback` | Mark false/true positive feedback |
 
 ## Other
 
@@ -71,6 +73,7 @@ Static: `GET /install.sh` â€” agent installer script
 | GET | `/mitre/matrix` | all | MITRE ATT&CK matrix from events |
 | GET | `/mitre/techniques` | all | Seeded MITRE techniques |
 | GET/POST/PATCH/DELETE | `/alert-rules` | admin/analyst | Detection rule CRUD |
+| GET | `/alert-rules/feedback-insights` | admin/analyst | Detection rule false-positive insights |
 | GET | `/timelines` | all | Attack timelines |
 | GET | `/timelines/{id}/events` | all | Events in a timeline |
 | GET/POST | `/incidents` | analyst+ | Incident management |
@@ -79,7 +82,11 @@ Static: `GET /install.sh` â€” agent installer script
 | GET | `/reports/summary` | all | Summary report (json/csv) |
 | GET | `/network/topology` | all | Host network map |
 | GET | `/threat-scores` | all | Ranked host threat scores |
-| GET | `/correlation-rules` | all | Read-only correlation rules |
+| GET | `/correlation-rules` | all | List correlation rules |
+| GET | `/correlation-rules/meta` | all | Editor metadata and templates |
+| POST | `/correlation-rules/validate` | admin, analyst | Validate rule draft |
+| POST | `/correlation-rules/preview` | admin, analyst | Preview rule against recent events |
+| POST | `/reference-sets/{id}/sync-feed` | admin/analyst | Sync indicators from threat intel feed URL |
 | GET/POST/DELETE | `/maintenance-windows` | analyst+ | Host maintenance windows (suppress routine alerts) |
 | GET | `/hosts/{id}/enrollment-tokens` | admin/analyst | List enrollment tokens |
 | DELETE | `/enrollment-tokens/{id}` | admin/analyst | Revoke token |

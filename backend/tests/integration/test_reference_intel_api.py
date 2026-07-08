@@ -1,14 +1,17 @@
 """Integration tests for reference sets API."""
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
 async def test_create_reference_set_and_entries(admin_client: AsyncClient):
+    name = f"test_bad_ips_{uuid.uuid4().hex[:8]}"
     create = await admin_client.post(
         "/api/v1/reference-sets",
-        json={"name": "test_bad_ips", "set_type": "ip", "description": "test"},
+        json={"name": name, "set_type": "ip", "description": "test"},
     )
     assert create.status_code == 201
     set_id = create.json()["id"]
@@ -27,19 +30,21 @@ async def test_create_reference_set_and_entries(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_siem_ref_filter(admin_client: AsyncClient):
+    name = f"siem_ref_users_{uuid.uuid4().hex[:8]}"
     create = await admin_client.post(
         "/api/v1/reference-sets",
-        json={"name": "siem_ref_ips", "set_type": "ip"},
+        json={"name": name, "set_type": "username"},
     )
+    assert create.status_code == 201, create.text
     set_id = create.json()["id"]
     await admin_client.post(
         f"/api/v1/reference-sets/{set_id}/entries",
-        json={"values": ["203.0.113.77"]},
+        json={"values": ["alice"]},
     )
 
-    res = await admin_client.get("/api/v1/search/siem", params={"q": "source_ip:ref:siem_ref_ips"})
+    res = await admin_client.get("/api/v1/search/siem", params={"q": f"username:ref:{name}"})
     assert res.status_code == 200
-    assert res.json()["parsed"]["in_filters"]["source_ip"] == ["203.0.113.77"]
+    assert res.json()["parsed"]["in_filters"]["username"] == ["alice"]
 
 
 @pytest.mark.asyncio
@@ -50,7 +55,7 @@ async def test_reference_set_triggers_detection_alert(analyst_client: AsyncClien
 
     create = await analyst_client.post(
         "/api/v1/reference-sets",
-        json={"name": "detect_bad_ips", "set_type": "ip"},
+        json={"name": f"detect_bad_ips_{uuid.uuid4().hex[:8]}", "set_type": "ip"},
     )
     assert create.status_code == 201
     set_id = create.json()["id"]
@@ -77,3 +82,36 @@ async def test_reference_set_triggers_detection_alert(analyst_client: AsyncClien
     assert alerts.status_code == 200
     titles = [a["title"] for a in alerts.json()["items"]]
     assert any("Threat Intel Match" in t for t in titles)
+
+
+@pytest.mark.asyncio
+async def test_feed_backed_reference_set_sync(admin_client: AsyncClient, monkeypatch):
+    async def _fake_fetch(_url: str) -> str:
+        return "203.0.113.10\n203.0.113.11\n"
+
+    monkeypatch.setattr(
+        "app.services.threat_intel_feeds.fetch_remote_feed",
+        _fake_fetch,
+    )
+
+    create = await admin_client.post(
+        "/api/v1/reference-sets",
+        json={
+            "name": f"feed_bad_ips_{uuid.uuid4().hex[:8]}",
+            "set_type": "ip",
+            "source_type": "feed",
+            "feed_url": "https://example.com/feed.txt",
+            "feed_format": "txt",
+        },
+    )
+    assert create.status_code == 201, create.text
+    set_id = create.json()["id"]
+
+    sync = await admin_client.post(f"/api/v1/reference-sets/{set_id}/sync-feed")
+    assert sync.status_code == 200, sync.text
+    assert sync.json()["added"] == 2
+
+    entries = await admin_client.get(f"/api/v1/reference-sets/{set_id}/entries")
+    assert entries.status_code == 200, entries.text
+    values = {e["value"] for e in entries.json()}
+    assert {"203.0.113.10", "203.0.113.11"}.issubset(values)
