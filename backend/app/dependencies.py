@@ -64,9 +64,10 @@ async def get_host_by_api_key(
 
 
 def client_ip(request: Request) -> str | None:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if settings.trusted_proxy:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     if request.client:
         return request.client.host
     return None

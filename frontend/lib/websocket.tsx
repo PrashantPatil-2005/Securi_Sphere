@@ -54,8 +54,11 @@ class WebSocketStore {
 
     void fetchWsToken().then((token) => {
       if (!token) return;
-      const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws?token=${token}`;
+      const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws`;
       const ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "auth", token }));
+      };
       this.ws = ws;
 
       ws.onopen = () => {

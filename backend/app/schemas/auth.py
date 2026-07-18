@@ -1,9 +1,23 @@
 from datetime import datetime
+import re
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.validators import AuthEmail
+
+_PASSWORD_COMPLEXITY = re.compile(
+    r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]).{8,}$"
+)
+
+
+def _validate_password(v: str) -> str:
+    if not _PASSWORD_COMPLEXITY.match(v):
+        raise ValueError(
+            "Password must be at least 8 characters and include uppercase, "
+            "lowercase, digit, and special character"
+        )
+    return v
 
 
 class RoleResponse(BaseModel):
@@ -31,6 +45,11 @@ class UserResponse(BaseModel):
 class RegisterRequest(BaseModel):
     email: AuthEmail
     password: str = Field(min_length=8)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _validate_password(v)
 
 
 class LoginRequest(BaseModel):
@@ -93,6 +112,11 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(min_length=8)
 
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _validate_password(v)
+
 
 class LogoutRequest(BaseModel):
     refresh_token: str | None = None
@@ -105,3 +129,8 @@ class ProfileUpdateRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        return _validate_password(v)

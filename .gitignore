@@ -2,13 +2,17 @@ __pycache__/
 *.py[cod]
 venv/
 .env
+.env.*
+!.env.example
 backend/.env
+backend/.env.*
 backend/venv
 scripts/*
 !scripts/*.sh
 !scripts/*.ps1
 !scripts/*.js
 frontend/.env.local
+frontend/.env.*
 *.db
 node_modules/
 .next/
@@ -21,3 +25,9 @@ backend/data/backups/
 data/backups/
 data/pitr/
 k8s/secret.yaml
+.enroll-temp.json
+.install-cmd.sh
+*.tar.gz
+*.log
+docker-compose.override.yml
+backend/debug-*.log

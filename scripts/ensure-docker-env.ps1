@@ -45,7 +45,10 @@ function Ensure-DockerEnv {
         }
     }
 
-    if (-not $pgPass) { $pgPass = "securi_dev" }
+    if (-not $pgPass) {
+        Write-Warning "No POSTGRES_PASSWORD found in .env files. Using development fallback. DO NOT use in production."
+        $pgPass = "securi_dev"
+    }
 
     $lines = @()
     if (Test-Path $rootEnv) {

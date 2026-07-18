@@ -154,10 +154,11 @@ async def execute_siem_search(
         if not values:
             event_clauses.append(false())
         else:
+            ip_values = [str(v) for v in values]
             event_clauses.append(
                 or_(
-                    cast(Event.source_ip, String).in_(values),
-                    Event.metadata_["source_ip"].astext.in_(values),
+                    cast(Event.source_ip, String).in_(ip_values),
+                    Event.metadata_["source_ip"].astext.in_(ip_values),
                 )
             )
     if parsed["free_text"]:

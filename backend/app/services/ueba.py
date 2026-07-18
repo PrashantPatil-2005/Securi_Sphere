@@ -1,4 +1,24 @@
-"""UEBA baseline anomaly detection — z-score spikes vs rolling daily baselines."""
+"""Statistical anomaly detection — z-score spikes vs rolling daily baselines.
+
+This is NOT full UEBA (User and Entity Behavior Analytics). Real UEBA uses
+machine learning models, behavioral profiling, and graph analysis. This is
+a simpler approach: compute daily baselines for event counts, then flag
+statistically significant deviations using z-scores.
+
+What it does:
+1. Aggregate daily event counts per user/entity
+2. Compute rolling mean and stddev over a configurable window
+3. When current count deviates by > Z_THRESHOLD standard deviations, flag it
+
+What it doesn't do:
+- No ML models or training
+- No behavioral profiling
+- No graph-based entity relationships
+- No peer group analysis
+
+Honest name: "statistical anomaly detection"
+Marketing name: "UEBA" (what the industry calls it)
+"""
 
 from __future__ import annotations
 

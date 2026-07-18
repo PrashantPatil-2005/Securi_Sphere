@@ -30,7 +30,7 @@ See [SIEM_PIPELINE_ARCHITECTURE.md](SIEM_PIPELINE_ARCHITECTURE.md) for the full 
 - [x] FastAPI backend + PostgreSQL + optional Redis/OpenSearch
 - [x] Next.js 14 dashboard with real-time WebSockets
 - [x] Python Linux agent (enrollment, heartbeat, log collection)
-- [x] Alembic migrations `001` → `005` (baseline, indexes, constraints, event partitions, agent cert)
+- [x] Alembic migrations `001` → `020` (baseline, indexes, constraints, partitions, agent cert, OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, reference intel, immutable audit, false-positive feedback, threat intel, analytics MVs, reports, telemetry)
 - [x] Docker Compose (Postgres, Redis, backend, worker, frontend)
 
 ### Detection & response
@@ -141,7 +141,6 @@ npx playwright test e2e/lab-flow.spec.ts
 | Item | Reason |
 |------|--------|
 | Native Windows agent / Sysmon on endpoint | Separate product surface |
-| OIDC / SAML SSO | Identity-provider integration project |
 | HashiCorp Vault / AWS Secrets Manager | Deployment-specific infra |
 | Packet capture / Wireshark integration | Forensics appliance scope |
 | Multi-tenancy | Architecture redesign |

@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.database import get_db, get_db_read
 from app.dependencies import get_current_user
@@ -67,7 +70,7 @@ async def retention_view(
         try:
             return await query_retention_from_materialized_views(db, view, since=since)
         except Exception:
-            pass
+            logger.debug("Materialized view query failed, falling back to raw query", exc_info=True)
 
     since_dt = now - timedelta(days=90)
 

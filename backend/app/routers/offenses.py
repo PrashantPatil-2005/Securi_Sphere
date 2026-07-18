@@ -115,7 +115,6 @@ async def get_offense(
         )
     ).scalar_one_or_none()
     if not offense:
-        from fastapi import HTTPException
         raise HTTPException(404, "Offense not found")
 
     host = (await db.execute(select(Host).where(Host.id == offense.host_id))).scalar_one_or_none()

@@ -18,10 +18,13 @@ COPY backend/app ./app
 COPY backend/alembic ./alembic
 COPY backend/alembic.ini .
 COPY agent ./agent
-# Bundle must contain agent/main.py + requirements.txt (see app.utils.agent_bundle)
-RUN python -c "import sys; sys.path.insert(0, '/app'); from pathlib import Path; from app.utils.agent_bundle import build_agent_bundle; build_agent_bundle(Path('/app/agent/agent-bundle.tar.gz'))"
+
+RUN chown -R securi:securi /app
 
 USER securi
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD python -c "import urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/health/live'); exit(0 if r.status==200 else 1)"
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "30"]

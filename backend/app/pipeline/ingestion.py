@@ -1,4 +1,28 @@
-"""Event ingestion orchestrator."""
+"""Event ingestion pipeline — the entry point for all security events.
+
+Flow:
+  Agent POST /api/v1/agent/events
+    → validate_batch_size (1-100 events)
+    → for each event:
+        → validate_event_payload (type, severity, timestamp, field lengths)
+        → normalize_event_type (aliases → canonical names)
+        → event_fingerprint + is_duplicate (deduplication)
+        → build_normalized_event (extract source_ip, username, category)
+        → enrich_event (MITRE ATT&CK mapping)
+        → check_reference_intel_on_event (IOC matching)
+        → check_service_failure_event (immediate alert trigger)
+    → db.flush()
+    → enqueue async correlation pipeline (or run sync)
+    → broadcast via WebSocket (real-time feed)
+    → index in OpenSearch (if enabled)
+
+Security controls:
+  - Timestamp validation: rejects events > 5 min in future or > 30 days old
+  - Batch size limit: max 100 events per request
+  - Field length limits: max 8192 chars for strings
+  - Deduplication: SHA-256 fingerprint prevents re-ingestion
+  - HMAC signing: agent signs each request (optional, prevents replay)
+"""
 
 import logging
 from datetime import datetime, timezone
@@ -18,6 +42,15 @@ from app.services.offense_engine import link_event_to_offense
 from app.websocket.manager import ws_manager
 
 logger = logging.getLogger(__name__)
+
+# Performance counter — tracks events/second across the lifetime of the process
+_INGESTION_COUNTER = {
+    "total_events": 0,
+    "total_batches": 0,
+    "total_errors": 0,
+    "total_deduplicated": 0,
+    "total_seconds": 0.0,
+}
 
 
 async def ingest_event_batch(
@@ -143,8 +176,30 @@ async def ingest_event_batch(
 
     await index_events_batch(ingested, {host.id: host.name})
 
+    # Performance metrics
+    _INGESTION_COUNTER["total_events"] += len(ingested)
+    _INGESTION_COUNTER["total_batches"] += 1
+    _INGESTION_COUNTER["total_errors"] += len(errors)
+    _INGESTION_COUNTER["total_deduplicated"] += deduplicated
+
+    elapsed = (datetime.now(timezone.utc) - batch_start).total_seconds()
+    _INGESTION_COUNTER["total_seconds"] += elapsed
+
+    if _INGESTION_COUNTER["total_events"] > 0:
+        eps = _INGESTION_COUNTER["total_events"] / max(_INGESTION_COUNTER["total_seconds"], 0.001)
+    else:
+        eps = 0
+
     logger.info(
         "events ingested",
-        extra={"host_id": str(host.id), "count": len(ingested), "errors": len(errors), "deduplicated": deduplicated},
+        extra={
+            "host_id": str(host.id),
+            "count": len(ingested),
+            "errors": len(errors),
+            "deduplicated": deduplicated,
+            "elapsed_ms": round(elapsed * 1000, 1),
+            "events_per_second": round(eps, 1),
+            "total_events": _INGESTION_COUNTER["total_events"],
+        },
     )
     return ingested, errors, deduplicated

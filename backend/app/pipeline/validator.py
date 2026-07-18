@@ -1,3 +1,17 @@
+"""Event payload validation — the first line of defense.
+
+Every event entering the system passes through these checks:
+1. event_type: 1-100 characters, non-empty
+2. severity: must be one of {info, low, medium, high, critical}
+3. timestamp: cannot be > 5 min in future or > 30 days old
+4. description/raw_log: max 8192 characters each
+5. metadata: max 16384 characters total
+6. batch size: 1-100 events per request
+
+These are input validation checks, not business logic.
+The detection engine handles the actual security analysis.
+"""
+
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator

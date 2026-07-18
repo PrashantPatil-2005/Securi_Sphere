@@ -1,236 +1,162 @@
-# Mini SIEM (Securi)
+# Securi — Security Monitoring Platform
 
-A lightweight security monitoring platform inspired by Wazuh, built for small Linux environments (4-5 systems).
+A lightweight SIEM (Security Information and Event Management) system for small Linux fleets. Built as a final year engineering project.
 
-## Stack
+## What This Actually Is
 
-- Frontend: Next.js 14, TypeScript, TailwindCSS
-- Backend: FastAPI, Python 3.10+
-- Database: PostgreSQL 16
-- Agent: Python (systemd service)
-- Real-time: WebSockets
+This is a **backend-focused security monitoring platform** that:
+
+1. **Collects** events from Linux agents (logs, metrics, network flows)
+2. **Detects** threats using an extensible rule engine
+3. **Correlates** events across hosts to find attack patterns
+4. **Presents** a real-time SOC dashboard for investigation
+
+It's inspired by IBM QRadar's 3-layer pipeline architecture. It's not QRadar — it's a learning project that implements the same concepts.
+
+## Core Features (What Actually Works)
+
+### Ingestion Pipeline
+- Event batching (up to 100 events per request)
+- HMAC-SHA256 request signing (prevents replay attacks)
+- Nonce tracking (each request is single-use)
+- Timestamp validation (rejects future/ancient events)
+- Event normalization (canonical field extraction)
+- Deduplication (fingerprint-based)
+- SQLite offline buffer (agent retries when server is down)
+
+### Detection Engine
+Extensible rule registry — add new rule types by writing one class:
+- Failed logins (threshold-based)
+- Brute force (high-volume SSH failures)
+- High CPU/Memory/Disk (metric threshold)
+- Service failure (systemd events)
+- Agent offline (heartbeat staleness)
+
+### Correlation Engine
+Three algorithms for detecting attack patterns:
+- **Sequence matcher**: Ordered events (failed_login → success = brute force)
+- **Co-occurrence matcher**: Related events in same window (service_stop + agent_disconnect)
+- **Cross-host matcher**: Same attacker across multiple hosts (lateral movement)
+- Confidence scoring with heuristics
+
+### Agent
+- Python systemd service
+- Heartbeat every 30 seconds
+- Log tailing with state tracking
+- CPU/memory/disk metrics collection
+- HMAC-signed requests
+- SQLite offline buffer with exponential backoff
+- One-line installer script
+
+### Dashboard
+- Real-time WebSocket feed
+- Alert investigation pane (alert → related events → host → timeline)
+- Bulk alert actions (investigate, resolve, close)
+- SIEM query language (`host:web01 severity:critical`)
+- Keyboard navigation (j/k/Enter/Space)
+- Host status monitoring
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | FastAPI + SQLAlchemy (async) + PostgreSQL |
+| Frontend | Next.js 14 + TypeScript + TailwindCSS |
+| Agent | Python + requests + SQLite |
+| Real-time | WebSocket + Redis pub/sub |
+| Cache | Redis (job queue + session state) |
 
 ## Quick Start
 
-### One-command dev (Windows)
-
-```powershell
-cd c:\Users\Prash\Desktop\Securi
-.\scripts\start-infra.ps1          # Postgres + Redis only (first time or after reboot)
-.\scripts\dev-windows.ps1
-```
-
-Stop dev servers: `.\scripts\dev-stop.ps1`
-
-Verify Postgres, Redis, and API health:
-
-```powershell
-.\scripts\verify-local.ps1
-.\scripts\run-tests.ps1 -Quick          # fast backend smoke
-.\scripts\run-tests.ps1 -SearchGate     # OpenSearch admin + search fallback gate
-.\scripts\run-tests.ps1 -IntegrationOnly  # all integration tests
-.\scripts\run-e2e.ps1                   # Playwright E2E (stack must be running)
-.\scripts\validate-demo-flow.ps1        # demo-setup + golden-path E2E (full dry-run)
-```
-
-**Demo / presentation mode** (faster page loads, no dev compilation):
-
-```powershell
-.\scripts\dev-windows.ps1 -Demo
-```
-
-**LAN access from other devices** on the same network:
-
-```powershell
-.\scripts\dev-windows.ps1 -LanIp 192.168.0.105
-```
-
-Open Windows Firewall for TCP ports 3000 and 8000.
-
-### Manual start
-
-#### 1. Start PostgreSQL
-
-```powershell
-cd c:\Users\Prash\Desktop\Securi
+```bash
+# 1. Start PostgreSQL + Redis
 docker compose up -d
-```
 
-### 2. Backend
-
-```powershell
+# 2. Backend
 cd backend
-copy ..\.env.example .env
 python -m venv venv
-.\venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
 
-API docs: http://localhost:8000/docs
-
-### 3. Frontend
-
-```powershell
+# 3. Frontend
 cd frontend
 npm install
 npm run dev
 ```
 
 Dashboard: http://localhost:3000
+API docs: http://localhost:8000/docs
 
-Dev login (seeded in development): `admin@test.local` / `testpass123`
+## Project Structure
 
-### LAN pilot deploy (Windows + Docker)
+```
+backend/
+  app/
+    pipeline/         # Ingestion pipeline (validation, normalization, dedup)
+    services/
+      detection.py    # Extensible rule engine (registry pattern)
+      correlation/    # Three correlation algorithms
+      offense_engine.py  # Alert grouping into offenses
+      timeline.py     # Attack chain reconstruction
+    models/           # 34 SQLAlchemy models
+    routers/          # 39 FastAPI routers
+    middleware/        # Rate limiting, security headers, timeouts
+  tests/              # Backend test suite
 
-```powershell
-.\scripts\deploy-windows-lan.ps1 -LanIp 192.168.0.105
+frontend/
+  app/(dashboard)/    # 28 dashboard pages
+  components/         # 42 React components
+  lib/                # API client, hooks, WebSocket
+
+agent/
+  agent/              # Python agent (sender, buffer, collectors)
+  install.sh          # One-line installer
 ```
 
-After registering admin: `.\scripts\pilot-harden.ps1`
+## How the Agent Works
 
-Agent install on Ubuntu VM:
+1. Agent starts, loads config from `/etc/securi/config.json`
+2. Sends heartbeat every 30s with agent hash (integrity check)
+3. Tails syslog/auth.log for security events
+4. Collects CPU/memory/disk metrics every 30s
+5. Signs each request with HMAC-SHA256 (timestamp + nonce + body)
+6. If server is unreachable, buffers to SQLite with exponential backoff
+7. On reconnect, flushes buffer automatically
 
-```powershell
-.\scripts\agent-install-help.ps1 -ServerUrl http://192.168.0.105:8000 -EnrollToken YOUR_TOKEN
-```
+## How Detection Works
 
-See [docs/VPS_DEPLOY.md](docs/VPS_DEPLOY.md) for Linux VPS deployment and backups.
+1. Events arrive via `POST /api/v1/agent/events`
+2. Pipeline validates (timestamp, batch size, field lengths)
+3. Normalizes event types (aliases → canonical names)
+4. Deduplicates via fingerprint (host + timestamp + type + raw_log)
+5. Runs detection rules against the host
+6. If threshold exceeded, creates alert + broadcasts via WebSocket
+7. Correlation engine evaluates event sequences across hosts
 
-### API smoke test
-
-With backend running:
-
-```powershell
-.\scripts\smoke-api.ps1
-```
-
-### 4. First Login
-
-1. Open http://localhost:3000/register
-2. Create an account (first user becomes admin)
-3. Log in and add a host from the Hosts page
-
-### 5. Install Agent (Ubuntu VM)
-
-See **[docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md)** for the full guide (add host → enroll → install → verify).
-
-Quick install:
+## Testing
 
 ```bash
-curl -fsSL http://YOUR_SERVER_IP:8000/install.sh | sudo bash -s -- --token ENROLL_TOKEN --server http://YOUR_SERVER_IP:8000
-```
-
-## Documentation
-
-### Getting started
-- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — Linux hosting, HTTPS, agents, demo walkthrough
-- [docs/GUIDE_DEMO.md](docs/GUIDE_DEMO.md) — 5-minute demo (simulation-only or with agent)
-- [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md) — Multi-stage attack lab for portfolio
-- [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md) — Add hosts, install agents, monitoring
-- [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) — Completion scorecard
-
-### Platform
-- [docs/API.md](docs/API.md) — API reference
-- [docs/SCHEMA.md](docs/SCHEMA.md) — Database schema
-- [docs/SIEM_PIPELINE_ARCHITECTURE.md](docs/SIEM_PIPELINE_ARCHITECTURE.md) — QRadar-style 3-layer pipeline
-- [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md) — Production env checklist
-- [docs/DB_ENCRYPTION_AT_REST.md](docs/DB_ENCRYPTION_AT_REST.md) — Database encryption at rest
-- [docs/BACKUP_AUTOMATION.md](docs/BACKUP_AUTOMATION.md) — Scheduled Postgres backups
-- [docs/PITR_RUNBOOK.md](docs/PITR_RUNBOOK.md) — Point-in-time recovery
-- [docs/KUBERNETES.md](docs/KUBERNETES.md) — Kubernetes manifests (`k8s/`)
-- [docs/HELM.md](docs/HELM.md) — Helm chart (`helm/securi/`)
-- [docs/KUBERNETES_INGRESS.md](docs/KUBERNETES_INGRESS.md) — Ingress + cert-manager TLS
-- [docs/HEALTH_PROBES.md](docs/HEALTH_PROBES.md) — Liveness / readiness / startup probes
-- [docs/GRACEFUL_SHUTDOWN.md](docs/GRACEFUL_SHUTDOWN.md) — SIGTERM drain and rollouts
-- [docs/CIRCUIT_BREAKERS.md](docs/CIRCUIT_BREAKERS.md) — External dependency circuit breakers
-- [docs/REQUEST_TIMEOUTS.md](docs/REQUEST_TIMEOUTS.md) — API and outbound HTTP timeouts
-- [docs/CONNECTION_POOLING.md](docs/CONNECTION_POOLING.md) — Postgres connection pool tuning
-- [docs/READ_REPLICAS.md](docs/READ_REPLICAS.md) — Optional read replica routing
-- [docs/MATERIALIZED_VIEWS_ANALYTICS.md](docs/MATERIALIZED_VIEWS_ANALYTICS.md) — Analytics materialized views
-- [docs/CORRELATION_RULE_EDITOR.md](docs/CORRELATION_RULE_EDITOR.md) — Correlation rule editor v2
-- [docs/FALSE_POSITIVE_FEEDBACK_LOOP.md](docs/FALSE_POSITIVE_FEEDBACK_LOOP.md) — Analyst feedback and rule tuning loop
-- [docs/ONBOARDING_WIZARD.md](docs/ONBOARDING_WIZARD.md) — First-run onboarding wizard
-- [docs/WRAP_UP.md](docs/WRAP_UP.md) — Feature checklist and handoff
-
-### Features
-- [docs/OIDC_SSO.md](docs/OIDC_SSO.md) — SSO login
-- [docs/USER_PROVISIONING.md](docs/USER_PROVISIONING.md) — Invites and team management
-- [docs/THREAT_INTEL.md](docs/THREAT_INTEL.md) — Reference sets and building blocks
-- [docs/UEBA.md](docs/UEBA.md) — User behavior analytics
-- [docs/PLAYBOOKS_SOAR.md](docs/PLAYBOOKS_SOAR.md) — SOAR webhooks
-- [docs/NOTIFICATION_RULES.md](docs/NOTIFICATION_RULES.md) — Alert routing rules
-- [docs/MITRE_HEATMAP.md](docs/MITRE_HEATMAP.md) — ATT&CK coverage
-- [docs/COMPLIANCE_REPORTS.md](docs/COMPLIANCE_REPORTS.md) — Compliance exports
-- [docs/EXECUTIVE_REPORTS.md](docs/EXECUTIVE_REPORTS.md) — Executive summaries
-- [docs/ALERTS_TABLE.md](docs/ALERTS_TABLE.md) — Alerts UI
-- [docs/SAVED_SEARCHES_DASHBOARDS.md](docs/SAVED_SEARCHES_DASHBOARDS.md) — Saved searches
-- [docs/OPENSEARCH_AT_SCALE.md](docs/OPENSEARCH_AT_SCALE.md) — Search scaling
-- [docs/AI_AND_UX_ROADMAP.md](docs/AI_AND_UX_ROADMAP.md) — AI copilot features
-- [docs/AGENT_MTLS.md](docs/AGENT_MTLS.md) — Agent mTLS enrollment
-
-### Dev infrastructure
-- `docker-compose.dev.yml` — Postgres + Redis only (no OpenSearch) for native dev
-- `docker-compose.ci.yml` — Postgres + Redis + backend for compose smoke tests
-- `scripts/demo-setup.ps1` / `scripts/demo-setup.sh` — One-command demo prep
-- `scripts/compose-smoke.ps1` / `scripts/compose-smoke.sh` — Verify Docker stack health
-
-### Deploy on Linux (quick)
-
-```bash
-chmod +x scripts/deploy-linux.sh
-./scripts/deploy-linux.sh YOUR_SERVER_IP
-# Dashboard: http://YOUR_SERVER_IP:3000
-```
-
-
-## Advanced Features
-
-- MITRE ATT&CK mapping and matrix view
-- Correlation engine with confidence scoring
-- Attack timeline reconstruction
-- Host threat scores and network topology
-- Incident management, audit log, attack simulation
-- Agent integrity monitoring (hash change detection)
-- Windows event forwarder API, VirusTotal IOC lookup, bulk alert actions
-- Redis job queue/worker, event partitioning, RS256 JWT, Playwright E2E
-
-## AI Security Assistant
-
-Securi includes a **local-first AI copilot** — no API key required for core features.
-
-- **Floating assistant** (bottom-right) — explain alerts, suggest investigation steps, SIEM syntax help
-- **Ask AI about this alert** — in the investigation pane, pre-fills alert context
-- **Auto investigation summary** — `GET /api/v1/alerts/{id}/ai-summary`
-- **Natural language search** — Search page converts plain English to SIEM queries
-- **Offense AI brief** — plain-English narrative on the Offenses detail panel
-- **Command palette** — `Ctrl+K` / `⌘K` for quick navigation and actions
-
-### Configuration
-
-```env
-AI_ASSISTANT_ENABLED=true
-AI_PROVIDER=local          # local | openai | anthropic
-OPENAI_API_KEY=          # optional — richer answers when set
-ANTHROPIC_API_KEY=       # optional alternative LLM
-```
-
-Without an API key, rule-based templates handle chat, NL search, and summaries. Set `AI_PROVIDER=openai` and `OPENAI_API_KEY` for LLM-enhanced responses (falls back to local on failure).
-
-See [docs/AI_AND_UX_ROADMAP.md](docs/AI_AND_UX_ROADMAP.md) for the full feature plan.
-
-## Dashboard Pages
-
-Overview, Hosts, Events, Alerts, Metrics, MITRE, Timeline, Incidents, Network, Rules, Audit, Simulation, Reports, Search
-
-## Database Migration
-
-Schema is managed by **Alembic**. On startup the backend runs `alembic upgrade head` automatically.
-
-```powershell
+# Backend tests
 cd backend
-.\venv\Scripts\pip install -r requirements.txt
-.\venv\Scripts\alembic upgrade head
+pytest tests/ -v
+
+# E2E tests
+cd frontend
+npx playwright test
+
+# Load test
+k6 run loadtests/smoke.js
 ```
 
-See `backend/alembic/README.md` for revision chain and stamping existing databases.
+## What I'd Improve Next
+
+- [ ] User-defined correlation rules (UI editor)
+- [ ] Event normalization for more log formats (syslog, journald, Windows Event Log)
+- [ ] Performance benchmarking (events/second metrics)
+- [ ] Network flow analysis (connection graph)
+- [ ] Agent auto-update mechanism
+
+## License
+
+MIT

@@ -1,3 +1,26 @@
+"""Correlation engine — evaluates event sequences against rules.
+
+The correlation engine runs after detection. It looks at sequences of events
+(rather than individual events) to detect attack patterns that single-alert
+rules would miss.
+
+Three matcher algorithms (see correlation/framework.py for details):
+1. SequenceMatcher: ordered events within a time window
+2. CoOccurrenceMatcher: related events appearing together
+3. CrossHostMatcher: same attacker across multiple hosts
+
+The engine evaluates all enabled rules against recent events for a host.
+When a rule fires, it creates a CorrelationResult with confidence score
+and optionally generates an alert.
+
+Confidence scoring is heuristic-based (not ML). Scores range 0-100 and
+are computed from:
+- Base confidence defined in the rule
+- Bonus for high-severity event combinations
+- Bonus for compressed attack timelines
+- Bonus for cross-host impact
+"""
+
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -15,10 +38,6 @@ def _matcher_for_rule(rule: CorrelationRule):
         return MATCHERS["cross_host"]
     if desc.startswith("[co_occurrence]"):
         return MATCHERS["co_occurrence"]
-    if len(rule.event_sequence or []) >= 2 and not rule.min_occurrences:
-        types = rule.event_sequence or []
-        if types != sorted(types, key=lambda t: t):
-            pass
     return MATCHERS["sequence"]
 
 

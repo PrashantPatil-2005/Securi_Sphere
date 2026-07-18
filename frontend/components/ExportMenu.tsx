@@ -21,9 +21,11 @@ export default function ExportMenu({ resource, query }: Props) {
     }
     const blob = await res.blob();
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    const objectUrl = URL.createObjectURL(blob);
+    a.href = objectUrl;
     a.download = `${resource}.${format}`;
     a.click();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 100);
   }
 
   return (

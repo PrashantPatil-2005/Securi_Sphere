@@ -31,7 +31,7 @@ def _get_sync_client():
     _client = OpenSearch(
         hosts=[settings.opensearch_url],
         use_ssl=settings.opensearch_url.startswith("https"),
-        verify_certs=False,
+        verify_certs=settings.opensearch_url.startswith("https"),
         ssl_show_warn=False,
     )
     return _client

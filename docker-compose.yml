@@ -12,6 +12,10 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - securi_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - securi-backend
+      - securi-data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-securi} -d ${POSTGRES_DB:-securi}"]
       interval: 5s
@@ -21,10 +25,19 @@ services:
   redis:
     image: redis:7-alpine
     container_name: securi-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:-securi_redis_dev}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     ports:
       - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    networks:
+      - securi-backend
+      - securi-data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-securi_redis_dev}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -39,7 +52,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-securi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-securi}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-securi_redis_dev}@redis:6379/0
       JOB_QUEUE_BACKEND: redis
       JOB_QUEUE_RUN_WORKERS: "true"
       JOB_QUEUE_WORKERS: "2"
@@ -48,6 +61,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - securi-backend
+      - securi-data
     healthcheck:
       test: ["CMD-SHELL", "python -m app.worker_health"]
       interval: 30s
@@ -64,7 +81,7 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-securi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-securi}
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:-securi_redis_dev}@redis:6379/0
       JOB_QUEUE_BACKEND: ${JOB_QUEUE_BACKEND:-redis}
       JOB_QUEUE_RUN_WORKERS: ${JOB_QUEUE_RUN_WORKERS:-false}
       WS_PUBSUB_BACKEND: ${WS_PUBSUB_BACKEND:-redis}
@@ -73,12 +90,17 @@ services:
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
       SEARCH_BACKEND: ${SEARCH_BACKEND:-postgres}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - securi-frontend
+      - securi-backend
+      - securi-data
     healthcheck:
       test:
         [
@@ -101,6 +123,9 @@ services:
       - "127.0.0.1:9200:9200"
     volumes:
       - securi_os_data:/usr/share/opensearch/data
+    restart: unless-stopped
+    networks:
+      - securi-data
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
       interval: 15s
@@ -116,10 +141,13 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${SERVER_URL:-http://localhost:8000}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       backend:
         condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - securi-frontend
     healthcheck:
       test:
         [
@@ -130,6 +158,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+networks:
+  securi-frontend:
+    driver: bridge
+  securi-backend:
+    driver: bridge
+  securi-data:
+    driver: bridge
 
 volumes:
   securi_pg_data:

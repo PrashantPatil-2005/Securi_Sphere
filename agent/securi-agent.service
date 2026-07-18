@@ -9,7 +9,8 @@ ExecStart=/opt/securi-agent/venv/bin/python3 -m agent.main
 WorkingDirectory=/opt/securi-agent
 Restart=always
 RestartSec=10
-User=root
+User=securi-agent
+Group=securi-agent
 
 [Install]
 WantedBy=multi-user.target

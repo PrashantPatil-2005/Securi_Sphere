@@ -44,7 +44,12 @@ const ExecutiveKpis = memo(function ExecutiveKpis() {
   useEffect(() => {
     if (!vitalityEnabled || !data) return;
     const prevRaw = sessionStorage.getItem(KPI_SNAPSHOT_KEY);
-    const prev = prevRaw ? (JSON.parse(prevRaw) as Record<string, number>) : null;
+    let prev: Record<string, number> | null = null;
+    try {
+      prev = prevRaw ? (JSON.parse(prevRaw) as Record<string, number>) : null;
+    } catch {
+      prev = null;
+    }
     if (prev) {
       setDeltas({
         active_alerts: (data.active_alerts ?? 0) - (prev.active_alerts ?? 0),

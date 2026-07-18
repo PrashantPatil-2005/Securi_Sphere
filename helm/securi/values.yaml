@@ -7,11 +7,11 @@ fullnameOverride: ""
 image:
   backend:
     repository: ghcr.io/example/securi/backend
-    tag: latest
+    tag: "2.0.0"
     pullPolicy: IfNotPresent
   frontend:
     repository: ghcr.io/example/securi/frontend
-    tag: latest
+    tag: "2.0.0"
     pullPolicy: IfNotPresent
 
 postgresql:
@@ -67,8 +67,9 @@ secrets:
   # Set create: false and existingSecret when using External Secrets / Sealed Secrets
   create: true
   existingSecret: ""
-  postgresPassword: changeme
-  jwtSecret: changeme-use-at-least-32-random-characters
+  # IMPORTANT: Override these values before deployment. Never use defaults in production.
+  postgresPassword: ""
+  jwtSecret: ""
   # Leave empty to auto-build from in-cluster Postgres settings
   databaseUrl: ""
 

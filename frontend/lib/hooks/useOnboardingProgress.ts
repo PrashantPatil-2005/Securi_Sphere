@@ -156,7 +156,13 @@ export function useOnboardingProgress() {
 
   useEffect(() => {
     const key = "securi_onboarding_completed_steps";
-    const prev = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[];
+    let prev: string[] = [];
+    try {
+      prev = JSON.parse(sessionStorage.getItem(key) ?? "[]") as string[];
+      if (!Array.isArray(prev)) prev = [];
+    } catch {
+      prev = [];
+    }
     const now = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).map((s) => s.id);
     for (const id of now) {
       if (!prev.includes(id)) {

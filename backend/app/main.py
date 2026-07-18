@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -183,14 +184,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.frontend_url,
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 prefix = "/api/v1"
@@ -279,10 +276,20 @@ async def overview(user: User = Depends(get_current_user)):
 
 
 @app.websocket("/api/v1/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str | None = None):
-    if not token:
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        import json
+        msg = json.loads(raw)
+        if msg.get("type") != "auth" or not msg.get("token"):
+            await websocket.close(code=4001)
+            return
+        token = msg["token"]
+    except Exception:
         await websocket.close(code=4001)
         return
+
     try:
         payload = jwt_decode(token)
         if payload.get("type") not in ("access", "ws"):
