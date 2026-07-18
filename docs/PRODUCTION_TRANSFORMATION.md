@@ -83,7 +83,7 @@ Remaining: RS256/JWKS, secrets manager, MFA, SSO, mTLS.
 - This report: `docs/PRODUCTION_TRANSFORMATION.md`
 
 ## Phase 14 — Testing
-- 16+ backend unit tests
+- 241+ backend unit tests, 41 frontend unit tests
 - CI: pytest, ruff, frontend lint/tsc, docker build
 - Gap: HTTP integration tests, Playwright E2E, load tests
 
@@ -95,7 +95,7 @@ Remaining: RS256/JWKS, secrets manager, MFA, SSO, mTLS.
 5. OIDC/SAML SSO + MFA
 6. mTLS agent transport
 7. Event table partitioning
-8. Keyset pagination on events
+8. ~~Keyset pagination on events~~ (done)
 9. Incident detail UI with notes
 10. Offense → incident promotion
 11. Playwright E2E in CI

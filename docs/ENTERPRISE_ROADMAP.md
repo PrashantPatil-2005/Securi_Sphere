@@ -47,7 +47,6 @@ Score: **8.5/10** (final year project). Core SIEM pipeline functional: Collectio
 | OpenSearch security plugin (non-dev) | HIGH | 2 days |
 | NetworkPolicy manifests for K8s | MEDIUM | 4h |
 | PodDisruptionBudgets for K8s | LOW | 2h |
-| Keyset pagination on `/events` | MEDIUM | 4h |
 | mTLS for agent transport (active, not just docs) | HIGH | 1 day |
 
 ## Phase Deliverables Index
@@ -66,6 +65,6 @@ Score: **8.5/10** (final year project). Core SIEM pipeline functional: Collectio
 
 1. Frontend unit tests (5–10 key components)
 2. Load tests (k6) in CI
-3. Keyset pagination on `/events`
-4. Migrate to PyJWT
-5. Hash-pinned dependencies
+3. Migrate to PyJWT
+4. Hash-pinned dependencies
+5. Agent test coverage (buffer, sender, main)

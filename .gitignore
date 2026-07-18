@@ -31,3 +31,4 @@ k8s/secret.yaml
 *.log
 docker-compose.override.yml
 backend/debug-*.log
+*.tmp

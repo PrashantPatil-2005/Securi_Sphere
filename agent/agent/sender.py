@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from agent.buffer import clear_queue, dequeue_all, enqueue, queue_size
+from agent.buffer import clear_queue, dequeue_all, enqueue, queue_size, remove_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +152,9 @@ class Sender:
     def flush_buffer(self) -> None:
         """Drain the offline SQLite buffer and replay to server.
 
-        This is called at the start of each main loop iteration.
-        If the server is still down, buffered items stay in SQLite.
+        Only removes items that were successfully sent. Failed items stay
+        in SQLite for the next retry cycle, preventing silent data loss
+        on partial network failures.
         """
         buffered = queue_size()
         if buffered > 0:
@@ -163,25 +164,40 @@ class Sender:
         if not items:
             return
 
-        events_batch = []
-        metrics_batch = []
-        for kind, payload in items:
+        events_batch: list[dict] = []
+        metrics_batch: list[dict] = []
+        event_ids: list[int] = []
+        metric_ids: list[int] = []
+
+        for item_id, kind, payload in items:
             if kind == "events":
                 events_batch.extend(payload.get("events", [payload]))
+                event_ids.append(item_id)
             elif kind == "metrics":
                 metrics_batch.extend(payload.get("metrics", [payload]))
+                metric_ids.append(item_id)
 
-        ok = True
+        sent_ids: list[int] = []
         if events_batch:
-            ok = self.send_events(events_batch) and ok
+            if self.send_events(events_batch):
+                sent_ids.extend(event_ids)
+            else:
+                logger.warning("Failed to send %d buffered events — will retry", len(events_batch))
         if metrics_batch:
-            ok = self.send_metrics(metrics_batch) and ok
+            if self.send_metrics(metrics_batch):
+                sent_ids.extend(metric_ids)
+            else:
+                logger.warning("Failed to send %d buffered metrics — will retry", len(metrics_batch))
 
-        if ok:
-            clear_queue()
-            logger.info("Buffer flushed successfully (%d events, %d metrics)", len(events_batch), len(metrics_batch))
-        else:
-            logger.warning("Buffer flush partially failed — items remain in SQLite")
+        if sent_ids:
+            remove_by_ids(sent_ids)
+            logger.info(
+                "Buffer flushed: %d/%d items sent (%d events, %d metrics)",
+                len(sent_ids), len(items), len(events_batch), len(metrics_batch),
+            )
+        if len(sent_ids) < len(items):
+            remaining = len(items) - len(sent_ids)
+            logger.warning("Buffer flush partial — %d items remain in SQLite", remaining)
 
     @staticmethod
     def register(

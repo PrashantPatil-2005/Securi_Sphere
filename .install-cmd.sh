@@ -1,1 +1,0 @@
-curl -fsSL http://localhost:8000/install.sh | sudo bash -s -- --token enroll_8xaQFoqFKFUG7twiRFgTIEBr6J5M_RgBb61DvPDEvSk --server http://localhost:8000

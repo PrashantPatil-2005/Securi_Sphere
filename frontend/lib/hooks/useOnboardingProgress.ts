@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { isOnboardingSearchCompleted } from "@/lib/onboarding";
@@ -138,7 +138,7 @@ export function useOnboardingProgress() {
     staleTime: 60_000,
   });
 
-  const progress: OnboardingProgress = {
+  const progress: OnboardingProgress = useMemo(() => ({
     hosts: overview?.total_hosts ?? 0,
     simulationRuns,
     triagedAlerts: investigatingAlerts + resolvedAlerts,
@@ -150,7 +150,7 @@ export function useOnboardingProgress() {
       notifSettings?.slack_enabled
     ),
     searchCompleted,
-  };
+  }), [overview?.total_hosts, simulationRuns, investigatingAlerts, resolvedAlerts, offenseCount, incidentCount, notifSettings, searchCompleted]);
 
   const completedCount = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).length;
 

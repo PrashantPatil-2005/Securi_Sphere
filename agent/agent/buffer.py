@@ -34,11 +34,23 @@ def enqueue(kind: str, payload: dict) -> None:
     conn.close()
 
 
-def dequeue_all() -> list[tuple[str, dict]]:
+def dequeue_all() -> list[tuple[int, str, dict]]:
+    """Return all items with their IDs so callers can remove only successful ones."""
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute("SELECT id, kind, payload FROM queue ORDER BY id").fetchall()
     conn.close()
-    return [(r[1], json.loads(r[2])) for r in rows]
+    return [(r[0], r[1], json.loads(r[2])) for r in rows]
+
+
+def remove_by_ids(ids: list[int]) -> None:
+    """Remove only the items that were successfully sent."""
+    if not ids:
+        return
+    conn = sqlite3.connect(DB_PATH)
+    placeholders = ",".join("?" * len(ids))
+    conn.execute(f"DELETE FROM queue WHERE id IN ({placeholders})", ids)
+    conn.commit()
+    conn.close()
 
 
 def queue_size() -> int:
