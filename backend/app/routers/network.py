@@ -16,8 +16,8 @@ router = APIRouter(prefix="/network", tags=["network"])
 
 @router.get("/topology")
 async def topology(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
-    hosts = list((await db.execute(select(Host))).scalars().all())
-    scores = {s.host_id: s.score for s in (await db.execute(select(HostThreatScore))).scalars().all()}
+    hosts = list((await db.execute(select(Host).limit(5000))).scalars().all())
+    scores = {s.host_id: s.score for s in (await db.execute(select(HostThreatScore).limit(5000))).scalars().all()}
     ip_to_host: dict[str, str] = {}
     for h in hosts:
         if h.ip_address:

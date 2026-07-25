@@ -30,10 +30,8 @@ function LoginForm() {
   const [oidcLabel, setOidcLabel] = useState("SSO");
 
   useEffect(() => {
-    fetch("/api/v1/settings/public")
-      .then((r) => (r.ok ? r.json() : null))
+    api<{ allow_registration: boolean; oidc_enabled: boolean; oidc_provider_label: string }>("/api/v1/settings/public")
       .then((cfg) => {
-        if (!cfg) return;
         if (typeof cfg.allow_registration === "boolean") {
           setAllowRegistration(cfg.allow_registration);
         }

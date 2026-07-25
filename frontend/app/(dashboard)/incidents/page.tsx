@@ -68,6 +68,7 @@ function IncidentsPageContent() {
       setDesc("");
       toast("success", "Incident created");
     },
+    onError: (e: Error) => toast("error", "Failed", e.message),
   });
 
   const statusMutation = useMutation({
@@ -77,6 +78,7 @@ function IncidentsPageContent() {
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
       if (selectedId) queryClient.invalidateQueries({ queryKey: ["incidents", selectedId] });
     },
+    onError: (e: Error) => toast("error", "Failed", e.message),
   });
 
   const noteMutation = useMutation({
@@ -90,6 +92,7 @@ function IncidentsPageContent() {
       queryClient.invalidateQueries({ queryKey: ["incidents", selectedId] });
       toast("success", "Note added");
     },
+    onError: (e: Error) => toast("error", "Failed", e.message),
   });
 
   return (
@@ -113,6 +116,7 @@ function IncidentsPageContent() {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="flex-1 min-w-[200px]"
+            disabled={createMutation.isPending}
           />
           <Input
             label="Description"
@@ -120,6 +124,7 @@ function IncidentsPageContent() {
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             className="flex-1 min-w-[200px]"
+            disabled={createMutation.isPending}
           />
           <Button type="submit" loading={createMutation.isPending}>
             Create

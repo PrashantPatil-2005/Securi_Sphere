@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Gauge } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { downsampleSeries } from "@/lib/downsample";
@@ -11,9 +11,32 @@ import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
+
+const LazyLineChart = dynamic(
+  () =>
+    import("recharts").then((mod) => {
+      const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } = mod;
+      return function LazyLineChartWrapper({ data }: { data: { time: string; cpu: number | null; memory: number | null; disk: number | null }[] }) {
+        return (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data}>
+              <XAxis dataKey="time" {...axisProps} />
+              <YAxis {...axisProps} domain={[0, 100]} width={36} />
+              <Tooltip {...CHART_THEME.tooltip} />
+              <Legend />
+              <Line type="monotone" dataKey="cpu" stroke={CHART_THEME.colors.primary} dot={false} isAnimationActive={false} name="CPU %" />
+              <Line type="monotone" dataKey="memory" stroke={CHART_THEME.colors.success} dot={false} isAnimationActive={false} name="Memory %" />
+              <Line type="monotone" dataKey="disk" stroke={CHART_THEME.colors.warning} dot={false} isAnimationActive={false} name="Disk %" />
+            </LineChart>
+          </ResponsiveContainer>
+        );
+      };
+    }),
+  { loading: () => <ChartSkeleton height={320} />, ssr: false },
+);
 
 interface Metric {
   recorded_at: string;
@@ -73,17 +96,7 @@ export default function MetricsPage() {
       ) : chartData.length > 0 ? (
         <Panel title="Utilization">
           <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <XAxis dataKey="time" {...axisProps} />
-                <YAxis {...axisProps} domain={[0, 100]} width={36} />
-                <Tooltip {...CHART_THEME.tooltip} />
-                <Legend />
-                <Line type="monotone" dataKey="cpu" stroke={CHART_THEME.colors.primary} dot={false} isAnimationActive={false} name="CPU %" />
-                <Line type="monotone" dataKey="memory" stroke={CHART_THEME.colors.success} dot={false} isAnimationActive={false} name="Memory %" />
-                <Line type="monotone" dataKey="disk" stroke={CHART_THEME.colors.warning} dot={false} isAnimationActive={false} name="Disk %" />
-              </LineChart>
-            </ResponsiveContainer>
+            <LazyLineChart data={chartData} />
           </div>
         </Panel>
       ) : (

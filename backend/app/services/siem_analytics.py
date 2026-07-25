@@ -224,22 +224,27 @@ async def top_risky_hosts(db: AsyncSession, limit: int = 20) -> list[dict]:
         await db.execute(select(HostThreatScore).order_by(HostThreatScore.score.desc()).limit(limit))
     ).scalars().all()
 
+    host_ids = [s.host_id for s in scores]
+    alert_counts = {}
+    if host_ids:
+        rows = (
+            await db.execute(
+                select(Alert.host_id, func.count().label("cnt"))
+                .where(Alert.host_id.in_(host_ids), Alert.status.in_(["open", "investigating"]))
+                .group_by(Alert.host_id)
+            )
+        ).all()
+        alert_counts = {row.host_id: row.cnt for row in rows}
+
     result = []
     for s in scores:
         host = hosts.get(s.host_id)
-        open_alerts = (
-            await db.execute(
-                select(func.count()).select_from(Alert).where(
-                    Alert.host_id == s.host_id, Alert.status.in_(["open", "investigating"])
-                )
-            )
-        ).scalar_one()
         result.append({
             "host_id": str(s.host_id),
             "host_name": host.name if host else "?",
             "risk_score": s.score,
             "health_score": s.health_score,
-            "active_alerts": open_alerts,
+            "active_alerts": alert_counts.get(s.host_id, 0),
             "last_seen": host.last_seen.isoformat() if host and host.last_seen else None,
             "color": _risk_color(s.score),
             "factors": s.factors or {},
@@ -395,7 +400,7 @@ async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
         try:
             return await query_historical_from_materialized_views(db, view)
         except Exception:
-            pass
+            logger.debug("materialized view query failed, falling back to raw query", exc_info=True)
 
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=90)

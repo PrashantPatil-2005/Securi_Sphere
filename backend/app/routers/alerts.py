@@ -268,25 +268,6 @@ async def get_alert_investigation(
     )
 
 
-@router.patch("/{alert_id}/resolve", response_model=AlertResponse)
-async def resolve_alert(
-    alert_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_roles("admin", "analyst")),
-):
-    result = await db.execute(select(Alert).where(Alert.id == alert_id))
-    alert = result.scalar_one_or_none()
-    if not alert:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    alert.status = "resolved"
-    alert.resolved_at = datetime.now(timezone.utc)
-    alert.resolved_by = user.id
-    await update_host_statuses(db)
-    await log_audit(db, "alert_resolve", user_id=user.id, resource_type="alert", resource_id=alert_id)
-    await ws_manager.broadcast({"type": "alert_resolved", "data": {"id": str(alert.id)}})
-    return _to_response(alert)
-
-
 @router.patch("/{alert_id}/status", response_model=AlertResponse)
 async def update_alert_status(
     alert_id: UUID,

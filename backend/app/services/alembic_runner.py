@@ -17,7 +17,11 @@ logger = logging.getLogger(__name__)
 def _sync_database_url() -> str:
     url = settings.database_url
     if "+asyncpg" in url:
-        return url.replace("+asyncpg", "+psycopg2")
+        url = url.replace("+asyncpg", "+psycopg2")
+    url = url.replace("@localhost:", "@127.0.0.1:")
+    if "connect_timeout" not in url:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}connect_timeout=10"
     return url
 
 
@@ -32,16 +36,6 @@ def alembic_config() -> Config:
 def upgrade_head() -> None:
     command.upgrade(alembic_config(), "heads")
     logger.info("Alembic upgrade heads complete")
-
-
-def current_revision() -> str | None:
-    from alembic.runtime.migration import MigrationContext
-    from sqlalchemy import create_engine
-
-    engine = create_engine(_sync_database_url(), poolclass=None)
-    with engine.connect() as connection:
-        context = MigrationContext.configure(connection)
-        return context.get_current_revision()
 
 
 async def upgrade_head_async() -> None:

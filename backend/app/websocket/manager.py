@@ -48,8 +48,7 @@ class ConnectionManager:
                 pass
             self._listener_task = None
 
-    async def connect(self, websocket: WebSocket) -> None:
-        await websocket.accept()
+    def connect(self, websocket: WebSocket) -> None:
         self.active.append(websocket)
 
     def disconnect(self, websocket: WebSocket) -> None:
@@ -73,6 +72,7 @@ class ConnectionManager:
             try:
                 await ws.send_text(payload)
             except Exception:
+                logger.debug("WebSocket send failed, marking dead", exc_info=True)
                 dead.append(ws)
         for ws in dead:
             self.disconnect(ws)

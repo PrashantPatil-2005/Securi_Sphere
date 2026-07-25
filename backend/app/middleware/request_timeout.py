@@ -22,6 +22,9 @@ class RequestTimeoutMiddleware(BaseHTTPMiddleware):
         if not settings.request_timeout_enabled or request.scope.get("type") == "websocket":
             return await call_next(request)
 
+        if settings.environment == "development":
+            return await call_next(request)
+
         timeout = resolve_request_timeout(request.url.path)
         if timeout is None:
             return await call_next(request)

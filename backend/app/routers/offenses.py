@@ -60,7 +60,7 @@ async def list_offenses(
     page_rows = list(
         (await db.execute(q.order_by(Offense.updated_at.desc()).offset(offset).limit(page_size))).scalars().all()
     )
-    hosts = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
+    hosts = {h.id: h.name for h in (await db.execute(select(Host).limit(5000))).scalars().all()}
 
     return {
         "items": [
@@ -109,41 +109,54 @@ async def get_offense(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    from sqlalchemy.orm import selectinload
+    from app.models.alert import Alert
+    from app.models.event import Event
+
     offense = (
         await db.execute(
-            select(Offense).options(selectinload(Offense.links)).where(Offense.id == offense_id)
+            select(Offense)
+            .options(
+                selectinload(Offense.links)
+            )
+            .where(Offense.id == offense_id)
         )
     ).scalar_one_or_none()
     if not offense:
         raise HTTPException(404, "Offense not found")
 
     host = (await db.execute(select(Host).where(Host.id == offense.host_id))).scalar_one_or_none()
-    from app.models.alert import Alert
-    from app.models.event import Event
+
+    event_ids = [link.event_id for link in offense.links if link.event_id]
+    alert_ids = [link.alert_id for link in offense.links if link.alert_id]
 
     events = []
+    if event_ids:
+        rows = (await db.execute(select(Event).where(Event.id.in_(event_ids)))).scalars().all()
+        events = [
+            {
+                "id": str(ev.id),
+                "event_type": ev.event_type,
+                "description": ev.description,
+                "severity": ev.severity,
+                "timestamp": ev.timestamp.isoformat(),
+            }
+            for ev in rows
+        ]
+
     alerts = []
-    for link in offense.links:
-        if link.event_id:
-            ev = (await db.execute(select(Event).where(Event.id == link.event_id))).scalar_one_or_none()
-            if ev:
-                events.append({
-                    "id": str(ev.id),
-                    "event_type": ev.event_type,
-                    "description": ev.description,
-                    "severity": ev.severity,
-                    "timestamp": ev.timestamp.isoformat(),
-                })
-        if link.alert_id:
-            al = (await db.execute(select(Alert).where(Alert.id == link.alert_id))).scalar_one_or_none()
-            if al:
-                alerts.append({
-                    "id": str(al.id),
-                    "title": al.title,
-                    "severity": al.severity,
-                    "status": al.status,
-                    "created_at": al.created_at.isoformat(),
-                })
+    if alert_ids:
+        rows = (await db.execute(select(Alert).where(Alert.id.in_(alert_ids)))).scalars().all()
+        alerts = [
+            {
+                "id": str(al.id),
+                "title": al.title,
+                "severity": al.severity,
+                "status": al.status,
+                "created_at": al.created_at.isoformat(),
+            }
+            for al in rows
+        ]
 
     return {
         "id": str(offense.id),

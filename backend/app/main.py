@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
@@ -13,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.brand import PRODUCT_NAME
 from app.config import settings
-from app.core.errors import http_exception_handler, validation_exception_handler
+from app.core.errors import http_exception_handler, validation_exception_handler, generic_exception_handler
 from app.core.health import liveness, readiness, startup
 from app.core.lifecycle import shutdown_application
 from app.core.logging import configure_logging
@@ -53,15 +54,11 @@ scheduler = AsyncIOScheduler()
 async def init_db() -> None:
     await migrate_schema()
     async with async_session() as db:
-        from app.routers.auth import seed_demo_users, seed_dev_users, seed_roles
+        from app.routers.auth import seed_roles
         await seed_roles(db)
-        await seed_dev_users(db)
-        await seed_demo_users(db)
         await seed_alert_rules(db)
         await seed_mitre(db)
         await seed_correlation_rules(db)
-        from app.services.seed_reference_intel import seed_reference_intel
-        await seed_reference_intel(db)
         await db.commit()
 
 
@@ -128,30 +125,43 @@ async def lifespan(app: FastAPI):
         await ws_manager.start()
     await init_db()
     if not settings.testing:
-        scheduler.add_job(status_job, "interval", seconds=30, id="host_status")
+        now = datetime.now()
+        scheduler.add_job(status_job, "interval", seconds=30, id="host_status",
+                          next_run_time=now + timedelta(seconds=30), max_instances=1)
         scheduler.add_job(
             cross_host_correlation_job,
             "interval",
             seconds=settings.cross_host_correlation_interval_seconds,
             id="cross_host_correlation",
+            next_run_time=now + timedelta(seconds=60),
+            max_instances=1,
         )
-        scheduler.add_job(run_retention, "cron", hour=2, id="retention")
-        scheduler.add_job(backup_job, "cron", hour=settings.backup_schedule_hour, id="postgres_backup")
-        scheduler.add_job(analytics_job, "cron", hour=3, id="analytics")
+        scheduler.add_job(run_retention, "cron", hour=2, id="retention",
+                          next_run_time=now + timedelta(hours=1), max_instances=1)
+        scheduler.add_job(backup_job, "cron", hour=settings.backup_schedule_hour, id="postgres_backup",
+                          next_run_time=now + timedelta(hours=1), max_instances=1)
+        scheduler.add_job(analytics_job, "cron", hour=3, id="analytics",
+                          next_run_time=now + timedelta(hours=1), max_instances=1)
         scheduler.add_job(
             analytics_mv_job,
             "interval",
             minutes=settings.analytics_mv_refresh_interval_minutes,
             id="analytics_materialized_views",
+            next_run_time=now + timedelta(minutes=5),
+            max_instances=1,
         )
         scheduler.add_job(
             threat_intel_feed_job,
             "interval",
             minutes=settings.threat_intel_feed_sync_minutes,
             id="threat_intel_feed_sync",
+            next_run_time=now + timedelta(minutes=3),
+            max_instances=1,
         )
-        scheduler.add_job(ueba_scan_job, "interval", minutes=settings.ueba_scan_interval_minutes, id="ueba_scan")
-        scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts")
+        scheduler.add_job(ueba_scan_job, "interval", minutes=settings.ueba_scan_interval_minutes, id="ueba_scan",
+                          next_run_time=now + timedelta(minutes=2), max_instances=1)
+        scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts",
+                          next_run_time=now + timedelta(minutes=1), max_instances=1)
         scheduler.start()
     logger.info(f"{PRODUCT_NAME} backend started", extra={"environment": settings.environment})
     yield
@@ -176,6 +186,7 @@ app = FastAPI(
 
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(RequestTimeoutMiddleware)
@@ -256,22 +267,25 @@ async def health_ready():
 
 @app.get("/api/v1/overview")
 async def overview(user: User = Depends(get_current_user)):
+    import asyncio
     from sqlalchemy import func
     from app.models.alert import Alert
     from app.models.host import Host
 
     async with read_session_factory()() as db:
-        total = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
-        online = (await db.execute(select(func.count()).select_from(Host).where(Host.status == "online"))).scalar_one()
-        offline = (await db.execute(select(func.count()).select_from(Host).where(Host.status.in_(["offline", "critical"])))).scalar_one()
-        active = (await db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open"))).scalar_one()
-        critical = (await db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open", Alert.severity == "critical"))).scalar_one()
+        total_q, online_q, offline_q, active_q, critical_q = await asyncio.gather(
+            db.execute(select(func.count()).select_from(Host)),
+            db.execute(select(func.count()).select_from(Host).where(Host.status == "online")),
+            db.execute(select(func.count()).select_from(Host).where(Host.status.in_(["offline", "critical"]))),
+            db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open")),
+            db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open", Alert.severity == "critical")),
+        )
     return {
-        "total_hosts": total,
-        "online_hosts": online,
-        "offline_hosts": offline,
-        "active_alerts": active,
-        "critical_alerts": critical,
+        "total_hosts": total_q.scalar_one(),
+        "online_hosts": online_q.scalar_one(),
+        "offline_hosts": offline_q.scalar_one(),
+        "active_alerts": active_q.scalar_one(),
+        "critical_alerts": critical_q.scalar_one(),
     }
 
 
@@ -287,6 +301,7 @@ async def websocket_endpoint(websocket: WebSocket):
             return
         token = msg["token"]
     except Exception:
+        logger.debug("WebSocket auth handshake failed", exc_info=True)
         await websocket.close(code=4001)
         return
 
@@ -299,7 +314,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4001)
         return
 
-    await ws_manager.connect(websocket)
+    ws_manager.connect(websocket)
     try:
         while True:
             await websocket.receive_text()

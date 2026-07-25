@@ -64,7 +64,7 @@ async def report_summary(
 ):
     hosts = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
     alerts = (await db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open"))).scalar_one()
-    scores = list((await db.execute(select(HostThreatScore).order_by(HostThreatScore.score.desc()))).scalars().all())
+    scores = list((await db.execute(select(HostThreatScore).order_by(HostThreatScore.score.desc()).limit(5000))).scalars().all())
     data = {"total_hosts": hosts, "open_alerts": alerts, "threat_scores": [{"host_id": str(s.host_id), "score": s.score} for s in scores]}
     if format == "csv":
         buf = io.StringIO()

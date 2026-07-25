@@ -24,7 +24,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.get("")
 async def global_search(
-    q: str = Query(..., min_length=1),
+    q: str = Query(..., min_length=1, max_length=500),
     exact: bool = False,
     preset: str | None = Query(None),
     from_time: datetime | None = Query(None, alias="from"),
@@ -134,7 +134,7 @@ async def nl_search(
 
 @router.get("/siem")
 async def siem_search(
-    q: str = Query(..., min_length=1),
+    q: str = Query(..., min_length=1, max_length=500),
     preset: str | None = Query(None),
     from_time: datetime | None = Query(None, alias="from"),
     to_time: datetime | None = Query(None, alias="to"),

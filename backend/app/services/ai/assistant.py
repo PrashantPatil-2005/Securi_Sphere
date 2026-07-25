@@ -1,7 +1,5 @@
 """Context-aware security assistant — local templates + optional LLM."""
 
-import re
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
@@ -199,6 +197,4 @@ async def chat(
             return {"reply": llm_reply, "provider": provider, "suggestions": suggestions[:4]}
 
     reply, suggestions = _local_chat_reply(message, ctx, siem_query)
-    # Strip accidental markdown bold markers duplication for plain responses
-    reply = re.sub(r"\*\*([^*]+)\*\*", r"**\1**", reply)
     return {"reply": reply, "provider": "local", "suggestions": suggestions[:4]}

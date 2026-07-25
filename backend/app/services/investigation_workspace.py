@@ -95,29 +95,41 @@ async def _timelines_for_host(db: AsyncSession, host_id: UUID, limit: int = 5) -
 
 async def _offense_summary(db: AsyncSession, offense: Offense) -> WorkspaceOffenseSummary:
     host = await db.get(Host, offense.host_id)
+
+    event_ids = [link.event_id for link in offense.links if link.event_id]
+    alert_ids = [link.alert_id for link in offense.links if link.alert_id]
+
+    events_map: dict[UUID, Event] = {}
+    alerts_map: dict[UUID, Alert] = {}
+
+    if event_ids:
+        rows = (await db.execute(select(Event).where(Event.id.in_(event_ids)))).scalars().all()
+        events_map = {e.id: e for e in rows}
+    if alert_ids:
+        rows = (await db.execute(select(Alert).where(Alert.id.in_(alert_ids)))).scalars().all()
+        alerts_map = {a.id: a for a in rows}
+
     events = []
     alerts = []
     for link in offense.links:
-        if link.event_id:
-            ev = await db.get(Event, link.event_id)
-            if ev:
-                events.append({
-                    "id": str(ev.id),
-                    "event_type": ev.event_type,
-                    "description": ev.description,
-                    "severity": ev.severity,
-                    "timestamp": ev.timestamp.isoformat(),
-                })
-        if link.alert_id:
-            al = await db.get(Alert, link.alert_id)
-            if al:
-                alerts.append({
-                    "id": str(al.id),
-                    "title": al.title,
-                    "severity": al.severity,
-                    "status": al.status,
-                    "created_at": al.created_at.isoformat(),
-                })
+        if link.event_id and link.event_id in events_map:
+            ev = events_map[link.event_id]
+            events.append({
+                "id": str(ev.id),
+                "event_type": ev.event_type,
+                "description": ev.description,
+                "severity": ev.severity,
+                "timestamp": ev.timestamp.isoformat(),
+            })
+        if link.alert_id and link.alert_id in alerts_map:
+            al = alerts_map[link.alert_id]
+            alerts.append({
+                "id": str(al.id),
+                "title": al.title,
+                "severity": al.severity,
+                "status": al.status,
+                "created_at": al.created_at.isoformat(),
+            })
     return WorkspaceOffenseSummary(
         id=offense.id,
         offense_number=offense.offense_number,

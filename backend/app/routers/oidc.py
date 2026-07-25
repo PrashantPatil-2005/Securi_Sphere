@@ -1,5 +1,6 @@
 """OpenID Connect login routes."""
 
+import logging
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -8,6 +9,8 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 from app.database import get_db
 from app.dependencies import client_ip
 from app.services.audit import log_audit
@@ -66,6 +69,7 @@ async def oidc_callback(
             status_code=302,
         )
     except Exception:
+        logger.exception("OIDC login completion failed")
         return RedirectResponse(
             url=f"{frontend}/login?error={quote('oidc_failed')}",
             status_code=302,

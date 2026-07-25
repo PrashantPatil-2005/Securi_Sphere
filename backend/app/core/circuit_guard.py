@@ -25,6 +25,7 @@ async def run_async(breaker_name: str, coro_factory: Callable[[], Awaitable[T]])
         return result
     except Exception:
         breaker.record_failure()
+        logger.debug("circuit breaker %s recorded failure", breaker_name, exc_info=True)
         raise
 
 
@@ -39,4 +40,5 @@ async def run_thread(breaker_name: str, fn: Callable[[], T], *, fallback: T | No
         return result
     except Exception:
         breaker.record_failure()
+        logger.debug("circuit breaker %s recorded failure (thread)", breaker_name, exc_info=True)
         raise

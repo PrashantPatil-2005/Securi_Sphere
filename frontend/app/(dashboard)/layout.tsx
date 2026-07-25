@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AppShell } from "@/components/layout/AppShell";
 import { AuthGuard } from "@/components/AuthGuard";
 import { RouteGuard } from "@/components/RouteGuard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TimeRangeProvider } from "@/lib/timeRange";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -18,7 +19,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <AssistantProvider>
               <AppShell>
                 <AuthGuard>
-                  <RouteGuard>{children}</RouteGuard>
+                  <RouteGuard>
+                    <ErrorBoundary>{children}</ErrorBoundary>
+                  </RouteGuard>
                 </AuthGuard>
               </AppShell>
             </AssistantProvider>

@@ -8,7 +8,11 @@ from app.database import Base
 from app.models import *  # noqa: F401, F403
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("+asyncpg", "+psycopg2"))
+_sync_url = settings.database_url.replace("+asyncpg", "+psycopg2").replace("@localhost:", "@127.0.0.1:")
+if "connect_timeout" not in _sync_url:
+    sep = "&" if "?" in _sync_url else "?"
+    _sync_url = f"{_sync_url}{sep}connect_timeout=10"
+config.set_main_option("sqlalchemy.url", _sync_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
@@ -23,7 +27,9 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(config.get_section(config.config_ini_section, {}), prefix="sqlalchemy.", poolclass=pool.NullPool)
+    from sqlalchemy import create_engine
+    url = config.get_main_option("sqlalchemy.url")
+    connectable = create_engine(url, poolclass=pool.NullPool, connect_args={"connect_timeout": 10})
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():

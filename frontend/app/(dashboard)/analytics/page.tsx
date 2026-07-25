@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
+import { useDebounce } from "@/lib/hooks/useDebounce";
 import { useTimeRange } from "@/lib/timeRange";
 import TimeRangeBar from "@/components/TimeRangeBar";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -32,17 +33,18 @@ export default function AnalyticsPage() {
   const [riskHostFilter, setRiskHostFilter] = useState("");
   const [riskDrawerHostId, setRiskDrawerHostId] = useState<string | null>(null);
   const [alertStatus, setAlertStatus] = useState("");
+  const debouncedHostFilter = useDebounce(hostFilter, 300);
   const extra = useMemo<Record<string, string>>(() => {
     const p: Record<string, string> = {};
-    if (hostFilter) p.host_id = hostFilter;
+    if (debouncedHostFilter) p.host_id = debouncedHostFilter;
     if (alertStatus) p.status = alertStatus;
     return p;
-  }, [hostFilter, alertStatus]);
+  }, [debouncedHostFilter, alertStatus]);
   const hostExtra = useMemo<Record<string, string>>(() => {
     const p: Record<string, string> = {};
-    if (hostFilter) p.host_id = hostFilter;
+    if (debouncedHostFilter) p.host_id = debouncedHostFilter;
     return p;
-  }, [hostFilter]);
+  }, [debouncedHostFilter]);
 
   const { data: trend, isLoading: trendLoading, isError: trendError, refetch: refetchTrend } = useSiemQuery<{
     total: { period: string; count: number }[];

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.brand import PRODUCT_NAME
@@ -248,8 +248,8 @@ async def refresh_analytics_materialized_views_endpoint(
 
 @router.post("/opensearch/backfill")
 async def opensearch_backfill(
-    event_limit: int = 10_000,
-    alert_limit: int = 5000,
+    event_limit: int = Query(10_000, le=100_000),
+    alert_limit: int = Query(5000, le=50_000),
     user: User = Depends(require_roles("admin")),
 ):
     """Bulk reindex hosts, events, and alerts into OpenSearch (admin)."""

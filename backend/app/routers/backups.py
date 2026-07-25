@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
@@ -63,7 +64,7 @@ async def get_backups(user: User = Depends(require_roles("admin"))):
 @router.post("/run", response_model=BackupRecordResponse)
 async def trigger_backup(
     request: Request,
-    db=Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles("admin")),
 ):
     if not settings.backup_enabled:

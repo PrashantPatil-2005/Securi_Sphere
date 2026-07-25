@@ -10,7 +10,6 @@ from app.dependencies import require_roles
 from app.models.alert_rule import AlertRule
 from app.models.user import User
 from app.services.detection import SUPPORTED_RULE_TYPES
-from app.services.feedback_loop import rule_feedback_insight
 
 router = APIRouter(prefix="/alert-rules", tags=["alert-rules"])
 
@@ -51,17 +50,6 @@ async def rules_meta(user: User = Depends(require_roles("admin", "analyst"))):
 @router.get("", response_model=list[RuleResponse])
 async def list_rules(db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
     return list((await db.execute(select(AlertRule))).scalars().all())
-
-
-@router.get("/feedback-insights")
-async def feedback_insights(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_roles("admin", "analyst")),
-):
-    rules = list((await db.execute(select(AlertRule))).scalars().all())
-    insights = [rule_feedback_insight(rule) for rule in rules]
-    insights.sort(key=lambda item: item["false_positive_rate"], reverse=True)
-    return {"items": insights}
 
 
 @router.post("", response_model=RuleResponse)

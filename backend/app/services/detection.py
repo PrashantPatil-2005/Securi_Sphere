@@ -393,9 +393,41 @@ async def check_service_failure_event(db: AsyncSession, host: Host, event_type: 
 
 async def update_host_statuses(db: AsyncSession) -> None:
     """Update host status based on heartbeats and open alerts."""
+    from collections import defaultdict
+
     now = datetime.now(timezone.utc)
     hosts_result = await db.execute(select(Host))
     hosts = hosts_result.scalars().all()
+
+    if not hosts:
+        return
+
+    host_ids = [h.id for h in hosts]
+
+    all_open_alerts = (
+        await db.execute(
+            select(Alert).where(Alert.host_id.in_(host_ids), Alert.status == "open")
+        )
+    ).scalars().all()
+
+    alerts_by_host: dict = defaultdict(list)
+    for alert in all_open_alerts:
+        alerts_by_host[alert.host_id].append(alert)
+
+    offline_rule = None
+    hosts_with_api_key = [h for h in hosts if h.api_key_hash]
+    if hosts_with_api_key:
+        rules_result = await db.execute(
+            select(AlertRule).where(AlertRule.rule_type == "agent_offline")
+        )
+        offline_rule = rules_result.scalar_one_or_none()
+
+    maintenance_host_ids: set = set()
+    if offline_rule:
+        from app.services.maintenance import is_host_in_maintenance
+        for h in hosts_with_api_key:
+            if await is_host_in_maintenance(db, h.id):
+                maintenance_host_ids.add(h.id)
 
     for host in hosts:
         old_status = host.status
@@ -409,10 +441,7 @@ async def update_host_statuses(db: AsyncSession) -> None:
                 })
             continue
 
-        open_alerts = await db.execute(
-            select(Alert).where(Alert.host_id == host.id, Alert.status == "open")
-        )
-        alerts = list(open_alerts.scalars().all())
+        alerts = alerts_by_host.get(host.id, [])
         critical_alerts = [a for a in alerts if a.severity == "critical"]
         high_alerts = [a for a in alerts if a.severity in ("high", "medium")]
 
@@ -422,13 +451,9 @@ async def update_host_statuses(db: AsyncSession) -> None:
             host.status = "critical"
         elif stale:
             host.status = "offline"
-            rules_result = await db.execute(
-                select(AlertRule).where(AlertRule.rule_type == "agent_offline")
-            )
-            offline_rule = rules_result.scalar_one_or_none()
             open_rule_ids = {a.rule_id for a in alerts if a.rule_id}
             if offline_rule and offline_rule.id not in open_rule_ids:
-                if not await is_host_in_maintenance(db, host.id):
+                if host.id not in maintenance_host_ids:
                     await create_alert(
                         db, host.id, "Agent Offline",
                         f"Host {host.name} has not sent a heartbeat",

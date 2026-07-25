@@ -1,13 +1,27 @@
 from collections.abc import AsyncGenerator
+import logging
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
 from app.core.db_pool import engine_options
 
+logger = logging.getLogger(__name__)
+
 engine = create_async_engine(settings.database_url, echo=settings.sql_echo, **engine_options())
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+@event.listens_for(engine.sync_engine, "checkout")
+def _on_checkout(dbapi_conn, connection_rec, connection_proxy):
+    logger.debug("pool checkout: checked_out=%s", engine.pool.checkedout())
+
+
+@event.listens_for(engine.sync_engine, "checkin")
+def _on_checkin(dbapi_conn, connection_rec):
+    logger.debug("pool checkin: checked_out=%s", engine.pool.checkedout())
 
 read_engine = None
 read_async_session: async_sessionmaker[AsyncSession] | None = None

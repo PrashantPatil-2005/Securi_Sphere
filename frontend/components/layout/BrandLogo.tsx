@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
+import { PRODUCT_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils/cn";
 
 interface BrandLogoProps {
@@ -13,7 +13,7 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
   const content = (
     <div className={cn("flex items-center gap-3 min-w-0", collapsed && "justify-center", className)}>
       <Image
-        src="/logo.webp"
+        src="/logo_main.jpg"
         alt={PRODUCT_NAME}
         width={collapsed ? 32 : 40}
         height={collapsed ? 32 : 40}
@@ -29,7 +29,7 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
             {PRODUCT_NAME}
           </p>
           <p className="text-[10px] text-muted uppercase tracking-widest leading-tight mt-0.5">
-            {PRODUCT_TAGLINE}
+            Enterprise Security Platform
           </p>
         </div>
       )}

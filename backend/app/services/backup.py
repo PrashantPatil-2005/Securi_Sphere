@@ -138,6 +138,7 @@ def _run_pg_dump_sync(*, trigger: str) -> BackupRecord:
                 check=False,
                 stdout=gz,
                 stderr=subprocess.PIPE,
+                timeout=600,
             )
         if result.returncode != 0:
             archive.unlink(missing_ok=True)
@@ -159,18 +160,6 @@ def _run_pg_dump_sync(*, trigger: str) -> BackupRecord:
         return record
     except Exception as exc:
         archive.unlink(missing_ok=True)
-        failed = BackupRecord(
-            filename=archive.name,
-            path=str(archive),
-            size_bytes=0,
-            sha256="",
-            created_at=started.isoformat(),
-            trigger=trigger,
-            duration_seconds=round((datetime.now(timezone.utc) - started).total_seconds(), 2),
-            database=db_name,
-            status="failed",
-            error=str(exc),
-        )
         raise RuntimeError(str(exc)) from exc
 
 

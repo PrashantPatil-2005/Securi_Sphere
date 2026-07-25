@@ -138,7 +138,7 @@ export default function SimulationPage() {
     onSuccess: (r) => {
       setLastResult(null);
       setSelectedRunId(null);
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["simulation"] });
       toast("success", r.message, `${r.events_deleted} simulated events removed`);
     },
     onError: (e: Error) => toast("error", "Purge failed", e.message),

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 
 interface AdminUser {
@@ -43,6 +44,7 @@ export function TeamManagementPanel() {
   const [ssoOnly, setSsoOnly] = useState(true);
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"provision" | "invite">("invite");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
 
   const { data: users = [], isLoading, isError, refetch } = useQuery({
     queryKey: ["admin", "users"],
@@ -261,9 +263,7 @@ export function TeamManagementPanel() {
                           size="sm"
                           className="text-xs text-danger"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (confirm(`Remove ${u.email} from the team?`)) deleteMutation.mutate(u.id);
-                          }}
+                          onClick={() => setDeleteTarget({ id: u.id, email: u.email })}
                         >
                           Remove
                         </Button>
@@ -276,6 +276,21 @@ export function TeamManagementPanel() {
           </div>
         )}
       </Panel>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Remove user"
+        description={`Remove ${deleteTarget?.email} from the team? This action cannot be undone.`}
+        confirmLabel="Remove"
+        danger
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

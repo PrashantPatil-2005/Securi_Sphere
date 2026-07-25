@@ -58,13 +58,10 @@ class WebSocketStore {
       const ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: "auth", token }));
-      };
-      this.ws = ws;
-
-      ws.onopen = () => {
         this.connected = true;
         this.notifyStatus();
       };
+      this.ws = ws;
       ws.onclose = () => {
         this.connected = false;
         this.notifyStatus();
@@ -161,14 +158,6 @@ export function useWsMessages(types: string[], onMessage: (msg: WSMessage) => vo
   }, [typesKey]);
 }
 
-/** @deprecated Use useWsConnected + query invalidation instead */
-export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
-  const connected = useWsConnected();
-  useWsMessages(["new_alert", "new_event", "security_feed", "alert_resolved", "host_status"], (msg) => {
-    onMessage?.(msg);
-  });
-  return { connected };
-}
 
 export function useSecurityFeedStore(maxItems = 50) {
   const feedRef = useRef<Array<Record<string, unknown>>>([]);

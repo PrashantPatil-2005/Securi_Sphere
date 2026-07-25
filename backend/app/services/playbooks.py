@@ -55,6 +55,29 @@ def sign_payload(secret: str, body: bytes) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
 
 
+async def _post_webhook(url: str, body: bytes, headers: dict) -> tuple[str, int | None, str | None]:
+    """Post to a webhook URL, returning (status, http_status, error_message)."""
+    status = "failed"
+    http_status: int | None = None
+    error_message: str | None = None
+    try:
+        async def _post():
+            async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
+                return await client.post(url, content=body, headers=headers)
+
+        response = await run_async("playbook_webhook", _post)
+        http_status = response.status_code
+        if 200 <= response.status_code < 300:
+            status = "success"
+        else:
+            error_message = (response.text or "")[:500]
+    except CircuitOpenError:
+        error_message = "circuit_open"
+    except Exception as exc:
+        error_message = str(exc)[:500]
+    return status, http_status, error_message
+
+
 async def schedule_playbook_dispatch(
     event: str,
     resource_type: str,
@@ -200,25 +223,8 @@ async def _deliver_webhook(
     if playbook.webhook_secret:
         headers["X-Securi-Signature"] = sign_payload(playbook.webhook_secret, body)
 
-    status = "failed"
-    http_status: int | None = None
-    error_message: str | None = None
-
-    try:
-        async def _post():
-            async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
-                return await client.post(playbook.webhook_url, content=body, headers=headers)
-
-        response = await run_async("playbook_webhook", _post)
-        http_status = response.status_code
-        if 200 <= response.status_code < 300:
-            status = "success"
-        else:
-            error_message = (response.text or "")[:500]
-    except CircuitOpenError:
-        error_message = "circuit_open"
-    except Exception as exc:
-        error_message = str(exc)[:500]
+    status, http_status, error_message = await _post_webhook(playbook.webhook_url, body, headers)
+    if status != "success":
         logger.warning(
             "playbook webhook failed",
             extra={"playbook": playbook.name, "event": event, "error": error_message},
@@ -267,23 +273,7 @@ async def send_test_webhook(playbook: Playbook) -> PlaybookRun:
     if playbook.webhook_secret:
         headers["X-Securi-Signature"] = sign_payload(playbook.webhook_secret, body)
 
-    status = "failed"
-    http_status: int | None = None
-    error_message: str | None = None
-    try:
-        async def _post():
-            async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
-                return await client.post(playbook.webhook_url, content=body, headers=headers)
-
-        response = await run_async("playbook_webhook", _post)
-        http_status = response.status_code
-        status = "success" if 200 <= response.status_code < 300 else "failed"
-        if status != "success":
-            error_message = (response.text or "")[:500]
-    except CircuitOpenError:
-        error_message = "circuit_open"
-    except Exception as exc:
-        error_message = str(exc)[:500]
+    status, http_status, error_message = await _post_webhook(playbook.webhook_url, body, headers)
 
     return PlaybookRun(
         playbook_id=playbook.id,

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 
 from uuid import UUID
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.auth_cookies import clear_auth_cookies
+
+logger = logging.getLogger(__name__)
 from app.services.auth_session import issue_auth_tokens
 from app.config import settings
 from app.database import get_db
@@ -227,6 +230,7 @@ async def verify_mfa_login(
     try:
         payload = decode_mfa_pending_token(body.mfa_token)
     except Exception:
+        logger.debug("MFA token decode failed", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid or expired MFA session")
 
     user_id = payload.get("sub")
@@ -348,7 +352,10 @@ async def refresh(
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
+    except HTTPException:
+        raise
     except Exception:
+        logger.debug("Refresh token decode failed", exc_info=True)
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 
     token_hash = hash_token(refresh_token)

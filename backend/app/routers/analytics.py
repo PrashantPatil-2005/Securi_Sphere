@@ -70,7 +70,7 @@ async def retention_view(
         try:
             return await query_retention_from_materialized_views(db, view, since=since)
         except Exception:
-            logger.debug("Materialized view query failed, falling back to raw query", exc_info=True)
+            logger.warning("Materialized view query failed, falling back to raw query", exc_info=True)
 
     since_dt = now - timedelta(days=90)
 

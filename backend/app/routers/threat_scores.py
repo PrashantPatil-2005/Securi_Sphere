@@ -22,6 +22,6 @@ class ScoreResponse(BaseModel):
 
 @router.get("")
 async def ranked_scores(db: AsyncSession = Depends(get_db_read), user: User = Depends(get_current_user)):
-    hosts = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
+    hosts = {h.id: h.name for h in (await db.execute(select(Host).limit(5000))).scalars().all()}
     scores = (await db.execute(select(HostThreatScore).order_by(HostThreatScore.score.desc()))).scalars().all()
     return [ScoreResponse(host_id=str(s.host_id), host_name=hosts.get(s.host_id, "?"), score=s.score, health_score=s.health_score, factors=s.factors or {}) for s in scores]

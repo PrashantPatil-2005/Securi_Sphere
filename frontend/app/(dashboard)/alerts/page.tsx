@@ -70,7 +70,10 @@ function AlertsPageContent() {
   const [filters, setFilters] = useState({ status: "", severity: "", host_id: "", rule_name: "", q: "", mitre_technique_id: "" });
   const debouncedQ = useDebounce(filters.q, 400);
   const debouncedRule = useDebounce(filters.rule_name, 400);
-  const queryFilters = { ...filters, q: debouncedQ, rule_name: debouncedRule };
+  const queryFilters = useMemo(
+    () => ({ ...filters, q: debouncedQ, rule_name: debouncedRule }),
+    [filters, debouncedQ, debouncedRule],
+  );
 
   useEffect(() => {
     const q = searchParams.get("q");

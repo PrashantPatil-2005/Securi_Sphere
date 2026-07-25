@@ -20,12 +20,38 @@ import { useUxEnabled } from "@/lib/featureFlags";
 import { QueryError } from "@/components/ui/QueryError";
 import { Button } from "@/components/ui/Button";
 import { axisProps, CHART_THEME } from "@/lib/design/chartTheme";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const LiveSecurityFeed = dynamic(() => import("@/components/LiveSecurityFeed"), {
   loading: () => <ChartSkeleton height={280} />,
   ssr: false,
 });
+
+const LazyAreaChart = dynamic(
+  () =>
+    import("recharts").then((mod) => {
+      const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } = mod;
+      return function LazyAreaChartWrapper({ data }: { data: { period: string; count: number }[] }) {
+        return (
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={CHART_THEME.colors.primary} stopOpacity={0.3} />
+                  <stop offset="100%" stopColor={CHART_THEME.colors.primary} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="period" {...axisProps} />
+              <YAxis {...axisProps} width={36} />
+              <Tooltip {...CHART_THEME.tooltip} />
+              <Area type="monotone" dataKey="count" stroke={CHART_THEME.colors.primary} fill="url(#trendGrad)" strokeWidth={2} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        );
+      };
+    }),
+  { loading: () => <ChartSkeleton height={240} />, ssr: false },
+);
 
 const KPI_SNAPSHOT_KEY = "securi_kpi_snapshot";
 
@@ -127,20 +153,7 @@ const SecurityTimeline = memo(function SecurityTimeline() {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={trendData}>
-        <defs>
-          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={CHART_THEME.colors.primary} stopOpacity={0.3} />
-            <stop offset="100%" stopColor={CHART_THEME.colors.primary} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis dataKey="period" {...axisProps} />
-        <YAxis {...axisProps} width={36} />
-        <Tooltip {...CHART_THEME.tooltip} />
-        <Area type="monotone" dataKey="count" stroke={CHART_THEME.colors.primary} fill="url(#trendGrad)" strokeWidth={2} isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
+    <LazyAreaChart data={trendData} />
   );
 });
 
@@ -227,41 +240,49 @@ function renderWidget(
   riskHostId: string | null,
   setRiskHostId: (id: string | null) => void,
 ) {
+  let widget: ReactNode = null;
   switch (id) {
     case "kpis":
-      return <ExecutiveKpis key={id} />;
+      widget = <ExecutiveKpis key={id} />;
+      break;
     case "onboarding":
-      return <OnboardingChecklist key={id} />;
+      widget = <OnboardingChecklist key={id} />;
+      break;
     case "timeline":
-      return (
+      widget = (
         <Panel key={id} title="Security timeline" subtitle="Event volume over selected period">
           <SecurityTimeline />
         </Panel>
       );
+      break;
     case "risky_hosts":
-      return (
+      widget = (
         <Panel key={id} title="Host risk ranking" subtitle="Highest risk scores in your environment">
           <RiskyHostsWidget onSelect={setRiskHostId} />
         </Panel>
       );
+      break;
     case "attack_timelines":
-      return (
+      widget = (
         <Panel key={id} title="Active attack timelines" subtitle="Correlated threat sequences">
           <AttackTimelines />
         </Panel>
       );
+      break;
     case "live_feed":
-      return (
+      widget = (
         <Panel key={id} title="Live security feed" subtitle="Real-time events via WebSocket">
           <LiveSecurityFeed initial={[]} />
         </Panel>
       );
+      break;
     default: {
       const searchId = savedSearchIdFromWidget(id);
-      if (searchId) return <SavedSearchWidget key={id} searchId={searchId} />;
-      return null;
+      if (searchId) widget = <SavedSearchWidget key={id} searchId={searchId} />;
     }
   }
+  if (!widget) return null;
+  return <ErrorBoundary key={id}>{widget}</ErrorBoundary>;
 }
 
 export default function ExecutiveDashboard() {

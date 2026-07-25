@@ -22,8 +22,7 @@ export default function RegisterPage() {
   const [allowRegistration, setAllowRegistration] = useState(true);
 
   useEffect(() => {
-    fetch("/api/v1/settings/public")
-      .then((r) => (r.ok ? r.json() : null))
+    api<{ allow_registration: boolean }>("/api/v1/settings/public")
       .then((cfg) => {
         if (cfg && typeof cfg.allow_registration === "boolean") {
           setAllowRegistration(cfg.allow_registration);

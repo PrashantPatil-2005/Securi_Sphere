@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
@@ -32,6 +32,7 @@ export default function RulesPage() {
   const isAdmin = user?.role?.name === "admin";
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"detection" | "correlation">("detection");
+  const [, startTransition] = useTransition();
   const [form, setForm] = useState({ name: "", rule_type: "failed_logins", threshold: 5, window_minutes: 5, severity: "high" });
 
   const { data: rules = [], isLoading } = useQuery({
@@ -49,7 +50,19 @@ export default function RulesPage() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api(`/api/v1/alert-rules/${id}`, { method: "PATCH", body: JSON.stringify({ enabled: !enabled }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alert-rules"] }),
+    onMutate: async ({ id, enabled }) => {
+      await queryClient.cancelQueries({ queryKey: ["alert-rules"] });
+      const previous = queryClient.getQueryData<AlertRule[]>(["alert-rules"]);
+      queryClient.setQueryData<AlertRule[]>(["alert-rules"], (old) =>
+        old ? old.map((r) => (r.id === id ? { ...r, enabled: !enabled } : r)) : old
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["alert-rules"], context.previous);
+      toast("error", "Failed", _err.message);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["alert-rules"] }),
   });
 
   const createMutation = useMutation({
@@ -80,7 +93,7 @@ export default function RulesPage() {
           <button
             key={t}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => startTransition(() => setTab(t))}
             className={cn("btn-ghost capitalize", tab === t && "bg-accent/10 text-accent border-accent/30")}
           >
             {t}
@@ -92,13 +105,13 @@ export default function RulesPage() {
           <RuleFeedbackInsights />
           <Panel title="Create detection rule" subtitle="Threshold-based alert rules">
             <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }} className="grid md:grid-cols-6 gap-3 items-end">
-              <Input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} label="Name" />
-              <Select label="Type" value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })}>
+              <Input required placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} label="Name" disabled={createMutation.isPending} />
+              <Select label="Type" value={form.rule_type} onChange={(e) => setForm({ ...form, rule_type: e.target.value })} disabled={createMutation.isPending}>
                 {ruleTypes.map((t) => <option key={t} value={t}>{t}</option>)}
               </Select>
-              <Input type="number" label="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} />
-              <Input type="number" label="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} />
-              <Select label="Severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+              <Input type="number" label="Threshold" value={form.threshold} onChange={(e) => setForm({ ...form, threshold: +e.target.value })} disabled={createMutation.isPending} />
+              <Input type="number" label="Window (min)" value={form.window_minutes} onChange={(e) => setForm({ ...form, window_minutes: +e.target.value })} disabled={createMutation.isPending} />
+              <Select label="Severity" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })} disabled={createMutation.isPending}>
                 {["low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
               </Select>
               <Button type="submit" loading={createMutation.isPending}>Add rule</Button>

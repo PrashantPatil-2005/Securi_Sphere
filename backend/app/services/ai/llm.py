@@ -18,10 +18,6 @@ def resolve_provider() -> str:
         return "openai"
     if provider == "anthropic" and settings.anthropic_api_key:
         return "anthropic"
-    if provider == "openai" and settings.openai_api_key:
-        return "openai"
-    if provider == "anthropic" and settings.anthropic_api_key:
-        return "anthropic"
     return "local"
 
 

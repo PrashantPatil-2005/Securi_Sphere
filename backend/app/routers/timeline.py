@@ -51,7 +51,7 @@ async def list_timelines(
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     q = select(AttackTimeline).order_by(AttackTimeline.started_at.desc())
@@ -64,7 +64,7 @@ async def list_timelines(
 
 
 @router.get("/{timeline_id}/events", response_model=list[EventResponse])
-async def timeline_events(timeline_id: UUID, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+async def timeline_events(timeline_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     result = await db.execute(select(AttackTimeline).where(AttackTimeline.id == timeline_id))
     tl = result.scalar_one_or_none()
     if not tl or not tl.event_ids:

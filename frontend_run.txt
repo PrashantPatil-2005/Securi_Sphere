@@ -1,0 +1,72 @@
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 5.6s
+ ✓ Compiled /middleware in 184ms (73 modules)
+ ○ Compiling /login ...
+ ✓ Compiled /login in 3.9s (1209 modules)
+ GET /login 200 in 4171ms
+ GET /login 200 in 49ms
+(node:7320) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+ ✓ Compiled /favicon.ico in 337ms (658 modules)
+ GET /favicon.ico 200 in 404ms
+ ○ Compiling / ...
+ ✓ Compiled / in 3.1s (2753 modules)
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ GET /login 200 in 80ms
+ ○ Compiling /analytics ...
+ ✓ Compiled /analytics in 1287ms (2801 modules)
+ ○ Compiling /threat-scores ...
+ ✓ Compiled /threat-scores in 745ms (2807 modules)
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1931ms (2776 modules)
+ GET /_next/static/chunks/app/(dashboard)/LayoutGroupContext.mjs.map 404 in 831ms
+ GET /_next/static/chunks/app/(auth)/login/LayoutGroupContext.mjs.map 404 in 838ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 2230ms
+ GET /_next/static/chunks/app/(dashboard)/analytics/LayoutGroupContext.mjs.map 404 in 835ms
+ GET /_next/static/chunks/app/(dashboard)/LayoutGroupContext.mjs.map 404 in 29ms
+ GET / 200 in 582ms
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 1345ms (1448 modules)
+ GET /favicon.ico 200 in 1883ms
+ GET /login 200 in 1629ms
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ GET / 200 in 276ms
+ ⨯ The requested resource isn't a valid image for /logo.webp received null
+ GET /favicon.ico 200 in 25ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ ✓ Compiled in 1883ms (2789 modules)
+ GET /?_rsc=rot37 200 in 90ms
+ ✓ Compiled in 1826ms (2787 modules)
+ GET /?_rsc=rot37 200 in 91ms
+ GET / 200 in 497ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ ○ Compiling /favicon.ico ...
+ ✓ Compiled /favicon.ico in 1068ms (1447 modules)
+ GET /favicon.ico 200 in 1241ms
+ GET / 200 in 420ms
+ GET / 200 in 71ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET /favicon.ico 200 in 10ms
+ GET / 200 in 85ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET /favicon.ico 200 in 39ms
+ GET / 200 in 75ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET / 200 in 110ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET / 200 in 167ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET / 200 in 54ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET / 200 in 57ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET / 200 in 75ms
+ ⨯ The requested resource isn't a valid image for /logo_main.jpg received null
+ GET /favicon.ico 200 in 38ms

@@ -73,7 +73,7 @@ export function usePaginatedResource<T>({
       return parsePaginatedList(r);
     },
     placeholderData: (prev) => prev,
-    staleTime: includeTimeRange ? 0 : 15_000,
+    staleTime: includeTimeRange ? 30_000 : 15_000,
   });
 }
 
@@ -128,7 +128,7 @@ export function useCursorPaginatedResource<T>({
       return parsePaginatedList(r);
     },
     placeholderData: (prev) => prev,
-    staleTime: includeTimeRange ? 0 : 15_000,
+    staleTime: includeTimeRange ? 30_000 : 15_000,
   });
 
   const goNext = useCallback(() => {
@@ -176,7 +176,30 @@ export function useAlertStatusMutation(onSuccess?: () => void) {
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) =>
       api(`/api/v1/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
-    onSuccess: () => {
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["alerts"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["alerts"] });
+      queryClient.setQueriesData({ queryKey: ["alerts"] }, (old: unknown) => {
+        if (!old || typeof old !== "object") return old;
+        const data = old as { items?: { id: string; status: string }[]; total?: number };
+        if (Array.isArray(data.items)) {
+          return { ...data, items: data.items.map((a) => (a.id === id ? { ...a, status } : a)) };
+        }
+        if (Array.isArray(old)) {
+          return (old as { id: string; status: string }[]).map((a) => (a.id === id ? { ...a, status } : a));
+        }
+        return old;
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        for (const [key, data] of context.previous) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["alerts"] });
       onSuccess?.();
     },

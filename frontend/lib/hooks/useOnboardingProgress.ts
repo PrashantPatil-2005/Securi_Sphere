@@ -121,8 +121,8 @@ export function useOnboardingProgress() {
   const { data: incidentCount = 0 } = useQuery({
     queryKey: ["incidents", "count"],
     queryFn: async () => {
-      const items = await api<unknown[]>("/api/v1/incidents");
-      return items.length;
+      const res = await api<{ total?: number }>("/api/v1/incidents?page_size=1");
+      return res.total ?? 0;
     },
     staleTime: 30_000,
   });

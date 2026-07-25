@@ -107,15 +107,26 @@ export async function api<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
-  } catch {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: "include",
+      signal: options.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
     throw new Error("Cannot reach the server. Make sure the backend is running on " + BACKEND_URL);
   }
 
   if (res.status === 401 && retry) {
     const ok = await refreshAccessToken();
     if (ok) {
-      const retryRes = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: "include" });
+      const retryRes = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal: options.signal,
+      });
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => null);
         throw new Error(parseApiError(err, retryRes.status));
@@ -134,6 +145,53 @@ export async function api<T>(
 
   if (res.status === 204) return {} as T;
   return res.json();
+}
+
+/** Like `api()` but returns the raw Response for binary downloads. Handles auth retry. */
+export async function apiRaw(path: string, options: RequestInit = {}, retry = true): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string>),
+  };
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+      credentials: "include",
+      signal: options.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new Error("Cannot reach the server. Make sure the backend is running on " + BACKEND_URL);
+  }
+
+  if (res.status === 401 && retry) {
+    const ok = await refreshAccessToken();
+    if (ok) {
+      const retryRes = await fetch(`${API_URL}${path}`, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal: options.signal,
+      });
+      if (!retryRes.ok) {
+        const err = await retryRes.json().catch(() => null);
+        throw new Error(parseApiError(err, retryRes.status));
+      }
+      return retryRes;
+    }
+    redirectToLogin();
+    throw new Error("Session expired");
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new Error(parseApiError(err, res.status));
+  }
+
+  return res;
 }
 
 export async function fetchWsToken(): Promise<string | null> {

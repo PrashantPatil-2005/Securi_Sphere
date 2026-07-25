@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
@@ -11,9 +12,28 @@ import { MitreTechniqueDrilldown } from "@/components/mitre/MitreTechniqueDrilld
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
-import { TableSkeleton } from "@/components/ui/Skeleton";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { TableSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { CHART_THEME, axisProps } from "@/lib/design/chartTheme";
+
+const LazyBarChart = dynamic(
+  () =>
+    import("recharts").then((mod) => {
+      const { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } = mod;
+      return function LazyBarChartWrapper({ data }: { data: { name: string; coverage: number }[] }) {
+        return (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data}>
+              <XAxis dataKey="name" {...axisProps} tick={{ fontSize: 10 }} />
+              <YAxis domain={[0, 100]} {...axisProps} />
+              <Tooltip {...CHART_THEME.tooltip} />
+              <Bar dataKey="coverage" fill={CHART_THEME.colors.primary} isAnimationActive={false} name="Coverage %" />
+            </BarChart>
+          </ResponsiveContainer>
+        );
+      };
+    }),
+  { loading: () => <ChartSkeleton height={220} />, ssr: false },
+);
 
 interface Technique {
   technique_id: string;
@@ -87,14 +107,7 @@ function MitrePageContent() {
       {chartData.length > 0 && (
         <GlassPanel>
           <h2 className="text-subheading mb-4">Coverage by tactic</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData}>
-              <XAxis dataKey="name" {...axisProps} tick={{ fontSize: 10 }} />
-              <YAxis domain={[0, 100]} {...axisProps} />
-              <Tooltip {...CHART_THEME.tooltip} />
-              <Bar dataKey="coverage" fill={CHART_THEME.colors.primary} isAnimationActive={false} name="Coverage %" />
-            </BarChart>
-          </ResponsiveContainer>
+          <LazyBarChart data={chartData} />
         </GlassPanel>
       )}
       {data && totalHits === 0 && (

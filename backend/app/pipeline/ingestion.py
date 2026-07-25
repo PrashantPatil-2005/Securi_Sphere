@@ -64,6 +64,7 @@ async def ingest_event_batch(
     ingested: list[Event] = []
     errors: list[str] = []
     deduplicated = 0
+    batch_start = datetime.now(timezone.utc)
 
     for idx, item in enumerate(events):
         try:

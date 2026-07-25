@@ -15,6 +15,9 @@ from app.services.audit import log_audit
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
+VALID_INCIDENT_STATUSES = ("open", "investigating", "resolved", "closed")
+VALID_SEVERITIES = ("low", "medium", "high", "critical")
+
 
 class IncidentCreate(BaseModel):
     title: str
@@ -49,7 +52,7 @@ class IncidentDetailResponse(IncidentResponse):
 async def get_incident(
     incident_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     inc = (
         await db.execute(
@@ -84,7 +87,9 @@ async def list_incidents(status: str | None = None, db: AsyncSession = Depends(g
 
 
 @router.post("", response_model=IncidentResponse)
-async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_db), user=Depends(require_roles("admin", "analyst"))):
+async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
+    if body.severity not in VALID_SEVERITIES:
+        raise HTTPException(status_code=400, detail=f"Severity must be one of {VALID_SEVERITIES}")
     inc = Incident(title=body.title, description=body.description, severity=body.severity, host_id=body.host_id, created_by=user.id)
     db.add(inc)
     await db.flush()
@@ -95,7 +100,9 @@ async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_d
 
 
 @router.patch("/{incident_id}/status")
-async def update_status(incident_id: UUID, status: str, db: AsyncSession = Depends(get_db), user=Depends(require_roles("admin", "analyst"))):
+async def update_status(incident_id: UUID, status: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
+    if status not in VALID_INCIDENT_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Status must be one of {VALID_INCIDENT_STATUSES}")
     result = await db.execute(select(Incident).where(Incident.id == incident_id))
     inc = result.scalar_one_or_none()
     if not inc:
@@ -104,16 +111,35 @@ async def update_status(incident_id: UUID, status: str, db: AsyncSession = Depen
     inc.updated_at = datetime.now(timezone.utc)
     if status in ("resolved", "closed"):
         inc.resolved_at = datetime.now(timezone.utc)
+    await log_audit(db, "incident_status_change", user_id=user.id, resource_type="incident", resource_id=incident_id)
     return inc
 
 
 @router.post("/{incident_id}/notes")
-async def add_note(incident_id: UUID, body: NoteCreate, db: AsyncSession = Depends(get_db), user=Depends(require_roles("admin", "analyst"))):
-    db.add(IncidentNote(incident_id=incident_id, user_id=user.id, content=body.content))
-    return {"message": "note added"}
+async def add_note(incident_id: UUID, body: NoteCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
+    inc = (await db.execute(select(Incident).where(Incident.id == incident_id))).scalar_one_or_none()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    if not body.content or not body.content.strip():
+        raise HTTPException(status_code=400, detail="Note content cannot be empty")
+    note = IncidentNote(incident_id=incident_id, user_id=user.id, content=body.content.strip())
+    db.add(note)
+    await db.flush()
+    return {"message": "note added", "id": str(note.id)}
 
 
 @router.post("/{incident_id}/alerts/{alert_id}")
-async def link_alert(incident_id: UUID, alert_id: UUID, db: AsyncSession = Depends(get_db), user=Depends(require_roles("admin", "analyst"))):
+async def link_alert(incident_id: UUID, alert_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
+    inc = (await db.execute(select(Incident).where(Incident.id == incident_id))).scalar_one_or_none()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    from app.models.alert import Alert
+    alert = (await db.execute(select(Alert).where(Alert.id == alert_id))).scalar_one_or_none()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    existing = (await db.execute(select(IncidentAlert).where(IncidentAlert.incident_id == incident_id, IncidentAlert.alert_id == alert_id))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="Alert already linked to this incident")
     db.add(IncidentAlert(incident_id=incident_id, alert_id=alert_id))
+    await db.flush()
     return {"message": "linked"}

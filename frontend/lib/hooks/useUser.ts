@@ -24,13 +24,13 @@ export function canAccessRoute(role: string | undefined, href: string): boolean 
   if (!role) return true;
   if (role === "admin") return true;
 
-  const adminOnly = ["/audit", "/rules", "/system"];
+  const adminOnly = ["/audit", "/system"];
   if (adminOnly.some((p) => href === p || href.startsWith(`${p}/`))) {
     return false;
   }
 
   if (role === "viewer") {
-    const viewerBlocked = ["/reports", "/simulation"];
+    const viewerBlocked = ["/reports", "/simulation", "/rules"];
     if (viewerBlocked.some((p) => href === p || href.startsWith(`${p}/`))) {
       return false;
     }

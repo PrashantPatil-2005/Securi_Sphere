@@ -14,7 +14,12 @@ router = APIRouter(prefix="/siem", tags=["siem"])
 
 
 def _host_id(host_id: str | None = None) -> UUID | None:
-    return UUID(host_id) if host_id else None
+    if not host_id:
+        return None
+    try:
+        return UUID(host_id)
+    except ValueError:
+        return None
 
 
 @router.get("/events-trend")

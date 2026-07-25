@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
 import { ChevronRight, Search, Server } from "lucide-react";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
@@ -30,7 +31,7 @@ interface HostHit {
   ip?: string | null;
 }
 
-export function AlertResultRow({ alert, className }: { alert: AlertHit; className?: string }) {
+export const AlertResultRow = memo(function AlertResultRow({ alert, className }: { alert: AlertHit; className?: string }) {
   return (
     <Link
       href={workspaceHref({ alertId: alert.id })}
@@ -49,9 +50,9 @@ export function AlertResultRow({ alert, className }: { alert: AlertHit; classNam
       </div>
     </Link>
   );
-}
+});
 
-export function EventResultRow({ event, className }: { event: EventHit; className?: string }) {
+export const EventResultRow = memo(function EventResultRow({ event, className }: { event: EventHit; className?: string }) {
   return (
     <Link
       href={`/events?q=${encodeURIComponent(event.event_type)}`}
@@ -73,9 +74,9 @@ export function EventResultRow({ event, className }: { event: EventHit; classNam
       </div>
     </Link>
   );
-}
+});
 
-export function HostResultRow({ host, className }: { host: HostHit; className?: string }) {
+export const HostResultRow = memo(function HostResultRow({ host, className }: { host: HostHit; className?: string }) {
   return (
     <Link
       href="/hosts"
@@ -100,7 +101,7 @@ export function HostResultRow({ host, className }: { host: HostHit; className?: 
       </div>
     </Link>
   );
-}
+});
 
 export function SearchResultsSummary({
   events,

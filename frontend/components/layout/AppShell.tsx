@@ -1,13 +1,25 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { Sidebar } from "./Sidebar";
 import { TopNav } from "./TopNav";
 import { PageTransition } from "./PageTransition";
-import { AIAssistantPanel } from "@/components/AIAssistantPanel";
-import { CommandPalette } from "@/components/CommandPalette";
-import { OnboardingWizard } from "@/components/onboarding/OnboardingWizard";
-import { ActivationCoach } from "@/components/onboarding/ActivationCoach";
+
+const AIAssistantPanel = dynamic(() => import("@/components/AIAssistantPanel").then((m) => m.AIAssistantPanel), {
+  ssr: false,
+});
+const CommandPalette = dynamic(() => import("@/components/CommandPalette").then((m) => m.CommandPalette), {
+  ssr: false,
+});
+const OnboardingWizard = dynamic(
+  () => import("@/components/onboarding/OnboardingWizard").then((m) => m.OnboardingWizard),
+  { ssr: false },
+);
+const ActivationCoach = dynamic(
+  () => import("@/components/onboarding/ActivationCoach").then((m) => m.ActivationCoach),
+  { ssr: false },
+);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);

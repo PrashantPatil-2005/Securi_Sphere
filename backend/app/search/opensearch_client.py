@@ -222,6 +222,7 @@ async def opensearch_cluster_health() -> dict | None:
     try:
         return await run_thread("opensearch", _health, fallback=None)
     except Exception:
+        logger.debug("OpenSearch health check failed", exc_info=True)
         return {"status": "error", "detail": "circuit or cluster failure"}
 
 

@@ -17,12 +17,15 @@ def materialized_views_enabled() -> bool:
     return settings.analytics_materialized_views_enabled
 
 
-def _bucket_sql(view: str, column: str = "bucket_day") -> str:
-    if view == "weekly":
-        return f"date_trunc('week', {column})::date"
-    if view == "monthly":
-        return f"date_trunc('month', {column})::date"
-    return column
+_BUCKET_COLUMNS = {
+    "daily": "bucket_day",
+    "weekly": "date_trunc('week', bucket_day)::date",
+    "monthly": "date_trunc('month', bucket_day)::date",
+}
+
+
+def _bucket_sql(view: str) -> str:
+    return _BUCKET_COLUMNS[view]
 
 
 async def refresh_analytics_materialized_views(
