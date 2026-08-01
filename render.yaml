@@ -1,11 +1,9 @@
 services:
   - type: web
     name: securi-backend
-    runtime: image
-    image:
-      url: https://github.com/PrashantPatil-2005/Securi_Sphere.git
-      dockerfilePath: backend/Dockerfile
-      dockerContext: .
+    runtime: docker
+    dockerfilePath: backend/Dockerfile
+    dockerContext: .
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -37,11 +35,9 @@ services:
 
   - type: web
     name: securi-frontend
-    runtime: image
-    image:
-      url: https://github.com/PrashantPatil-2005/Securi_Sphere.git
-      dockerfilePath: frontend/Dockerfile
-      dockerContext: .
+    runtime: docker
+    dockerfilePath: frontend/Dockerfile
+    dockerContext: .
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://securi-backend.onrender.com
