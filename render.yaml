@@ -6,13 +6,9 @@ services:
     dockerContext: .
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: securi-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
-        fromRedis:
-          name: securi-redis
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: SERVER_URL
@@ -47,18 +43,12 @@ services:
     autoDeploy: true
     plan: starter
 
-  - type: database
-    name: securi-db
+databases:
+  - name: securi-db
     databaseName: securi
     user: securi
     plan: starter
-    ipAllowList:
-      - name: default
-        cidr: 0.0.0.0/0
 
-  - type: redis
-    name: securi-redis
+keyvalue:
+  - name: securi-redis
     plan: starter
-    ipAllowList:
-      - name: default
-        cidr: 0.0.0.0/0
