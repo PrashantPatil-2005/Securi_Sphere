@@ -49,8 +49,3 @@ databases:
     ipAllowList:
       - source: 0.0.0.0/0
 
-keyvalue:
-  - name: securi-redis
-    plan: starter
-    ipAllowList:
-      - source: 0.0.0.0/0
