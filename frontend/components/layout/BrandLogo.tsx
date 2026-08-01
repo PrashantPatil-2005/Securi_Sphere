@@ -13,7 +13,7 @@ export function BrandLogo({ collapsed = false, className, asLink = true }: Brand
   const content = (
     <div className={cn("flex items-center gap-3 min-w-0", collapsed && "justify-center", className)}>
       <Image
-        src="/logo_main.jpg"
+        src="/logo.webp"
         alt={PRODUCT_NAME}
         width={collapsed ? 32 : 40}
         height={collapsed ? 32 : 40}

@@ -54,8 +54,10 @@ scheduler = AsyncIOScheduler()
 async def init_db() -> None:
     await migrate_schema()
     async with async_session() as db:
-        from app.routers.auth import seed_roles
+        from app.routers.auth import seed_roles, seed_dev_users, seed_demo_users
         await seed_roles(db)
+        await seed_dev_users(db)
+        await seed_demo_users(db)
         await seed_alert_rules(db)
         await seed_mitre(db)
         await seed_correlation_rules(db)
@@ -191,11 +193,16 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
 app.add_middleware(RequestTimeoutMiddleware)
 app.add_middleware(RateLimitMiddleware)
+cors_origins = [settings.frontend_url]
+if settings.environment == "development":
+    cors_origins.extend([
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+    ])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-API-Key"],

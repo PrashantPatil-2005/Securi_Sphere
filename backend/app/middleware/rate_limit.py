@@ -19,6 +19,8 @@ async def _redis_client():
     global _redis
     if not settings.redis_url:
         return None
+    if _redis is False:
+        return None
     if _redis is None:
         try:
             from redis.asyncio import Redis
@@ -27,7 +29,8 @@ async def _redis_client():
         except Exception as exc:
             logger.warning("Redis rate limiter unavailable: %s", exc)
             _redis = False
-    return _redis if _redis is not False else None
+            return None
+    return _redis
 
 
 def _client_ip(request: Request) -> str:
@@ -82,14 +85,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         segment = request.url.path.split("/")[3] if len(request.url.path.split("/")) > 3 else "root"
         key = f"{ip}:{segment}"
 
-        if await self._check_redis(key, max_requests, window_seconds):
-            return self._rate_limit_response(window_seconds)
-
-        now = time.time()
-        self.requests[key] = [t for t in self.requests[key] if now - t < window_seconds]
-        if len(self.requests[key]) >= max_requests:
-            return self._rate_limit_response(window_seconds)
-        self.requests[key].append(now)
+        # Use Redis when available; fall back to in-memory only when Redis is unconfigured
+        redis = await _redis_client()
+        if redis:
+            if await self._check_redis(key, max_requests, window_seconds):
+                return self._rate_limit_response(window_seconds)
+        else:
+            now = time.time()
+            self.requests[key] = [t for t in self.requests[key] if now - t < window_seconds]
+            if len(self.requests[key]) >= max_requests:
+                return self._rate_limit_response(window_seconds)
+            self.requests[key].append(now)
         return await call_next(request)
 
     def _rate_limit_response(self, window_seconds: int) -> JSONResponse:

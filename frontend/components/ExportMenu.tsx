@@ -1,6 +1,6 @@
 "use client";
 
-import { api } from "@/lib/api";
+import { apiRaw } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 
 interface Props {
@@ -15,7 +15,7 @@ export default function ExportMenu({ resource, query }: Props) {
     try {
       const sep = query.includes("?") ? "&" : "?";
       const url = `/api/v1/${resource}/export${query}${sep}format=${format}`;
-      const res = await api<Response>(url, { method: "GET" }, false);
+      const res = await apiRaw(url, { method: "GET" }, false);
       const blob = await res.blob();
       const a = document.createElement("a");
       const objectUrl = URL.createObjectURL(blob);

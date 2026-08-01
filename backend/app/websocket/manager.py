@@ -68,7 +68,7 @@ class ConnectionManager:
     async def _broadcast_local(self, message: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
         payload = json.dumps(message)
-        for ws in self.active:
+        for ws in list(self.active):
             try:
                 await ws.send_text(payload)
             except Exception:

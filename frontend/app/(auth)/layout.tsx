@@ -17,7 +17,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <div className="relative z-10 flex flex-col justify-between p-10 xl:p-12">
             <div className="flex items-center gap-3">
               <Image
-                src="/logo_main.jpg"
+                src="/logo.webp"
                 alt={PRODUCT_NAME}
                 width={40}
                 height={40}
@@ -57,7 +57,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <div className="w-full max-w-md">
             <div className="lg:hidden flex items-center gap-3 mb-8">
               <Image
-                src="/logo_main.jpg"
+                src="/logo.webp"
                 alt={PRODUCT_NAME}
                 width={36}
                 height={36}

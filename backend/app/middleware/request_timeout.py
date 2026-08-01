@@ -29,9 +29,15 @@ class RequestTimeoutMiddleware(BaseHTTPMiddleware):
         if timeout is None:
             return await call_next(request)
 
+        task = asyncio.ensure_future(call_next(request))
         try:
-            return await asyncio.wait_for(call_next(request), timeout=timeout)
+            return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
         except asyncio.TimeoutError:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
             logger.warning(
                 "request timed out",
                 extra={
