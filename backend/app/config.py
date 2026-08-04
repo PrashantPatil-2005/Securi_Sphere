@@ -103,6 +103,8 @@ class Settings(BaseSettings):
     ai_provider: str = "local"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    huggingface_api_key: str = ""
+    huggingface_model: str = "mistralai/Mistral-7B-Instruct-v0.3"
     ueba_enabled: bool = True
     ueba_z_threshold: float = 2.5
     ueba_min_observed: int = 5

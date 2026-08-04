@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { isOnboardingSearchCompleted } from "@/lib/onboarding";
+import { track } from "@/lib/telemetry";
 
 export interface OnboardingProgress {
   hosts: number;
@@ -166,7 +167,7 @@ export function useOnboardingProgress() {
     const now = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).map((s) => s.id);
     for (const id of now) {
       if (!prev.includes(id)) {
-        import("@/lib/telemetry").then(({ track }) => track("onboarding_step_completed", { step_id: id }));
+        track("onboarding_step_completed", { step_id: id });
       }
     }
     sessionStorage.setItem(key, JSON.stringify(now));

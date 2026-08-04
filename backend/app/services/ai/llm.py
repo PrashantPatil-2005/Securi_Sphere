@@ -18,6 +18,8 @@ def resolve_provider() -> str:
         return "openai"
     if provider == "anthropic" and settings.anthropic_api_key:
         return "anthropic"
+    if provider == "huggingface" and settings.huggingface_api_key:
+        return "huggingface"
     return "local"
 
 
@@ -30,6 +32,8 @@ async def call_llm(system_prompt: str, user_prompt: str) -> str | None:
             return await _call_openai(system_prompt, user_prompt)
         if provider == "anthropic":
             return await _call_anthropic(system_prompt, user_prompt)
+        if provider == "huggingface":
+            return await _call_huggingface(system_prompt, user_prompt)
     except Exception as exc:
         logger.warning("LLM call failed, falling back to local: %s", exc)
     return None
@@ -72,3 +76,24 @@ async def _call_anthropic(system_prompt: str, user_prompt: str) -> str:
         )
         res.raise_for_status()
         return res.json()["content"][0]["text"].strip()
+
+
+async def _call_huggingface(system_prompt: str, user_prompt: str) -> str:
+    async with httpx.AsyncClient(timeout=outbound_timeout()) as client:
+        res = await client.post(
+            f"https://api-inference.huggingface.co/models/{settings.huggingface_model}",
+            headers={"Authorization": f"Bearer {settings.huggingface_api_key}"},
+            json={
+                "inputs": f"<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{user_prompt} [/INST]",
+                "parameters": {
+                    "max_new_tokens": 800,
+                    "temperature": 0.3,
+                    "return_full_text": False,
+                },
+            },
+        )
+        res.raise_for_status()
+        data = res.json()
+        if isinstance(data, list) and data:
+            return data[0].get("generated_text", "").strip()
+        return str(data).strip()
