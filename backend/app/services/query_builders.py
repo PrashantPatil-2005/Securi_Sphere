@@ -15,6 +15,10 @@ from app.utils.query import SEVERITY_ORDER, SortOrder, TimeRange, apply_time_ran
 from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _severity_case(column):
     from sqlalchemy import case
 
@@ -58,22 +62,22 @@ async def query_events(
     if event_type:
         clauses.append(Event.event_type == event_type)
     if username:
-        clauses.append(Event.metadata_["username"].astext.ilike(username if exact else f"%{username}%"))
+        clauses.append(Event.metadata_["username"].astext.ilike(username if exact else f"%{_escape_like(username)}%"))
     if source_ip:
         ip_clause = or_(
-            Event.metadata_["source_ip"].astext.ilike(source_ip if exact else f"%{source_ip}%"),
-            Event.metadata_["ip"].astext.ilike(source_ip if exact else f"%{source_ip}%"),
+            Event.metadata_["source_ip"].astext.ilike(source_ip if exact else f"%{_escape_like(source_ip)}%"),
+            Event.metadata_["ip"].astext.ilike(source_ip if exact else f"%{_escape_like(source_ip)}%"),
         )
         clauses.append(ip_clause)
     if service_name:
         clauses.append(
             or_(
-                Event.metadata_["service"].astext.ilike(f"%{service_name}%"),
-                Event.event_type.ilike(f"%{service_name}%"),
+                Event.metadata_["service"].astext.ilike(f"%{_escape_like(service_name)}%"),
+                Event.event_type.ilike(f"%{_escape_like(service_name)}%"),
             )
         )
     if status:
-        clauses.append(Event.metadata_["status"].astext.ilike(status if exact else f"%{status}%"))
+        clauses.append(Event.metadata_["status"].astext.ilike(status if exact else f"%{_escape_like(status)}%"))
     if mitre_technique_id:
         from app.services.mitre import event_technique_clause
 
@@ -88,7 +92,7 @@ async def query_events(
                 )
             )
         else:
-            pattern = f"%{q}%"
+            pattern = f"%{_escape_like(q)}%"
             clauses.append(
                 or_(
                     Event.description.ilike(pattern),
@@ -197,14 +201,14 @@ async def query_alerts(
     if assigned_to:
         clauses.append(Alert.assigned_to == assigned_to)
     if rule_name:
-        clauses.append(AlertRule.name.ilike(f"%{rule_name}%"))
+        clauses.append(AlertRule.name.ilike(f"%{_escape_like(rule_name)}%"))
     if mitre_technique_id:
         clauses.append(Alert.mitre_technique_id == mitre_technique_id)
     if q:
         if exact:
             clauses.append(or_(Alert.title == q, Alert.description == q))
         else:
-            pattern = f"%{q}%"
+            pattern = f"%{_escape_like(q)}%"
             clauses.append(or_(Alert.title.ilike(pattern), Alert.description.ilike(pattern)))
 
     for c in clauses:
@@ -258,14 +262,14 @@ async def query_hosts(
 
     if hostname:
         clauses.append(
-            or_(Host.name.ilike(f"%{hostname}%"), Host.hostname.ilike(f"%{hostname}%"))
+            or_(Host.name.ilike(f"%{_escape_like(hostname)}%"), Host.hostname.ilike(f"%{_escape_like(hostname)}%"))
             if not exact
             else or_(Host.name == hostname, Host.hostname == hostname)
         )
     if status:
         clauses.append(Host.status == status)
     if os_info:
-        clauses.append(Host.os_info.ilike(f"%{os_info}%"))
+        clauses.append(Host.os_info.ilike(f"%{_escape_like(os_info)}%"))
     if min_risk is not None:
         clauses.append(HostThreatScore.score >= min_risk)
     if max_risk is not None:
@@ -275,7 +279,7 @@ async def query_hosts(
     if last_seen_before:
         clauses.append(Host.last_seen <= last_seen_before)
     if q:
-        pattern = q if exact else f"%{q}%"
+        pattern = q if exact else f"%{_escape_like(q)}%"
         op = Host.name.__eq__ if exact else Host.name.ilike
         clauses.append(
             or_(

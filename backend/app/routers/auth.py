@@ -78,10 +78,10 @@ DEV_USERS = {
     "analyst@test.local": "analyst",
     "viewer@test.local": "viewer",
 }
-DEV_USER_PASSWORD = "testpass123"
+DEV_USER_PASSWORD = settings.dev_user_password or "testpass123"
 
 DEMO_USER_EMAIL = "demo@securi.local"
-DEMO_USER_PASSWORD = "Demo1234!"
+DEMO_USER_PASSWORD = settings.demo_user_password or "Demo1234!"
 
 
 async def seed_roles(db: AsyncSession) -> None:
@@ -286,6 +286,7 @@ async def mfa_setup(
     secret = generate_totp_secret()
     user.mfa_pending_secret = secret
     await db.flush()
+    await log_audit(db, "mfa_setup", user_id=user.id, ip_address=None)
     return MfaSetupResponse(secret=secret, otpauth_url=totp_provisioning_uri(secret, user.email))
 
 
@@ -491,6 +492,7 @@ async def update_me(
     if body.full_name is not None:
         user.full_name = body.full_name.strip() or None
     await db.flush()
+    await log_audit(db, "profile_update", user_id=user.id)
     result = await db.execute(
         select(User).options(selectinload(User.role)).where(User.id == user.id)
     )

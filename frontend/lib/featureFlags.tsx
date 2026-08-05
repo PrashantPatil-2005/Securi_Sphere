@@ -21,13 +21,13 @@ export interface PublicSettingsWithUx {
 }
 
 const DEFAULT_UX_FLAGS: UxFeatureFlags = {
-  dynamic_ux_enabled: true,
-  ux_activation_coach_enabled: true,
-  ux_live_simulation_enabled: true,
-  ux_enrollment_handshake_enabled: true,
-  ux_guided_triage_enabled: true,
-  ux_dashboard_vitality_enabled: true,
-  ux_admin_ops_console_enabled: true,
+  dynamic_ux_enabled: false,
+  ux_activation_coach_enabled: false,
+  ux_live_simulation_enabled: false,
+  ux_enrollment_handshake_enabled: false,
+  ux_guided_triage_enabled: false,
+  ux_dashboard_vitality_enabled: false,
+  ux_admin_ops_console_enabled: false,
 };
 
 const FeatureFlagsContext = createContext<UxFeatureFlags>(DEFAULT_UX_FLAGS);

@@ -10,7 +10,7 @@ import { buildQuery } from "@/lib/buildQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import {
   AlertResultRow,
   EventResultRow,

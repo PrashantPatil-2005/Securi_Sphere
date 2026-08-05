@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Server, Activity, Shield, LayoutGrid } from "lucide-react";
 import { api } from "@/lib/api";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
 import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { DashboardCustomizer } from "@/components/dashboard/DashboardCustomizer";

@@ -4,7 +4,27 @@ import io
 import json
 from typing import Any
 
+from fastapi import Query
 from fastapi.responses import Response
+
+
+def respond_export(
+    rows: list[dict[str, Any]],
+    format: str,
+    *,
+    filename_base: str,
+    pdf_title: str,
+) -> Response:
+    """Unified export dispatcher — call this instead of duplicating the if/elif/else."""
+    if format == "json":
+        return export_json(rows, f"{filename_base}.json")
+    if format == "pdf":
+        return export_pdf(rows, pdf_title, f"{filename_base}.pdf")
+    return export_csv(rows, f"{filename_base}.csv")
+
+
+def ExportFormat() -> str:  # noqa: N802 — dependency factory, PascalCase by convention
+    return Query("csv", pattern="^(csv|json|pdf)$")
 
 
 def export_csv(rows: list[dict[str, Any]], filename: str) -> Response:

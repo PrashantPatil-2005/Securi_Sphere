@@ -2,7 +2,6 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,35 +10,11 @@ from app.dependencies import get_current_user
 from app.models.event import Event
 from app.models.timeline import AttackTimeline
 from app.models.user import User
+from app.schemas.timeline import TimelineResponse, TimelineEventResponse
 from app.services.timeline import get_timelines
 from app.utils.query import ListParams, apply_time_range, resolve_time_range
 
 router = APIRouter(prefix="/timelines", tags=["timelines"])
-
-
-class TimelineResponse(BaseModel):
-    id: UUID
-    host_id: UUID
-    title: str
-    description: str | None
-    started_at: datetime
-    ended_at: datetime
-    event_ids: list
-    mitre_techniques: list
-    severity: str
-    confidence: float
-    status: str
-    model_config = {"from_attributes": True}
-
-
-class EventResponse(BaseModel):
-    id: UUID
-    event_type: str
-    severity: str
-    description: str | None
-    mitre_technique_id: str | None
-    timestamp: datetime
-    model_config = {"from_attributes": True}
 
 
 @router.get("", response_model=list[TimelineResponse])
@@ -63,12 +38,19 @@ async def list_timelines(
     return list(result.scalars().all())
 
 
-@router.get("/{timeline_id}/events", response_model=list[EventResponse])
+@router.get("/{timeline_id}/events", response_model=list[TimelineEventResponse])
 async def timeline_events(timeline_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     result = await db.execute(select(AttackTimeline).where(AttackTimeline.id == timeline_id))
     tl = result.scalar_one_or_none()
     if not tl or not tl.event_ids:
         return []
-    ids = [UUID(i) for i in tl.event_ids]
-    events = (await db.execute(select(Event).where(Event.id.in_(ids)).order_by(Event.timestamp))).scalars().all()
+    valid_ids = []
+    for eid in tl.event_ids:
+        try:
+            valid_ids.append(UUID(eid))
+        except (ValueError, TypeError):
+            continue
+    if not valid_ids:
+        return []
+    events = (await db.execute(select(Event).where(Event.id.in_(valid_ids)).order_by(Event.timestamp))).scalars().all()
     return list(events)

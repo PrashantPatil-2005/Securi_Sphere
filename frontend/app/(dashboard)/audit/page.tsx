@@ -5,7 +5,7 @@ import { ScrollText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useDebounce } from "@/lib/hooks/useDebounce";
-import { VirtualList } from "@/components/VirtualList";
+import { VirtualList } from "@/components/virtual-table/VirtualList";
 import { rowKeyById } from "@/lib/rowKey";
 import { PageHeader } from "@/components/ui/Panel";
 import { FilterBar } from "@/components/ui/FilterBar";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Panel";
-import ExportMenu from "@/components/ExportMenu";
+import ExportMenu from "@/components/export/ExportMenu";
 import { AuditIntegrityPanel } from "@/components/AuditIntegrityPanel";
 
 interface AuditEntry {

@@ -1,43 +1,17 @@
 """Admin API for PostgreSQL backups."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.dependencies import client_ip, require_roles
 from app.models.user import User
+from app.schemas.backup import BackupRecordResponse, BackupConfigResponse, BackupListResponse
 from app.services.audit import log_audit
 from app.services.backup import BackupRecord, list_backups, run_postgres_backup
 
 router = APIRouter(prefix="/backups", tags=["backups"])
-
-
-class BackupRecordResponse(BaseModel):
-    filename: str
-    path: str
-    size_bytes: int
-    sha256: str
-    created_at: str
-    trigger: str
-    duration_seconds: float
-    database: str
-    status: str
-    error: str | None = None
-
-
-class BackupConfigResponse(BaseModel):
-    enabled: bool
-    directory: str
-    retention_days: int
-    schedule_hour: int
-    pg_dump_available: bool
-
-
-class BackupListResponse(BaseModel):
-    items: list[BackupRecordResponse]
-    config: BackupConfigResponse
 
 
 def _to_response(record: BackupRecord) -> BackupRecordResponse:

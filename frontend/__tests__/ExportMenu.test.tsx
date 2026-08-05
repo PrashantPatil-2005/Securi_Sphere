@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import ExportMenu from "@/components/ExportMenu";
+import ExportMenu from "@/components/export/ExportMenu";
 
 // Mock dependencies
 vi.mock("@/lib/api", () => ({

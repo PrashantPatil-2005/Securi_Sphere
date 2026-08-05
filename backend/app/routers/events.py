@@ -9,7 +9,7 @@ from app.database import get_db, get_db_read
 from app.dependencies import get_current_user, require_roles
 from app.models.user import User
 from app.schemas.event import EventListResponse, EventResponse
-from app.services.export_service import export_csv, export_json, export_pdf
+from app.services.export_service import respond_export
 from app.services.query_builders import query_events
 from app.utils.query import ListParams, SortOrder, resolve_time_range
 
@@ -99,8 +99,4 @@ async def export_events(
         }
         for e in items
     ]
-    if format == "json":
-        return export_json(rows, "events.json")
-    if format == "pdf":
-        return export_pdf(rows, f"{PRODUCT_NAME} Events Export", "events.pdf")
-    return export_csv(rows, "events.csv")
+    return respond_export(rows, format, filename_base="events", pdf_title=f"{PRODUCT_NAME} Events Export")

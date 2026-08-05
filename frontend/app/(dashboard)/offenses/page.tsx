@@ -9,7 +9,7 @@ import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import { useDeepLinkedSelection, workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { OffenseDetailPanel } from "@/components/offenses/OffenseDetailPanel";
 import { TableSkeleton } from "@/components/ui/Skeleton";

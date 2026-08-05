@@ -3,7 +3,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +10,7 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.correlation import CorrelationRule
 from app.models.user import User
+from app.schemas.correlation_rule import CorrelationRuleResponse, CorrelationRuleCreate, CorrelationRuleUpdate, CorrelationRuleValidateRequest, CorrelationRulePreviewRequest
 from app.services.audit import log_audit
 from app.services.correlation.validation import (
     RuleDraft,
@@ -25,56 +25,6 @@ router = APIRouter(prefix="/correlation-rules", tags=["correlation-rules"])
 
 VALID_RULE_TYPES = frozenset({"sequence", "co_occurrence", "cross_host"})
 VALID_SEVERITIES = frozenset({"low", "medium", "high", "critical"})
-
-
-class CorrelationRuleResponse(BaseModel):
-    id: str
-    name: str
-    description: str | None
-    event_sequence: list
-    window_minutes: int
-    min_occurrences: dict
-    severity: str
-    confidence_base: float
-    enabled: bool
-    is_system: bool
-    rule_type: str
-
-
-class CorrelationRuleCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=255)
-    description: str | None = None
-    rule_type: str = "sequence"
-    event_sequence: list[str] = Field(min_length=1)
-    window_minutes: int = Field(default=20, ge=1, le=1440)
-    min_occurrences: dict = Field(default_factory=dict)
-    severity: str = "high"
-    confidence_base: float = Field(default=0.75, ge=0.0, le=1.0)
-
-
-class CorrelationRuleUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = None
-    rule_type: str | None = None
-    event_sequence: list[str] | None = Field(default=None, min_length=1)
-    window_minutes: int | None = Field(default=None, ge=1, le=1440)
-    min_occurrences: dict | None = None
-    severity: str | None = None
-    confidence_base: float | None = Field(default=None, ge=0.0, le=1.0)
-    enabled: bool | None = None
-
-
-class CorrelationRuleValidateRequest(BaseModel):
-    rule_type: str = "sequence"
-    event_sequence: list[str] = Field(min_length=1)
-    window_minutes: int = Field(default=20, ge=1, le=1440)
-    min_occurrences: dict = Field(default_factory=dict)
-    severity: str = "high"
-    confidence_base: float = Field(default=0.75, ge=0.0, le=1.0)
-
-
-class CorrelationRulePreviewRequest(CorrelationRuleValidateRequest):
-    host_id: UUID | None = None
 
 
 def _rule_type(rule: CorrelationRule) -> str:

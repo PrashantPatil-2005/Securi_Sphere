@@ -8,7 +8,7 @@ import {
   useNotificationMutations,
   notificationHref,
 } from "@/lib/hooks/useNotifications";
-import PaginationBar from "@/components/PaginationBar";
+import PaginationBar from "@/components/pagination/PaginationBar";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { QueryError } from "@/components/ui/QueryError";

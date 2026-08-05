@@ -1,4 +1,5 @@
 """SIEM analytics queries — all respect time range and host filters."""
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -13,7 +14,9 @@ from app.models.metric import Metric
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline
 from app.utils.query import TimeRange, apply_time_range
-from app.utils.simulation_filter import real_events_only, should_exclude_simulated
+from app.utils.simulation_filter import real_alerts_only, real_events_only, should_exclude_simulated
+
+logger = logging.getLogger(__name__)
 
 AUTH_TYPES = {"ssh_login_failure", "ssh_login_success", "root_login"}
 SERVICE_TYPES = {"service_failure", "service_start", "service_stop"}
@@ -42,6 +45,15 @@ def _event_clauses(tr: TimeRange, host_id: UUID | None = None, include_simulated
         clauses.append(Event.host_id == host_id)
     if should_exclude_simulated(include_simulated):
         clauses.append(real_events_only())
+    return clauses
+
+
+def _alert_clauses(tr: TimeRange, host_id: UUID | None = None, include_simulated: bool | None = None) -> list:
+    clauses = list(apply_time_range(Alert.created_at, tr))
+    if host_id:
+        clauses.append(Alert.host_id == host_id)
+    if should_exclude_simulated(include_simulated):
+        clauses.append(real_alerts_only())
     return clauses
 
 
@@ -327,17 +339,21 @@ async def host_health_monitoring(db: AsyncSession) -> dict:
 
 async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     event_clauses = _event_clauses(tr)
-    alert_clauses = apply_time_range(Alert.created_at, tr)
+    alert_clauses = _alert_clauses(tr)
 
     total_hosts = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
     online_hosts = (await db.execute(select(func.count()).select_from(Host).where(Host.status == "online"))).scalar_one()
     active_alerts = (
-        await db.execute(select(func.count()).select_from(Alert).where(Alert.status.in_(["open", "investigating"])))
+        await db.execute(
+            select(func.count()).select_from(Alert).where(
+                Alert.status.in_(["open", "investigating"]), *alert_clauses
+            )
+        )
     ).scalar_one()
     critical_alerts = (
         await db.execute(
             select(func.count()).select_from(Alert).where(
-                Alert.status.in_(["open", "investigating"]), Alert.severity == "critical"
+                Alert.status.in_(["open", "investigating"]), Alert.severity == "critical", *alert_clauses
             )
         )
     ).scalar_one()

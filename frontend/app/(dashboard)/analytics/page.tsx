@@ -8,7 +8,7 @@ import { buildQuery } from "@/lib/buildQuery";
 import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { useTimeRange } from "@/lib/timeRange";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { FilterBar } from "@/components/ui/FilterBar";
 import { Select } from "@/components/ui/Select";
 import { Input } from "@/components/ui/Input";

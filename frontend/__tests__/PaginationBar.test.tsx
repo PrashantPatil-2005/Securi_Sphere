@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import PaginationBar from "@/components/PaginationBar";
+import PaginationBar from "@/components/pagination/PaginationBar";
 
 describe("PaginationBar", () => {
   it("renders nothing when total is 0", () => {

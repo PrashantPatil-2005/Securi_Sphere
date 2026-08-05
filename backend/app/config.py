@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     ueba_create_alerts: bool = True
     ueba_scan_interval_minutes: int = 60
     demo_mode: bool = False
+    dev_user_password: str = ""
+    demo_user_password: str = ""
     telemetry_enabled: bool = True
     dynamic_ux_enabled: bool = True
     ux_activation_coach_enabled: bool = True

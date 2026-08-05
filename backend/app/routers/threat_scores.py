@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,16 +7,9 @@ from app.dependencies import get_current_user
 from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
+from app.schemas.threat_score import ScoreResponse
 
 router = APIRouter(prefix="/threat-scores", tags=["threat-scores"])
-
-
-class ScoreResponse(BaseModel):
-    host_id: str
-    host_name: str
-    score: int
-    health_score: int
-    factors: dict
 
 
 @router.get("")

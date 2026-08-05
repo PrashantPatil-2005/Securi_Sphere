@@ -14,6 +14,7 @@ class Alert(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     host_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("hosts.id"), nullable=False, index=True)
     rule_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("alert_rules.id"))
+    source: Mapped[str | None] = mapped_column(String(50))
     mitre_technique_id: Mapped[str | None] = mapped_column(String(20))
     mitre_tactic: Mapped[str | None] = mapped_column(String(50))
     confidence: Mapped[float | None] = mapped_column(Float)

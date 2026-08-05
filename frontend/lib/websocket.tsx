@@ -23,6 +23,9 @@ class WebSocketStore {
   private connected = false;
   private statusListeners = new Set<() => void>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 50;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   subscribeStatus = (cb: () => void) => {
     this.statusListeners.add(cb);
@@ -59,13 +62,18 @@ class WebSocketStore {
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: "auth", token }));
         this.connected = true;
+        this.reconnectAttempts = 0;
         this.notifyStatus();
+        this.startPing();
       };
       this.ws = ws;
       ws.onclose = () => {
         this.connected = false;
+        this.stopPing();
         this.notifyStatus();
-        this.reconnectTimer = setTimeout(() => this.connect(), 3000);
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+        this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, this.maxReconnectAttempts);
+        this.reconnectTimer = setTimeout(() => this.connect(), delay);
       };
       ws.onmessage = (ev) => {
         try {
@@ -79,10 +87,28 @@ class WebSocketStore {
 
   disconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.stopPing();
     this.ws?.close();
     this.ws = null;
     this.connected = false;
+    this.reconnectAttempts = 0;
     this.notifyStatus();
+  }
+
+  private startPing() {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: "ping" }));
+      }
+    }, 30_000);
+  }
+
+  private stopPing() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
   }
 }
 

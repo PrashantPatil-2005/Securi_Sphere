@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { MitreTechniqueDrilldown } from "@/components/mitre/MitreTechniqueDrilldown";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageHeader, EmptyState } from "@/components/ui/Panel";

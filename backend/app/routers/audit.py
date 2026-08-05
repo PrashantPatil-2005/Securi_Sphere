@@ -15,7 +15,7 @@ from app.models.user import User
 from app.schemas.validators import InetStr
 from app.services.audit import log_audit
 from app.services.audit_chain import verify_audit_chain
-from app.services.export_service import export_csv, export_json, export_pdf
+from app.services.export_service import respond_export
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -124,11 +124,7 @@ async def export_audit_logs(
     )
     await db.commit()
 
-    if format == "json":
-        return export_json(rows, "audit_logs.json")
-    if format == "pdf":
-        return export_pdf(rows, f"{PRODUCT_NAME} Audit Log Export", "audit_logs.pdf")
-    return export_csv(rows, "audit_logs.csv")
+    return respond_export(rows, format, filename_base="audit_logs", pdf_title=f"{PRODUCT_NAME} Audit Log Export")
 
 
 @router.get("/integrity", response_model=AuditIntegrityResponse)

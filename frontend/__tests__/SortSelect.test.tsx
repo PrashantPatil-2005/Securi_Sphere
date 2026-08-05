@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import SortSelect from "@/components/SortSelect";
+import SortSelect from "@/components/pagination/SortSelect";
 
 describe("SortSelect", () => {
   it("renders all sort options", () => {

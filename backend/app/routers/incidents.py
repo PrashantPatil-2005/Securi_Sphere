@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,41 +10,13 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.incident import Incident, IncidentAlert, IncidentNote
 from app.models.user import User
+from app.schemas.incident import IncidentCreate, NoteCreate, IncidentResponse, IncidentDetailResponse
 from app.services.audit import log_audit
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
 VALID_INCIDENT_STATUSES = ("open", "investigating", "resolved", "closed")
 VALID_SEVERITIES = ("low", "medium", "high", "critical")
-
-
-class IncidentCreate(BaseModel):
-    title: str
-    description: str | None = None
-    severity: str = "medium"
-    host_id: UUID | None = None
-
-
-class NoteCreate(BaseModel):
-    content: str
-
-
-class IncidentResponse(BaseModel):
-    id: UUID
-    title: str
-    description: str | None
-    severity: str
-    status: str
-    host_id: UUID | None
-    assigned_to: UUID | None
-    created_at: datetime
-    resolved_at: datetime | None
-    model_config = {"from_attributes": True}
-
-
-class IncidentDetailResponse(IncidentResponse):
-    notes: list[dict] = []
-    alert_ids: list[str] = []
 
 
 @router.get("/{incident_id}", response_model=IncidentDetailResponse)
@@ -79,11 +50,18 @@ async def get_incident(
 
 
 @router.get("", response_model=list[IncidentResponse])
-async def list_incidents(status: str | None = None, db: AsyncSession = Depends(get_db), user=Depends(get_current_user)):
+async def list_incidents(
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
     q = select(Incident).order_by(Incident.created_at.desc())
     if status:
         q = q.where(Incident.status == status)
-    return list((await db.execute(q)).scalars().all())
+    result = await db.execute(q.offset((page - 1) * page_size).limit(page_size))
+    return list(result.scalars().all())
 
 
 @router.post("", response_model=IncidentResponse)
@@ -125,6 +103,7 @@ async def add_note(incident_id: UUID, body: NoteCreate, db: AsyncSession = Depen
     note = IncidentNote(incident_id=incident_id, user_id=user.id, content=body.content.strip())
     db.add(note)
     await db.flush()
+    await log_audit(db, "incident_note_add", user_id=user.id, resource_type="incident", resource_id=incident_id)
     return {"message": "note added", "id": str(note.id)}
 
 
@@ -142,4 +121,5 @@ async def link_alert(incident_id: UUID, alert_id: UUID, db: AsyncSession = Depen
         raise HTTPException(status_code=409, detail="Alert already linked to this incident")
     db.add(IncidentAlert(incident_id=incident_id, alert_id=alert_id))
     await db.flush()
+    await log_audit(db, "incident_alert_link", user_id=user.id, resource_type="incident", resource_id=incident_id)
     return {"message": "linked"}

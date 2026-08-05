@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
-import { ThemeScript } from "@/components/ThemeScript";
+import { ThemeScript } from "@/lib/theme/ThemeScript";
 import { inter } from "@/lib/fonts";
 
 import { PRODUCT_NAME } from "@/lib/brand";

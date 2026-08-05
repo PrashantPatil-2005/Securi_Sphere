@@ -80,28 +80,41 @@ class ConnectionManager:
     async def _redis_listener(self) -> None:
         from app.websocket.redis_pubsub import WS_CHANNEL, get_redis
 
-        redis = await get_redis()
-        if not redis:
-            return
-        pubsub = redis.pubsub()
-        await pubsub.subscribe(WS_CHANNEL)
-        try:
-            async for raw in pubsub.listen():
-                if raw.get("type") != "message":
+        backoff = 1
+        max_backoff = 60
+        while True:
+            try:
+                redis = await get_redis()
+                if not redis:
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, max_backoff)
                     continue
+                pubsub = redis.pubsub()
+                await pubsub.subscribe(WS_CHANNEL)
+                backoff = 1
+                logger.info("WebSocket Redis pub/sub listener connected")
                 try:
-                    message = json.loads(raw["data"])
-                except (json.JSONDecodeError, TypeError):
-                    logger.warning("invalid WebSocket pub/sub payload")
-                    continue
-                await self._broadcast_local(message)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            logger.exception("WebSocket Redis listener failed")
-        finally:
-            await pubsub.unsubscribe(WS_CHANNEL)
-            await pubsub.close()
+                    async for raw in pubsub.listen():
+                        if raw.get("type") != "message":
+                            continue
+                        try:
+                            message = json.loads(raw["data"])
+                        except (json.JSONDecodeError, TypeError):
+                            logger.warning("invalid WebSocket pub/sub payload")
+                            continue
+                        await self._broadcast_local(message)
+                finally:
+                    try:
+                        await pubsub.unsubscribe(WS_CHANNEL)
+                        await pubsub.close()
+                    except Exception:
+                        pass
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("WebSocket Redis listener failed, reconnecting in %ds", backoff)
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
 
 
 ws_manager = ConnectionManager()

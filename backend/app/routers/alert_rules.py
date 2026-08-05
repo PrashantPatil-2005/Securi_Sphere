@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,37 +8,11 @@ from app.database import get_db
 from app.dependencies import require_roles
 from app.models.alert_rule import AlertRule
 from app.models.user import User
+from app.schemas.alert_rule import RuleCreate, RuleUpdate, RuleResponse
+from app.services.audit import log_audit
 from app.services.detection import SUPPORTED_RULE_TYPES
 
 router = APIRouter(prefix="/alert-rules", tags=["alert-rules"])
-
-
-class RuleCreate(BaseModel):
-    name: str
-    rule_type: str
-    threshold: float | None = None
-    window_minutes: int | None = 5
-    severity: str = "medium"
-
-
-class RuleUpdate(BaseModel):
-    threshold: float | None = None
-    window_minutes: int | None = None
-    severity: str | None = None
-    enabled: bool | None = None
-
-
-class RuleResponse(BaseModel):
-    id: UUID
-    name: str
-    rule_type: str
-    threshold: float | None
-    window_minutes: int | None
-    severity: str
-    enabled: bool
-    false_positive_count: int = 0
-    true_positive_count: int = 0
-    model_config = {"from_attributes": True}
 
 
 @router.get("/meta")
@@ -62,6 +35,7 @@ async def create_rule(body: RuleCreate, db: AsyncSession = Depends(get_db), user
     rule = AlertRule(**body.model_dump())
     db.add(rule)
     await db.flush()
+    await log_audit(db, "alert_rule_create", user_id=user.id, resource_type="alert_rule", resource_id=rule.id)
     return rule
 
 
@@ -73,6 +47,7 @@ async def update_rule(rule_id: UUID, body: RuleUpdate, db: AsyncSession = Depend
         raise HTTPException(status_code=404, detail="Rule not found")
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(rule, k, v)
+    await log_audit(db, "alert_rule_update", user_id=user.id, resource_type="alert_rule", resource_id=rule_id)
     return rule
 
 
@@ -82,5 +57,6 @@ async def delete_rule(rule_id: UUID, db: AsyncSession = Depends(get_db), user: U
     rule = result.scalar_one_or_none()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
+    await log_audit(db, "alert_rule_delete", user_id=user.id, resource_type="alert_rule", resource_id=rule_id)
     await db.delete(rule)
     return {"message": "deleted"}

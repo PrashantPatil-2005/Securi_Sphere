@@ -12,10 +12,10 @@ from app.models.notification import NotificationSettings
 logger = logging.getLogger(__name__)
 
 
-async def send_email(to: str, subject: str, body: str) -> None:
+async def send_email(to: str, subject: str, body: str) -> bool:
     if not settings.smtp_user or not settings.smtp_password:
         logger.info("Email (dev mode): to=%s subject=%s", to, subject)
-        return
+        return True
     try:
         import aiosmtplib
         from email.mime.text import MIMEText
@@ -32,30 +32,38 @@ async def send_email(to: str, subject: str, body: str) -> None:
             password=settings.smtp_password,
             start_tls=True,
         )
+        return True
     except Exception as e:
         logger.error("Failed to send email: %s", e)
+        return False
 
 
-async def send_telegram(chat_id: str, message: str) -> None:
+async def send_telegram(chat_id: str, message: str) -> bool:
     if not settings.telegram_bot_token:
         logger.info("Telegram (dev mode): chat=%s msg=%s", chat_id, message)
-        return
+        return True
     url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
     try:
         async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
-            await client.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
+            resp = await client.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
+            resp.raise_for_status()
+        return True
     except Exception as e:
         logger.error("Failed to send Telegram: %s", e)
+        return False
 
 
-async def send_slack(webhook_url: str, message: str) -> None:
+async def send_slack(webhook_url: str, message: str) -> bool:
     if not webhook_url:
-        return
+        return False
     try:
         async with httpx.AsyncClient(timeout=outbound_timeout(short=True)) as client:
-            await client.post(webhook_url, json={"text": message})
+            resp = await client.post(webhook_url, json={"text": message})
+            resp.raise_for_status()
+        return True
     except Exception as e:
         logger.error("Failed to send Slack notification: %s", e)
+        return False
 
 
 async def notify_alert(db: AsyncSession, alert: Alert) -> None:

@@ -2,7 +2,6 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +10,7 @@ from app.dependencies import get_current_user
 from app.models.notification import NotificationSettings
 from app.models.notification_rule import NOTIFICATION_TRIGGERS, SEVERITY_LEVELS, NotificationRule
 from app.models.user import User
+from app.schemas.notification import NotificationSettingsResponse, NotificationSettingsUpdate, DeliverySettingsTestRequest, NotificationHistoryItem, NotificationHistoryResponse, UnreadCountResponse, MarkAllReadResponse
 from app.services.in_app_notifications import (
     list_notification_history,
     mark_all_notifications_read,
@@ -30,19 +30,6 @@ from app.schemas.notification_rule import (
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
-class NotificationSettingsResponse(BaseModel):
-    email_enabled: bool
-    email_address: str | None
-    telegram_enabled: bool
-    telegram_chat_id: str | None
-    slack_enabled: bool
-    slack_webhook_url: str | None
-    server_email_configured: bool = False
-    server_telegram_configured: bool = False
-
-    model_config = {"from_attributes": True}
-
-
 def _settings_response(row: NotificationSettings) -> NotificationSettingsResponse:
     return NotificationSettingsResponse(
         email_enabled=row.email_enabled,
@@ -54,53 +41,6 @@ def _settings_response(row: NotificationSettings) -> NotificationSettingsRespons
         server_email_configured=bool(settings.smtp_user and settings.smtp_password),
         server_telegram_configured=bool(settings.telegram_bot_token),
     )
-
-
-class NotificationSettingsUpdate(BaseModel):
-    email_enabled: bool | None = None
-    email_address: str | None = None
-    telegram_enabled: bool | None = None
-    telegram_chat_id: str | None = None
-    slack_enabled: bool | None = None
-    slack_webhook_url: str | None = None
-
-
-class DeliverySettingsTestRequest(BaseModel):
-    channels: NotificationChannels = Field(default_factory=lambda: NotificationChannels(email=True, slack=True, telegram=True))
-    email_enabled: bool | None = None
-    email_address: str | None = None
-    telegram_enabled: bool | None = None
-    telegram_chat_id: str | None = None
-    slack_enabled: bool | None = None
-    slack_webhook_url: str | None = None
-
-
-class NotificationHistoryItem(BaseModel):
-    id: UUID
-    kind: str
-    title: str
-    body: str | None
-    severity: str | None
-    resource_type: str | None
-    resource_id: UUID | None
-    created_at: datetime
-    read: bool
-
-
-class NotificationHistoryResponse(BaseModel):
-    items: list[NotificationHistoryItem]
-    total: int
-    unread_count: int
-    page: int
-    page_size: int
-
-
-class UnreadCountResponse(BaseModel):
-    unread_count: int
-
-
-class MarkAllReadResponse(BaseModel):
-    marked: int
 
 
 async def _get_or_create_settings(db: AsyncSession, user_id: UUID) -> NotificationSettings:
@@ -133,6 +73,8 @@ async def update_notification_settings(
     for key, value in body.model_dump(exclude_unset=True).items():
         setattr(settings_row, key, value)
     await db.flush()
+    from app.services.audit import log_audit
+    await log_audit(db, "notification_settings_update", user_id=user.id, resource_type="notification_settings")
     return _settings_response(settings_row)
 
 
@@ -265,6 +207,8 @@ async def create_notification_rule(
     )
     db.add(rule)
     await db.flush()
+    from app.services.audit import log_audit
+    await log_audit(db, "notification_rule_create", user_id=user.id, resource_type="notification_rule", resource_id=rule.id)
     return _rule_response(rule)
 
 
@@ -297,6 +241,8 @@ async def update_notification_rule(
     if body.enabled is not None:
         rule.enabled = body.enabled
     await db.flush()
+    from app.services.audit import log_audit
+    await log_audit(db, "notification_rule_update", user_id=user.id, resource_type="notification_rule", resource_id=rule_id)
     return _rule_response(rule)
 
 
@@ -313,6 +259,8 @@ async def delete_notification_rule(
     ).scalar_one_or_none()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
+    from app.services.audit import log_audit
+    await log_audit(db, "notification_rule_delete", user_id=user.id, resource_type="notification_rule", resource_id=rule_id)
     await db.delete(rule)
 
 

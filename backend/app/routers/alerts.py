@@ -34,7 +34,7 @@ from app.schemas.event import EventResponse
 from app.services.ai.summaries import generate_alert_summary
 from app.services.audit import log_audit
 from app.services.detection import update_host_statuses
-from app.services.export_service import export_csv, export_json, export_pdf
+from app.services.export_service import respond_export
 from app.services.feedback_loop import (
     VALID_FEEDBACK_LABELS,
     apply_feedback_to_alert,
@@ -114,11 +114,7 @@ async def export_alerts(
         }
         for a in items
     ]
-    if format == "json":
-        return export_json(rows, "alerts.json")
-    if format == "pdf":
-        return export_pdf(rows, f"{PRODUCT_NAME} Alerts Export", "alerts.pdf")
-    return export_csv(rows, "alerts.csv")
+    return respond_export(rows, format, filename_base="alerts", pdf_title=f"{PRODUCT_NAME} Alerts Export")
 
 
 @router.patch("/bulk", response_model=AlertBulkUpdateResponse)

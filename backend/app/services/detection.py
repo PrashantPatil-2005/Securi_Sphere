@@ -255,6 +255,7 @@ async def create_alert(
     confidence: float | None = None,
     mitre_technique_id: str | None = None,
     mitre_tactic: str | None = None,
+    source: str | None = None,
 ) -> Alert | None:
     dedup_filters = [
         Alert.host_id == host_id,
@@ -271,6 +272,7 @@ async def create_alert(
     alert = Alert(
         host_id=host_id,
         rule_id=rule_id,
+        source=source,
         severity=severity,
         title=title,
         description=description,
@@ -337,7 +339,7 @@ async def seed_alert_rules(db: AsyncSession) -> None:
         db.add(AlertRule(**rule))
 
 
-async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
+async def run_detection_for_host(db: AsyncSession, host: Host, source: str | None = None) -> None:
     """Run all enabled detection rules against a host.
 
     This is the engine loop. It iterates over enabled rules, looks up
@@ -376,6 +378,7 @@ async def run_detection_for_host(db: AsyncSession, host: Host) -> None:
             confidence=result.get("confidence"),
             mitre_technique_id=result.get("mitre_technique_id"),
             mitre_tactic=result.get("mitre_tactic"),
+            source=source,
         )
 
 

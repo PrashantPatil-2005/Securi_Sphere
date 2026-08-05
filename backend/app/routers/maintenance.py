@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,24 +12,10 @@ from app.dependencies import get_current_user, require_roles
 from app.models.host import Host
 from app.models.maintenance import MaintenanceWindow
 from app.models.user import User
+from app.schemas.maintenance import MaintenanceCreate, MaintenanceResponse
+from app.services.audit import log_audit
 
 router = APIRouter(prefix="/maintenance-windows", tags=["maintenance"])
-
-
-class MaintenanceCreate(BaseModel):
-    host_id: UUID
-    reason: str | None = None
-    ends_at: datetime
-
-
-class MaintenanceResponse(BaseModel):
-    id: str
-    host_id: str
-    host_name: str
-    reason: str | None
-    starts_at: datetime
-    ends_at: datetime
-    active: bool
 
 
 @router.get("", response_model=list[MaintenanceResponse])
@@ -78,6 +63,7 @@ async def create_window(
     db.add(row)
     await db.commit()
     await db.refresh(row)
+    await log_audit(db, "maintenance_window_create", user_id=user.id, resource_type="maintenance_window", resource_id=row.id)
     return MaintenanceResponse(
         id=str(row.id),
         host_id=str(row.host_id),
@@ -98,6 +84,7 @@ async def delete_window(
     row = await db.get(MaintenanceWindow, window_id)
     if not row:
         raise HTTPException(404, "Window not found")
+    await log_audit(db, "maintenance_window_delete", user_id=user.id, resource_type="maintenance_window", resource_id=window_id)
     await db.delete(row)
     await db.commit()
     return {"ok": True}

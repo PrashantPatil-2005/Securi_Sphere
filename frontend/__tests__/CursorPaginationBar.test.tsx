@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import CursorPaginationBar from "@/components/CursorPaginationBar";
+import CursorPaginationBar from "@/components/pagination/CursorPaginationBar";
 
 describe("CursorPaginationBar", () => {
   it("renders nothing when total is 0", () => {

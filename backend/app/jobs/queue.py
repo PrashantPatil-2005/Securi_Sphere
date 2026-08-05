@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 JobHandler = Callable[..., Awaitable[Any]]
 
+DEFAULT_JOB_TIMEOUT = 120  # seconds
+
 
 class JobPriority(str, Enum):
     LOW = "low"
@@ -122,11 +124,20 @@ class JobQueue:
                 continue
             try:
                 self._in_flight += 1
-                await handler(**job.payload)
+                await asyncio.wait_for(handler(**job.payload), timeout=DEFAULT_JOB_TIMEOUT)
                 logger.info(
                     "job completed",
                     extra={"job_name": job.name, "job_id": job.id, "worker_id": worker_id},
                     )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "job timed out after %ds",
+                    DEFAULT_JOB_TIMEOUT,
+                    extra={"job_name": job.name, "job_id": job.id},
+                )
+                job.retry_count += 1
+                if job.retry_count <= job.max_retries:
+                    await self._requeue(job)
             except Exception:
                 job.retry_count += 1
                 if job.retry_count <= job.max_retries:

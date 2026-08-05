@@ -9,7 +9,7 @@ import { PageTransition } from "./PageTransition";
 const AIAssistantPanel = dynamic(() => import("@/components/AIAssistantPanel").then((m) => m.AIAssistantPanel), {
   ssr: false,
 });
-const CommandPalette = dynamic(() => import("@/components/CommandPalette").then((m) => m.CommandPalette), {
+const CommandPalette = dynamic(() => import("@/components/command/CommandPalette").then((m) => m.CommandPalette), {
   ssr: false,
 });
 const OnboardingWizard = dynamic(

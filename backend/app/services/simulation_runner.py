@@ -139,7 +139,7 @@ async def execute_simulation_run(
         await link_event_to_offense(db, event)
         await _broadcast_simulated_event(event, host)
 
-    await run_detection_for_host(db, host)
+    await run_detection_for_host(db, host, source="simulation")
     await run_correlation_engine(db, host.id)
     await build_timelines(db, host.id)
     await db.flush()

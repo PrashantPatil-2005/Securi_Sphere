@@ -2,7 +2,6 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,15 +13,12 @@ from app.models.siem import Offense, OffenseEvent
 from app.models.user import User
 from app.config import settings
 from app.schemas.assistant import OffenseAIBriefResponse
+from app.schemas.offense import OffenseStatusUpdate
 from app.services.ai.summaries import generate_offense_brief
 from app.utils.query import ListParams, resolve_time_range
 from app.services.incident_promotion import promote_offense_to_incident
 
 router = APIRouter(prefix="/offenses", tags=["offenses"])
-
-
-class OffenseStatusUpdate(BaseModel):
-    status: str
 
 
 @router.get("")
@@ -60,7 +56,9 @@ async def list_offenses(
     page_rows = list(
         (await db.execute(q.order_by(Offense.updated_at.desc()).offset(offset).limit(page_size))).scalars().all()
     )
-    hosts = {h.id: h.name for h in (await db.execute(select(Host).limit(5000))).scalars().all()}
+    hosts = {h.id: h.name for h in (await db.execute(
+        select(Host).where(Host.id.in_({o.host_id for o in page_rows}))
+    )).scalars().all()}
 
     return {
         "items": [
@@ -201,6 +199,8 @@ async def update_offense_status(
     offense.updated_at = datetime.now(timezone.utc)
     if body.status == "resolved":
         offense.closed_at = datetime.now(timezone.utc)
+    from app.services.audit import log_audit
+    await log_audit(db, "offense_status_change", user_id=user.id, resource_type="offense", resource_id=offense_id)
     await db.commit()
     return {"id": str(offense.id), "status": offense.status}
 

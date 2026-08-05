@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +11,7 @@ from app.database import get_db
 from app.dependencies import client_ip, get_current_user, require_roles
 from app.models.telemetry_event import TelemetryEvent
 from app.models.user import User
+from app.schemas.telemetry import TelemetryEventIn
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
@@ -46,13 +46,6 @@ ALLOWED_EVENTS = frozenset({
     "intel_feed_sync",
     "page_dwell",
 })
-
-
-class TelemetryEventIn(BaseModel):
-    event: str = Field(..., max_length=100)
-    properties: dict | None = None
-    session_id: str | None = Field(None, max_length=64)
-    page_path: str | None = Field(None, max_length=255)
 
 
 @router.post("/events", status_code=204)

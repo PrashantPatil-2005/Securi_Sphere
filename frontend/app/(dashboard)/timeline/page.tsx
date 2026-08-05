@@ -8,7 +8,7 @@ import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
 import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { TimelineReplayPlayer } from "@/components/timeline/TimelineReplayPlayer";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { PageHeader } from "@/components/ui/Panel";

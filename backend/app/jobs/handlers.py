@@ -64,5 +64,4 @@ def register_job_handlers() -> None:
     job_queue.register("notify_alert", handle_notify_alert)
     job_queue.register("notify_offense", handle_notify_offense)
     job_queue.register("playbook_dispatch", handle_playbook_dispatch)
-    job_queue.register("ueba_scan", handle_ueba_scan)
     job_queue.register("correlation_pipeline", handle_correlation_pipeline)

@@ -22,6 +22,10 @@ from app.utils.query import resolve_time_range
 router = APIRouter(prefix="/search", tags=["search"])
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("")
 async def global_search(
     q: str = Query(..., min_length=1, max_length=500),
@@ -63,7 +67,7 @@ async def global_search(
             "users": [{"id": str(u.id), "email": u.email, "full_name": u.full_name} for u in users],
         }
 
-    pattern = q if exact else f"%{q}%"
+    pattern = q if exact else f"%{_escape_like(q)}%"
 
     host_q = select(Host).limit(20)
     if exact:

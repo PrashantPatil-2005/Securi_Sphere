@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.brand import PRODUCT_NAME
 from app.config import settings
@@ -243,6 +244,8 @@ async def refresh_analytics_materialized_views_endpoint(
         raise HTTPException(status_code=400, detail="Analytics materialized views are disabled")
     result = await refresh_analytics_materialized_views(db)
     await db.commit()
+    from app.services.audit import log_audit
+    await log_audit(db, "analytics_mv_refresh", user_id=user.id, resource_type="analytics")
     return {"refreshed": result}
 
 
@@ -250,6 +253,7 @@ async def refresh_analytics_materialized_views_endpoint(
 async def opensearch_backfill(
     event_limit: int = Query(10_000, le=100_000),
     alert_limit: int = Query(5000, le=50_000),
+    db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles("admin")),
 ):
     """Bulk reindex hosts, events, and alerts into OpenSearch (admin)."""
@@ -258,4 +262,6 @@ async def opensearch_backfill(
     from app.services.opensearch_backfill import run_opensearch_backfill
 
     counts = await run_opensearch_backfill(event_limit=event_limit, alert_limit=alert_limit)
+    from app.services.audit import log_audit
+    await log_audit(db, "opensearch_backfill", user_id=user.id, resource_type="opensearch")
     return {"status": "ok", "indexed": counts, "search_backend": "opensearch"}

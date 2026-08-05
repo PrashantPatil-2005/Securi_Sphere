@@ -98,6 +98,8 @@ async def executive_report(
     db.add(report_row)
     await db.commit()
 
+    from app.services.audit import log_audit
+    await log_audit(db, "report_executive_generate", user_id=user.id, resource_type="report")
     filename = f"securi_executive_{report_type}.pdf"
     if format == "pdf":
         return export_executive_pdf(data, filename)
@@ -137,6 +139,8 @@ async def compliance_report(
     db.add(report_row)
     await db.commit()
 
+    from app.services.audit import log_audit
+    await log_audit(db, "report_compliance_generate", user_id=user.id, resource_type="report")
     if format == "pdf":
         return export_compliance_pdf(data, f"securi_compliance_{framework}_{report_type}.pdf")
     return data
@@ -163,6 +167,8 @@ async def generate_report(
     db.add(report_row)
     await db.commit()
 
+    from app.services.audit import log_audit
+    await log_audit(db, "report_generate", user_id=user.id, resource_type="report")
     filename = f"securi_{report_type}_report"
     if format == "csv":
         rows = [

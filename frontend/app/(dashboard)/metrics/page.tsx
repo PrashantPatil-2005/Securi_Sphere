@@ -9,7 +9,7 @@ import { buildQuery } from "@/lib/buildQuery";
 import { downsampleSeries } from "@/lib/downsample";
 import { useHostsList } from "@/lib/hooks/useApiQuery";
 import { useTimeRange } from "@/lib/timeRange";
-import TimeRangeBar from "@/components/TimeRangeBar";
+import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
 import { TableSkeleton, ChartSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";

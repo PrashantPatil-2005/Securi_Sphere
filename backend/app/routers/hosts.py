@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,22 +16,14 @@ from app.models.siem import HostRiskHistory
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
 from app.schemas.host import AgentCertRegister, EnrollmentTokenResponse, HostCreate, HostListResponse, HostResponse
+from app.schemas.host_risk import TokenListItem, RiskFactorItem, RiskHistoryItem, HostRiskResponse
 from app.security import generate_enrollment_token, hash_token
 from app.services.audit import log_audit
-from app.services.export_service import export_csv, export_json, export_pdf
+from app.services.export_service import respond_export
 from app.services.query_builders import query_hosts
 from app.utils.query import ListParams, SortOrder, resolve_time_range
 
 router = APIRouter(prefix="/hosts", tags=["hosts"])
-
-
-class TokenListItem(BaseModel):
-    id: UUID
-    expires_at: datetime
-    used_at: datetime | None
-    revoked_at: datetime | None
-    label: str | None
-    model_config = {"from_attributes": True}
 
 
 def _host_row(host, score, alert_count) -> HostResponse:
@@ -97,11 +88,9 @@ async def export_hosts(
 ):
     rows, _ = await query_hosts(db, hostname=hostname, status=status, sort=sort, page=1, page_size=page_size)
     data = [{"name": h.name, "hostname": h.hostname, "status": h.status, "risk_score": score, "alerts": ac or 0} for h, score, ac in rows]
-    if format == "json":
-        return export_json(data, "hosts.json")
-    if format == "pdf":
-        return export_pdf(data, f"{PRODUCT_NAME} Hosts Export", "hosts.pdf")
-    return export_csv(data, "hosts.csv")
+    from app.services.audit import log_audit
+    await log_audit(db, "host_export", user_id=user.id, resource_type="host")
+    return respond_export(data, format, filename_base="hosts", pdf_title=f"{PRODUCT_NAME} Hosts Export")
 
 
 @router.get("/{host_id}", response_model=HostResponse)
@@ -119,28 +108,6 @@ async def get_host(host_id: UUID, db: AsyncSession = Depends(get_db), user: User
         )
     ).scalar_one()
     return _host_row(host, score_row.score if score_row else None, alert_count)
-
-
-class RiskFactorItem(BaseModel):
-    name: str
-    value: float
-    weight: float
-
-
-class RiskHistoryItem(BaseModel):
-    risk_score: int
-    health_score: int
-    recorded_at: datetime
-
-
-class HostRiskResponse(BaseModel):
-    host_id: str
-    host_name: str
-    score: int
-    health_score: int
-    factors: dict[str, float]
-    factor_breakdown: list[RiskFactorItem]
-    history: list[RiskHistoryItem]
 
 
 @router.get("/{host_id}/risk", response_model=HostRiskResponse)
@@ -186,6 +153,17 @@ async def delete_host(host_id: UUID, request: Request, db: AsyncSession = Depend
     host = result.scalar_one_or_none()
     if not host:
         raise HTTPException(status_code=404, detail="Host not found")
+    from app.models.alert import Alert
+    from app.models.event import Event
+    from app.models.metric import Metric
+    from app.models.siem import Offense, HostRiskHistory
+    from app.models.threat_score import HostThreatScore
+    from app.models.timeline import AttackTimeline
+    from app.models.enrollment import EnrollmentToken
+    await db.execute(select(Alert).where(Alert.host_id == host_id))
+    for model in (Alert, Event, Metric, Offense, HostRiskHistory, HostThreatScore, AttackTimeline, EnrollmentToken):
+        from sqlalchemy import delete as sql_delete
+        await db.execute(sql_delete(model).where(model.host_id == host_id))
     await db.delete(host)
     await log_audit(db, "host_delete", user_id=user.id, resource_type="host", resource_id=host_id, ip_address=client_ip(request))
     return {"message": "Host deleted"}

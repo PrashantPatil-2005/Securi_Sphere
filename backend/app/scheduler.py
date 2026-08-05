@@ -1,0 +1,123 @@
+"""Background job scheduler — all APScheduler jobs live here."""
+
+import logging
+from datetime import datetime, timedelta
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from app.brand import PRODUCT_NAME
+from app.config import settings
+from app.database import async_session
+from app.jobs.handlers import register_job_handlers
+from app.jobs.queue import job_queue
+from app.services.analytics.aggregator import aggregate_daily_stats
+from app.services.backup import run_scheduled_backup
+from app.services.correlation_engine import run_cross_host_correlation
+from app.services.detection import update_host_statuses
+from app.services.retention import run_retention
+from app.services.saved_search_alerts import run_saved_search_alerts
+from app.services.threat_score import update_all_threat_scores
+from app.services.ueba import scan_ueba_anomalies
+from app.websocket.manager import ws_manager
+
+logger = logging.getLogger(__name__)
+scheduler = AsyncIOScheduler()
+
+
+async def saved_search_job() -> None:
+    async with async_session() as db:
+        await run_saved_search_alerts(db)
+        await db.commit()
+
+
+async def status_job() -> None:
+    async with async_session() as db:
+        await update_host_statuses(db)
+        await update_all_threat_scores(db)
+        await db.commit()
+
+
+async def analytics_job() -> None:
+    async with async_session() as db:
+        await aggregate_daily_stats(db)
+        await db.commit()
+
+
+async def analytics_mv_job() -> None:
+    if not settings.analytics_materialized_views_enabled:
+        return
+    from app.services.analytics.materialized_views import refresh_analytics_materialized_views
+
+    async with async_session() as db:
+        await refresh_analytics_materialized_views(db)
+        await db.commit()
+
+
+async def cross_host_correlation_job() -> None:
+    async with async_session() as db:
+        await run_cross_host_correlation(db)
+        await db.commit()
+
+
+async def ueba_scan_job() -> None:
+    async with async_session() as db:
+        await scan_ueba_anomalies(db)
+        await db.commit()
+
+
+async def backup_job() -> None:
+    await run_scheduled_backup()
+
+
+async def threat_intel_feed_job() -> None:
+    if not settings.threat_intel_feeds_enabled:
+        return
+    from app.services.threat_intel_feeds import sync_all_enabled_feeds
+
+    async with async_session() as db:
+        await sync_all_enabled_feeds(db)
+        await db.commit()
+
+
+def start_scheduler() -> None:
+    """Register all jobs and start the scheduler."""
+    register_job_handlers()
+    now = datetime.now()
+    scheduler.add_job(status_job, "interval", seconds=30, id="host_status",
+                      next_run_time=now + timedelta(seconds=30), max_instances=1)
+    scheduler.add_job(
+        cross_host_correlation_job,
+        "interval",
+        seconds=settings.cross_host_correlation_interval_seconds,
+        id="cross_host_correlation",
+        next_run_time=now + timedelta(seconds=60),
+        max_instances=1,
+    )
+    scheduler.add_job(run_retention, "cron", hour=2, id="retention",
+                      next_run_time=now + timedelta(hours=1), max_instances=1)
+    scheduler.add_job(backup_job, "cron", hour=settings.backup_schedule_hour, id="postgres_backup",
+                      next_run_time=now + timedelta(hours=1), max_instances=1)
+    scheduler.add_job(analytics_job, "cron", hour=3, id="analytics",
+                      next_run_time=now + timedelta(hours=1), max_instances=1)
+    scheduler.add_job(
+        analytics_mv_job,
+        "interval",
+        minutes=settings.analytics_mv_refresh_interval_minutes,
+        id="analytics_materialized_views",
+        next_run_time=now + timedelta(minutes=5),
+        max_instances=1,
+    )
+    scheduler.add_job(
+        threat_intel_feed_job,
+        "interval",
+        minutes=settings.threat_intel_feed_sync_minutes,
+        id="threat_intel_feed_sync",
+        next_run_time=now + timedelta(minutes=3),
+        max_instances=1,
+    )
+    scheduler.add_job(ueba_scan_job, "interval", minutes=settings.ueba_scan_interval_minutes, id="ueba_scan",
+                      next_run_time=now + timedelta(minutes=2), max_instances=1)
+    scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts",
+                      next_run_time=now + timedelta(minutes=1), max_instances=1)
+    scheduler.start()
+    logger.info("Scheduler started")
