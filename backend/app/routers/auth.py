@@ -78,10 +78,10 @@ DEV_USERS = {
     "analyst@test.local": "analyst",
     "viewer@test.local": "viewer",
 }
-DEV_USER_PASSWORD = settings.dev_user_password or "testpass123"
+DEV_USER_PASSWORD = settings.dev_user_password
 
 DEMO_USER_EMAIL = "demo@securi.local"
-DEMO_USER_PASSWORD = settings.demo_user_password or "Demo1234!"
+DEMO_USER_PASSWORD = settings.demo_user_password
 
 
 async def seed_roles(db: AsyncSession) -> None:
@@ -94,6 +94,12 @@ async def seed_roles(db: AsyncSession) -> None:
 
 async def seed_dev_users(db: AsyncSession) -> None:
     if settings.testing or settings.environment != "development":
+        return
+    if not DEV_USER_PASSWORD:
+        logger.warning(
+            "DEV_USER_PASSWORD not set — skipping dev user seeding. "
+            "Set DEV_USER_PASSWORD in your environment to enable dev users."
+        )
         return
     roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
     if not roles:
@@ -123,8 +129,14 @@ async def seed_dev_users(db: AsyncSession) -> None:
 
 
 async def seed_demo_users(db: AsyncSession) -> None:
-    """Seed pilot demo admin when DEMO_MODE=true (any environment)."""
+    """Seed pilot demo admin when DEMO_MODE=true."""
     if not settings.demo_mode or settings.testing:
+        return
+    if not DEMO_USER_PASSWORD:
+        logger.warning(
+            "DEMO_USER_PASSWORD not set — skipping demo user seeding. "
+            "Set DEMO_USER_PASSWORD in your environment to enable demo mode."
+        )
         return
     roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
     admin = roles.get("admin")

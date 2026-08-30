@@ -90,3 +90,15 @@ async def asyncio_gather_llen(redis) -> list[int]:
         return int(await redis.llen(key))
 
     return await asyncio.gather(*(_len(key) for key in QUEUE_ORDER))
+
+
+DEAD_LETTER_QUEUE = "securi:jobs:dead-letter"
+MAX_DEAD_LETTER_SIZE = 1000
+
+
+async def enqueue_dead_letter(job: Job) -> None:
+    redis = await get_redis()
+    if not redis:
+        return
+    await redis.lpush(DEAD_LETTER_QUEUE, job_to_json(job))
+    await redis.ltrim(DEAD_LETTER_QUEUE, 0, MAX_DEAD_LETTER_SIZE - 1)

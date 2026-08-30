@@ -108,6 +108,9 @@ async def exchange_code(discovery: dict[str, Any], code: str) -> dict[str, Any]:
         return response.json()
 
 
+_ALLOWED_OIDC_ALGORITHMS = ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512")
+
+
 def verify_id_token(
     id_token: str,
     jwks: dict[str, Any],
@@ -117,17 +120,22 @@ def verify_id_token(
     nonce: str,
 ) -> dict[str, Any]:
     header = jwt.get_unverified_header(id_token)
+    alg = header.get("alg")
+    if alg not in _ALLOWED_OIDC_ALGORITHMS:
+        raise HTTPException(
+            status_code=401,
+            detail=f"OIDC token algorithm not allowed: {alg}",
+        )
     kid = header.get("kid")
     key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if not key_data:
         raise HTTPException(status_code=401, detail="OIDC signing key not found")
 
     key = jwk.construct(key_data)
-    algorithms = [header.get("alg") or "RS256"]
     claims = jwt.decode(
         id_token,
         key,
-        algorithms=algorithms,
+        algorithms=list(_ALLOWED_OIDC_ALGORITHMS),
         audience=audience,
         issuer=issuer,
         options={"verify_at_hash": False},

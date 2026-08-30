@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     mail_password: str = ""
     mail_from: str = "noreply@securi.local"
     telegram_bot_token: str = ""
-    debug: bool = True
+    debug: bool = False
     sql_echo: bool = False
     environment: str = "development"
     retention_days: int = 90

@@ -33,6 +33,7 @@ def test_outbound_timeout_profiles(monkeypatch):
 async def test_middleware_returns_504_on_slow_request(monkeypatch):
     monkeypatch.setattr("app.middleware.request_timeout.settings.request_timeout_enabled", True)
     monkeypatch.setattr("app.middleware.request_timeout.settings.request_timeout_seconds", 0.05)
+    monkeypatch.setattr("app.middleware.request_timeout.settings.environment", "production")
 
     app = FastAPI()
     app.add_middleware(RequestTimeoutMiddleware)

@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -38,21 +39,15 @@ async def is_duplicate(db: AsyncSession, fingerprint: str) -> bool:
     redis = await _get_redis()
     if redis:
         key = f"dedup:{fingerprint}"
-        if await redis.exists(key):
-            return True
-        await redis.setex(key, settings.idempotency_ttl_seconds, "1")
-        return False
+        added = await redis.set(key, "1", nx=True, ex=settings.idempotency_ttl_seconds)
+        return added is None
 
     from app.models.ingest_dedup import IngestDedup
 
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=settings.idempotency_ttl_seconds)
-    await db.execute(delete(IngestDedup).where(IngestDedup.created_at < cutoff))
-
-    existing = (
-        await db.execute(select(IngestDedup).where(IngestDedup.fingerprint == fingerprint))
-    ).scalar_one_or_none()
-    if existing:
-        return True
-
-    db.add(IngestDedup(fingerprint=fingerprint))
-    return False
+    stmt = (
+        pg_insert(IngestDedup)
+        .values(fingerprint=fingerprint)
+        .on_conflict_do_nothing(index_elements=["fingerprint"])
+    )
+    result = await db.execute(stmt)
+    return result.rowcount == 0

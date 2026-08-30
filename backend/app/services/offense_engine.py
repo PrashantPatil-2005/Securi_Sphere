@@ -1,15 +1,18 @@
 """QRadar-style offense grouping with related entities and timeline."""
 
-import secrets
+import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.siem import Offense, OffenseEvent
+
+logger = logging.getLogger(__name__)
 
 OFFENSE_WINDOW = timedelta(minutes=30)
 
@@ -29,20 +32,10 @@ AUTH_EVENT_TYPES = frozenset({
 
 
 async def _next_offense_number(db: AsyncSession) -> int:
-    max_int32 = 2_147_483_647
-    for _ in range(8):
-        candidate = secrets.randbelow(max_int32 - 1000) + 1000
-        exists = (
-            await db.execute(
-                select(Offense.id).where(Offense.offense_number == candidate).limit(1)
-            )
-        ).scalar_one_or_none()
-        if not exists:
-            return candidate
-
-    current = (await db.execute(select(func.max(Offense.offense_number)))).scalar_one()
-    nxt = (current or 100) + 1
-    return nxt if nxt <= max_int32 else 1000
+    result = await db.execute(
+        text("SELECT nextval('offense_number_seq')")
+    )
+    return result.scalar_one()
 
 
 def _max_risk(a: str, b: str) -> str:
@@ -82,6 +75,7 @@ async def find_or_create_offense(
             )
             .order_by(Offense.updated_at.desc())
             .limit(1)
+            .with_for_update()
         )
     ).scalar_one_or_none()
 
@@ -90,8 +84,9 @@ async def find_or_create_offense(
         existing.risk_level = _max_risk(existing.risk_level, risk_level)
         return existing, False
 
+    offense_number = await _next_offense_number(db)
     offense = Offense(
-        offense_number=await _next_offense_number(db),
+        offense_number=offense_number,
         host_id=host_id,
         title=title,
         description="Correlated security activity on host",

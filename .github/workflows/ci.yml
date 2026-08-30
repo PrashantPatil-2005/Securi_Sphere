@@ -55,22 +55,8 @@ jobs:
       - run: pip install ruff
       - run: ruff check app tests
 
-  backend-opensearch-gate:
+  backend-security:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: securi
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: securi_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     defaults:
       run:
         working-directory: backend
@@ -79,22 +65,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt
-      - name: OpenSearch admin + search fallback gate
-        run: >
-          pytest
-          tests/test_opensearch_scale.py
-          tests/test_siem_opensearch.py
-          tests/integration/test_system_admin_api.py
-          tests/integration/test_search.py
-          -q --tb=short
-        env:
-          TESTING: "true"
-          DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
-          JWT_SECRET: ci-test-secret-key-minimum-length
-          REDIS_URL: ""
-          JOB_QUEUE_BACKEND: memory
-          WS_PUBSUB_BACKEND: memory
+      - run: pip install bandit[toml]
+      - run: bandit -r app -f json -o bandit-report.json --severity-level medium || true
+      - run: bandit -r app --severity-level high
 
   frontend-lint:
     runs-on: ubuntu-latest
@@ -109,6 +82,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - run: npm audit --audit-level=high
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
@@ -232,6 +206,20 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f backend/Dockerfile -t securi-backend .
       - run: docker build -f frontend/Dockerfile -t securi-frontend .
+
+  container-scan:
+    runs-on: ubuntu-latest
+    needs: docker-build
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f backend/Dockerfile -t securi-backend .
+      - uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: securi-backend
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+        continue-on-error: true
 
   compose-smoke:
     runs-on: ubuntu-latest

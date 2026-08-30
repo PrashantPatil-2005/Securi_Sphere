@@ -12,7 +12,7 @@ def test_alembic_single_head():
     cfg.set_main_option("script_location", str(backend_root / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     heads = script.get_heads()
-    assert heads == ["020_telemetry_events"]
+    assert heads == ["022_atomic_alert_dedup"]
 
 
 def test_alembic_revision_chain():
@@ -21,5 +21,5 @@ def test_alembic_revision_chain():
     cfg.set_main_option("script_location", str(backend_root / "alembic"))
     script = ScriptDirectory.from_config(cfg)
     revisions = [rev.revision for rev in script.walk_revisions()]
-    assert revisions[0] == "020_telemetry_events"
+    assert revisions[0] == "022_atomic_alert_dedup"
     assert "001_baseline" in revisions

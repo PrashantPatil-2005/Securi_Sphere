@@ -7,10 +7,14 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = Path("/var/lib/securi/buffer.db")
 
+MAX_BUFFER_ITEMS = 50000
+MAX_BUFFER_SIZE_MB = 500
+
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,12 +23,57 @@ def init_db() -> None:
             created_at REAL NOT NULL
         )
     """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_queue_created_at ON queue(created_at)")
     conn.commit()
     conn.close()
 
 
-def enqueue(kind: str, payload: dict) -> None:
+def queue_size() -> int:
+    conn = sqlite3.connect(DB_PATH)
+    count = conn.execute("SELECT COUNT(*) FROM queue").fetchone()[0]
+    conn.close()
+    return count
+
+
+def _buffer_size_mb() -> float:
+    if not DB_PATH.exists():
+        return 0.0
+    return DB_PATH.stat().st_size / (1024 * 1024)
+
+
+def _purge_oldest(conn: sqlite3.Connection, count: int) -> int:
+    cursor = conn.execute(
+        "DELETE FROM queue WHERE id IN (SELECT id FROM queue ORDER BY created_at ASC LIMIT ?)",
+        (count,),
+    )
+    deleted = cursor.rowcount
+    conn.commit()
+    return deleted
+
+
+def enqueue(kind: str, payload: dict) -> bool:
     import time
+
+    current_size = queue_size()
+    current_mb = _buffer_size_mb()
+
+    if current_size >= MAX_BUFFER_ITEMS:
+        logger.warning(
+            "Buffer full (%d items) — dropping newest event",
+            current_size,
+        )
+        return False
+
+    if current_mb >= MAX_BUFFER_SIZE_MB:
+        logger.warning(
+            "Buffer size exceeded (%.1f MB / %d MB limit) — purging oldest",
+            current_mb,
+            MAX_BUFFER_SIZE_MB,
+        )
+        conn = sqlite3.connect(DB_PATH)
+        _purge_oldest(conn, MAX_BUFFER_ITEMS // 10)
+        conn.close()
+
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
         "INSERT INTO queue (kind, payload, created_at) VALUES (?, ?, ?)",
@@ -32,6 +81,7 @@ def enqueue(kind: str, payload: dict) -> None:
     )
     conn.commit()
     conn.close()
+    return True
 
 
 def dequeue_all() -> list[tuple[int, str, dict]]:
@@ -51,14 +101,6 @@ def remove_by_ids(ids: list[int]) -> None:
     conn.execute(f"DELETE FROM queue WHERE id IN ({placeholders})", ids)
     conn.commit()
     conn.close()
-
-
-def queue_size() -> int:
-    """Return number of items waiting in the offline buffer."""
-    conn = sqlite3.connect(DB_PATH)
-    count = conn.execute("SELECT COUNT(*) FROM queue").fetchone()[0]
-    conn.close()
-    return count
 
 
 def clear_queue() -> None:

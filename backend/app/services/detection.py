@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -257,31 +258,54 @@ async def create_alert(
     mitre_tactic: str | None = None,
     source: str | None = None,
 ) -> Alert | None:
-    dedup_filters = [
-        Alert.host_id == host_id,
-        Alert.status == "open",
-    ]
     if rule_id is not None:
-        dedup_filters.append(Alert.rule_id == rule_id)
+        stmt = (
+            pg_insert(Alert)
+            .values(
+                host_id=host_id,
+                rule_id=rule_id,
+                source=source,
+                severity=severity,
+                title=title,
+                description=description,
+                status="open",
+                confidence=confidence,
+                mitre_technique_id=mitre_technique_id,
+                mitre_tactic=mitre_tactic,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["host_id", "rule_id"],
+                where=Alert.status == "open",
+            )
+            .returning(Alert)
+        )
     else:
-        dedup_filters.append(Alert.title == title)
-    existing = await db.execute(select(Alert).where(*dedup_filters))
-    if existing.scalar_one_or_none():
+        stmt = (
+            pg_insert(Alert)
+            .values(
+                host_id=host_id,
+                rule_id=None,
+                source=source,
+                severity=severity,
+                title=title,
+                description=description,
+                status="open",
+                confidence=confidence,
+                mitre_technique_id=mitre_technique_id,
+                mitre_tactic=mitre_tactic,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["host_id", "title"],
+                where=Alert.status == "open",
+            )
+            .returning(Alert)
+        )
+
+    result = await db.execute(stmt)
+    alert = result.scalar_one_or_none()
+    if not alert:
         return None
 
-    alert = Alert(
-        host_id=host_id,
-        rule_id=rule_id,
-        source=source,
-        severity=severity,
-        title=title,
-        description=description,
-        status="open",
-        confidence=confidence,
-        mitre_technique_id=mitre_technique_id,
-        mitre_tactic=mitre_tactic,
-    )
-    db.add(alert)
     await db.flush()
     host = await db.get(Host, host_id)
     from app.search.indexer import index_alert

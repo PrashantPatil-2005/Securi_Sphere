@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from sqlalchemy import text
@@ -11,6 +12,8 @@ from app.config import settings
 from app.database import engine
 
 logger = logging.getLogger(__name__)
+
+_PARTITION_NAME_RE = re.compile(r"^events_y\d{4}m\d{2}$")
 
 
 def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
@@ -24,6 +27,11 @@ def _month_bounds(year: int, month: int) -> tuple[datetime, datetime]:
 
 def _partition_name(year: int, month: int) -> str:
     return f"events_y{year}m{month:02d}"
+
+
+def _validate_partition_name(name: str) -> None:
+    if not _PARTITION_NAME_RE.match(name):
+        raise ValueError(f"Invalid partition name: {name!r}")
 
 
 async def is_events_partitioned() -> bool:
@@ -56,14 +64,13 @@ async def ensure_event_partitions(months_ahead: int = 3, months_back: int = 12) 
     async with engine.begin() as conn:
         for year, month in sorted(set(targets)):
             name = _partition_name(year, month)
+            _validate_partition_name(name)
             start, end = _month_bounds(year, month)
             await conn.execute(
                 text(
-                    f"""
-                    CREATE TABLE IF NOT EXISTS {name}
-                    PARTITION OF events
-                    FOR VALUES FROM (:start) TO (:end)
-                    """
+                    f"CREATE TABLE IF NOT EXISTS {name}"
+                    " PARTITION OF events"
+                    " FOR VALUES FROM (:start) TO (:end)"
                 ),
                 {"start": start, "end": end},
             )
@@ -92,6 +99,7 @@ async def drop_old_event_partitions(cutoff: datetime) -> int:
             if name == "events_default":
                 continue
             try:
+                _validate_partition_name(name)
                 year = int(name[8:12])
                 month = int(name[13:15])
             except (ValueError, IndexError):

@@ -120,7 +120,19 @@ class JobQueue:
                 continue
             handler = self._handlers.get(job.name)
             if not handler:
-                logger.error("unknown job handler", extra={"job_name": job.name})
+                logger.error(
+                    "unknown job handler — job dropped to dead-letter",
+                    extra={
+                        "job_name": job.name,
+                        "job_id": job.id,
+                        "worker_id": worker_id,
+                        "retry_count": job.retry_count,
+                        "payload_keys": list(job.payload.keys()) if job.payload else [],
+                    },
+                )
+                if self._use_redis:
+                    from app.jobs.redis_broker import enqueue_dead_letter
+                    await enqueue_dead_letter(job)
                 continue
             try:
                 self._in_flight += 1
