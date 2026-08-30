@@ -32,3 +32,7 @@ k8s/secret.yaml
 docker-compose.override.yml
 backend/debug-*.log
 *.tmp
+.vscode/
+.cursor/
+*_run.txt
+frontend/test-results/
