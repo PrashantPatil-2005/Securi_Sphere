@@ -35,6 +35,7 @@ export const API = {
   // Events
   EVENTS: {
     LIST: "/api/v1/events",
+    TYPES: "/api/v1/events/types",
     EXPORT: "/api/v1/events/export",
   },
 

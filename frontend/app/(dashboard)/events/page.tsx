@@ -1,60 +1,25 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Activity } from "lucide-react";
-import { useCursorPaginatedResource, useHostsList } from "@/lib/hooks/useApiQuery";
+
+import { useEventCursorList } from "@/lib/hooks/useEvents";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
-import { rowKeyById } from "@/lib/rowKey";
 import ExportMenu from "@/components/export/ExportMenu";
 import CursorPaginationBar from "@/components/pagination/CursorPaginationBar";
-import SortSelect from "@/components/pagination/SortSelect";
 import TimeRangeBar from "@/components/filters/TimeRangeBar";
-import { VirtualDataTable, type Column } from "@/components/virtual-table/VirtualDataTable";
-import { PageHeader, EmptyState } from "@/components/ui/Panel";
-import { FilterBar } from "@/components/ui/FilterBar";
-import { Select } from "@/components/ui/Select";
-import { Input } from "@/components/ui/Input";
+import { PageHeader } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
-import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-
-interface Event {
-  id: string;
-  host_id: string;
-  event_type: string;
-  severity: string;
-  description: string | null;
-  timestamp: string;
-}
-
-const columns: Column<Event>[] = [
-  {
-    key: "time",
-    header: "Time",
-    width: "160px",
-    render: (e) => <span className="text-[var(--muted)] tabular-nums">{new Date(e.timestamp).toLocaleString()}</span>,
-  },
-  {
-    key: "type",
-    header: "Type",
-    width: "140px",
-    render: (e) => <span className="font-mono text-xs">{e.event_type}</span>,
-  },
-  {
-    key: "severity",
-    header: "Severity",
-    width: "90px",
-    render: (e) => <SeverityBadge severity={e.severity} />,
-  },
-  {
-    key: "desc",
-    header: "Description",
-    render: (e) => <span className="text-[var(--muted)]">{e.description}</span>,
-  },
-];
+import { PageSizeSelect } from "@/components/design-system/Pagination";
+import { EventFiltersBar } from "@/components/events/EventFilters";
+import { EventRow } from "@/components/events/EventRow";
+import { EventEmptyState } from "@/components/events/EventEmptyState";
+import { EventDetailDrawer } from "@/components/events/EventDetailDrawer";
+import { DEFAULT_EVENT_FILTERS } from "@/lib/types/event";
+import type { EventFilters, EventSummary } from "@/lib/types/event";
 
 export default function EventsPage() {
   return (
@@ -69,18 +34,10 @@ function EventsPageContent() {
   const { queryParams } = useTimeRange();
   const [pageSize, setPageSize] = useState(50);
   const [sort, setSort] = useState("newest");
-  const [filters, setFilters] = useState({
-    severity: "",
-    event_type: "",
-    host_id: "",
-    username: "",
-    source_ip: "",
-    service_name: "",
-    status: "",
-    q: "",
-    mitre_technique_id: "",
-  });
+  const [filters, setFilters] = useState<EventFilters>(DEFAULT_EVENT_FILTERS);
+  const [selectedEvent, setSelectedEvent] = useState<EventSummary | null>(null);
 
+  // Read URL params on mount
   useEffect(() => {
     const mitre = searchParams.get("mitre_technique_id");
     const hostId = searchParams.get("host_id");
@@ -93,14 +50,20 @@ function EventsPageContent() {
     }
   }, [searchParams]);
 
+  // Debounce search and event type filters
   const debouncedQ = useDebounce(filters.q, 400);
-  const debouncedType = useDebounce(filters.event_type, 400);
+  const debouncedSourceType = useDebounce(filters.source_ip, 400);
+  const debouncedUsername = useDebounce(filters.username, 400);
   const debouncedFilters = useMemo(
-    () => ({ ...filters, q: debouncedQ, event_type: debouncedType }),
-    [filters, debouncedQ, debouncedType],
+    () => ({
+      ...filters,
+      q: debouncedQ,
+      source_ip: debouncedSourceType,
+      username: debouncedUsername,
+    }),
+    [filters, debouncedQ, debouncedSourceType, debouncedUsername],
   );
 
-  const { data: hosts = [] } = useHostsList();
   const {
     items,
     total,
@@ -112,9 +75,7 @@ function EventsPageContent() {
     hasMore,
     goNext,
     goPrev,
-  } = useCursorPaginatedResource<Event>({
-    endpoint: "/api/v1/events",
-    queryKey: "events",
+  } = useEventCursorList({
     pageSize,
     sort,
     filters: debouncedFilters,
@@ -122,72 +83,97 @@ function EventsPageContent() {
 
   const exportQuery = buildQuery({ sort, ...debouncedFilters }, queryParams);
 
+  const handleClearFilters = useCallback(() => {
+    setFilters(DEFAULT_EVENT_FILTERS);
+  }, []);
+
+  const handleSelectEvent = useCallback((event: EventSummary) => {
+    setSelectedEvent(event);
+  }, []);
+
+  const handleCloseDrawer = useCallback(() => {
+    setSelectedEvent(null);
+  }, []);
+
   return (
     <div>
-      <PageHeader title="Events" subtitle="Security event log with keyset pagination" action={<ExportMenu resource="events" query={exportQuery} />} />
+      <PageHeader
+        title="Events"
+        subtitle="Security telemetry and observed activity"
+        action={<ExportMenu resource="events" query={exportQuery} />}
+      />
+
       <TimeRangeBar />
-      <FilterBar
-        activeCount={[filters.event_type, filters.q].filter(Boolean).length}
-        more={
+
+      <div className="mt-4">
+        <EventFiltersBar
+          filters={filters}
+          sort={sort}
+          onFiltersChange={setFilters}
+          onSortChange={setSort}
+          total={total}
+        />
+      </div>
+
+      <div className="mt-4">
+        {isLoading ? (
+          <TableSkeleton rows={12} />
+        ) : isError ? (
+          <QueryError onRetry={() => refetch()} />
+        ) : items.length === 0 ? (
+          <EventEmptyState
+            hasFilters={Object.values(debouncedFilters).some(Boolean)}
+            onClear={handleClearFilters}
+          />
+        ) : (
           <>
-            <Input label="Event type" placeholder="Event type" value={filters.event_type} onChange={(e) => setFilters({ ...filters, event_type: e.target.value })} />
-            <Input label="Keyword" placeholder="Keyword search" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
-            <div className="space-y-1.5">
-              <span className="block text-body font-medium text-foreground text-sm">Sort</span>
-              <SortSelect value={sort} onChange={setSort} />
+            <div className={`transition-opacity ${isFetching ? "opacity-70" : ""}`}>
+              {/* Desktop table header */}
+              <div className="hidden md:flex items-center gap-3 px-3 py-2 border-b border-border-subtle text-[11px] font-medium text-muted uppercase tracking-wide">
+                <span className="w-[68px] shrink-0">Time</span>
+                <span className="w-[70px] shrink-0">Severity</span>
+                <span className="flex-1">Event</span>
+                <span className="w-[80px] shrink-0 hidden lg:block text-right">Host</span>
+              </div>
+
+              {/* Event rows */}
+              <div>
+                {items.map((event) => (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    selected={selectedEvent?.id === event.id}
+                    onClick={handleSelectEvent}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between mt-4 px-1">
+              <div className="flex items-center gap-3">
+                <CursorPaginationBar
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  itemCount={items.length}
+                  hasMore={hasMore}
+                  onPrev={goPrev}
+                  onNext={goNext}
+                  onPageSize={setPageSize}
+                />
+              </div>
+              <PageSizeSelect value={pageSize} onChange={setPageSize} />
             </div>
           </>
-        }
-      >
-        <Select label="Host" value={filters.host_id} onChange={(e) => setFilters({ ...filters, host_id: e.target.value })} className="min-w-[140px]">
-          <option value="">All hosts</option>
-          {hosts.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-        </Select>
-        <Select label="Severity" value={filters.severity} onChange={(e) => setFilters({ ...filters, severity: e.target.value })} className="min-w-[130px]">
-          <option value="">All severities</option>
-          {["info", "low", "medium", "high", "critical"].map((s) => <option key={s} value={s}>{s}</option>)}
-        </Select>
-      </FilterBar>
-      {isLoading ? (
-        <TableSkeleton />
-      ) : isError ? (
-        <QueryError onRetry={() => refetch()} />
-      ) : items.length === 0 ? (
-        <EmptyState
-          title="No events"
-          description="Enroll an agent on a host, or adjust filters and time range."
-          icon={<Activity className="w-10 h-10 opacity-40" />}
-          action="/hosts"
-          actionLabel="Add a host"
-        />
-      ) : (
-        <div className={isFetching ? "opacity-70 transition-opacity" : ""}>
-          <VirtualDataTable
-            rows={items}
-            columns={columns}
-            rowKey={rowKeyById}
-            renderMobileCard={(e) => (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <SeverityBadge severity={e.severity} />
-                  <span className="text-[11px] text-muted tabular-nums">{new Date(e.timestamp).toLocaleString()}</span>
-                </div>
-                <p className="font-mono text-xs text-accent">{e.event_type}</p>
-                {e.description && <p className="text-sm text-muted line-clamp-2">{e.description}</p>}
-              </div>
-            )}
-          />
-        </div>
-      )}
-      <CursorPaginationBar
-        page={page}
-        pageSize={pageSize}
-        total={total}
-        itemCount={items.length}
-        hasMore={hasMore}
-        onPrev={goPrev}
-        onNext={goNext}
-        onPageSize={setPageSize}
+        )}
+      </div>
+
+      {/* Event detail drawer */}
+      <EventDetailDrawer
+        event={selectedEvent}
+        open={!!selectedEvent}
+        onClose={handleCloseDrawer}
       />
     </div>
   );

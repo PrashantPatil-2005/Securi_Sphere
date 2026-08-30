@@ -130,7 +130,10 @@ const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
   new_incident: [["incidents"]],
   incident_updated: [["incidents"]],
   incident_status_changed: [["incidents"]],
-  // security_feed is handled by useSecurityFeedStore — no query invalidation
+  // security_feed carries real-time events; also invalidate the events list
+  // so the analyst's view stays current. Debouncing (600ms) prevents
+  // excessive refetches during burst ingestion.
+  security_feed: [["events"], ["siem"]],
 };
 
 const INVALIDATION_DEBOUNCE_MS = 600;
