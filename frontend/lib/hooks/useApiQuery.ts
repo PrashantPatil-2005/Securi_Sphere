@@ -1,16 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { parsePaginatedList } from "@/lib/parseList";
 import { useTimeRange } from "@/lib/timeRange";
-
-export function useTimeQueryKey(base: string, extra: Record<string, unknown> = {}) {
-  const { queryParams } = useTimeRange();
-  return [base, queryParams, extra] as const;
-}
 
 export interface MaintenanceWindow {
   id: string;
@@ -43,121 +37,6 @@ export function useHostsList() {
   });
 }
 
-interface PaginatedParams {
-  endpoint: string;
-  queryKey: string;
-  page: number;
-  pageSize: number;
-  sort: string;
-  filters: Record<string, string | number | boolean | undefined | null>;
-  /** When false, omit global time-range params (e.g. host inventory). */
-  includeTimeRange?: boolean;
-}
-
-export function usePaginatedResource<T>({
-  endpoint,
-  queryKey,
-  page,
-  pageSize,
-  sort,
-  filters,
-  includeTimeRange = true,
-}: PaginatedParams) {
-  const { queryParams } = useTimeRange();
-  const timeParams = includeTimeRange ? queryParams : {};
-  return useQuery({
-    queryKey: [queryKey, timeParams, page, pageSize, sort, filters],
-    queryFn: async () => {
-      const q = buildQuery({ page, page_size: pageSize, sort, ...filters }, timeParams);
-      const r = await api<{ items?: T[]; total?: number } | T[]>(`${endpoint}${q}`);
-      return parsePaginatedList(r);
-    },
-    placeholderData: (prev) => prev,
-    staleTime: includeTimeRange ? 30_000 : 15_000,
-  });
-}
-
-interface CursorPaginatedParams {
-  endpoint: string;
-  queryKey: string;
-  pageSize: number;
-  sort: string;
-  filters: Record<string, string | number | boolean | undefined | null>;
-  includeTimeRange?: boolean;
-}
-
-export function useCursorPaginatedResource<T>({
-  endpoint,
-  queryKey,
-  pageSize,
-  sort,
-  filters,
-  includeTimeRange = true,
-}: CursorPaginatedParams) {
-  const { queryParams } = useTimeRange();
-  const timeParams = useMemo(
-    () => (includeTimeRange ? queryParams : {}),
-    [includeTimeRange, queryParams],
-  );
-  const [page, setPage] = useState(1);
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
-
-  const resetKey = useMemo(
-    () => JSON.stringify({ timeParams, pageSize, sort, filters }),
-    [timeParams, pageSize, sort, filters],
-  );
-
-  useEffect(() => {
-    setPage(1);
-    setCursors([null]);
-  }, [resetKey]);
-
-  const activeCursor = cursors[page - 1] ?? null;
-
-  const query = useQuery({
-    queryKey: [queryKey, timeParams, page, pageSize, sort, filters, activeCursor],
-    queryFn: async () => {
-      const paging = activeCursor ? { cursor: activeCursor } : { page: 1 };
-      const q = buildQuery({ page_size: pageSize, sort, ...filters, ...paging }, timeParams);
-      const r = await api<{
-        items?: T[];
-        total?: number;
-        next_cursor?: string | null;
-        has_more?: boolean;
-      } | T[]>(`${endpoint}${q}`);
-      return parsePaginatedList(r);
-    },
-    placeholderData: (prev) => prev,
-    staleTime: includeTimeRange ? 30_000 : 15_000,
-  });
-
-  const goNext = useCallback(() => {
-    const next = query.data?.next_cursor;
-    if (!next || !query.data?.has_more) return;
-    setCursors((prev) => {
-      const copy = [...prev];
-      copy[page] = next;
-      return copy;
-    });
-    setPage((p) => p + 1);
-  }, [page, query.data]);
-
-  const goPrev = useCallback(() => {
-    setPage((p) => Math.max(1, p - 1));
-  }, []);
-
-  return {
-    ...query,
-    page,
-    pageSize,
-    goNext,
-    goPrev,
-    hasMore: query.data?.has_more ?? false,
-    total: query.data?.total ?? 0,
-    items: query.data?.items ?? [],
-  };
-}
-
 export function useSiemQuery<T>(path: string, extra: Record<string, string> = {}, enabled = true) {
   const { queryParams } = useTimeRange();
   return useQuery({
@@ -168,55 +47,5 @@ export function useSiemQuery<T>(path: string, extra: Record<string, string> = {}
     },
     enabled,
     staleTime: 45_000,
-  });
-}
-
-export function useAlertStatusMutation(onSuccess?: () => void) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) =>
-      api(`/api/v1/alerts/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
-    onMutate: async ({ id, status }) => {
-      await queryClient.cancelQueries({ queryKey: ["alerts"] });
-      const previous = queryClient.getQueriesData({ queryKey: ["alerts"] });
-      queryClient.setQueriesData({ queryKey: ["alerts"] }, (old: unknown) => {
-        if (!old || typeof old !== "object") return old;
-        const data = old as { items?: { id: string; status: string }[]; total?: number };
-        if (Array.isArray(data.items)) {
-          return { ...data, items: data.items.map((a) => (a.id === id ? { ...a, status } : a)) };
-        }
-        if (Array.isArray(old)) {
-          return (old as { id: string; status: string }[]).map((a) => (a.id === id ? { ...a, status } : a));
-        }
-        return old;
-      });
-      return { previous };
-    },
-    onError: (_err, _vars, context) => {
-      if (context?.previous) {
-        for (const [key, data] of context.previous) {
-          queryClient.setQueryData(key, data);
-        }
-      }
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["alerts"] });
-      onSuccess?.();
-    },
-  });
-}
-
-export function useAlertBulkMutation(onSuccess?: () => void) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (body: { alert_ids: string[]; status?: string; assigned_to?: string }) =>
-      api<{ updated: number; not_found: string[] }>("/api/v1/alerts/bulk", {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["alerts"] });
-      onSuccess?.();
-    },
   });
 }

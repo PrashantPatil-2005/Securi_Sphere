@@ -88,11 +88,13 @@ export default function RulesPage() {
           </Link>
         }
       />
-      <div className="flex gap-2">
+      <div className="flex gap-2" role="tablist">
         {(["detection", "correlation"] as const).map((t) => (
           <button
             key={t}
             type="button"
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => startTransition(() => setTab(t))}
             className={cn("btn-ghost capitalize", tab === t && "bg-accent/10 text-accent border-accent/30")}
           >

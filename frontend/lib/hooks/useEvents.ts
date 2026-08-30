@@ -28,32 +28,6 @@ function normalizeList(
   };
 }
 
-interface UseEventListParams {
-  page: number;
-  pageSize: number;
-  sort: string;
-  filters: EventFilters;
-}
-
-export function useEventList(params: UseEventListParams) {
-  const { queryParams } = useTimeRange();
-  const { page, pageSize, sort, filters } = params;
-
-  return useQuery({
-    queryKey: ["events", queryParams, page, pageSize, sort, filters],
-    queryFn: async () => {
-      const q = buildQuery(
-        { page, page_size: pageSize, sort, ...filters },
-        queryParams,
-      );
-      const r = await api<EventListResponse | EventSummary[]>(`${API.EVENTS.LIST}${q}`);
-      return normalizeList(r);
-    },
-    placeholderData: (prev) => prev,
-    staleTime: 30_000,
-  });
-}
-
 /** Cursor-based event list (for keyset pagination). */
 export function useEventCursorList(params: {
   pageSize: number;

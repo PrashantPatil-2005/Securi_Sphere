@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Canonical Event types matching backend EventResponse schema.
  *

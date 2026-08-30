@@ -141,11 +141,14 @@ function SettingsPageContent() {
       />
 
       {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-border-subtle">
+      <div className="flex gap-1 border-b border-border-subtle" role="tablist">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`panel-${tab.id}`}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
@@ -159,7 +162,7 @@ function SettingsPageContent() {
       </div>
 
       {/* Tab content */}
-      <div>
+      <div role="tabpanel" id={`panel-${activeTab}`}>
         {activeTab === "appearance" && <AppearanceTab />}
         {activeTab === "notifications" && <NotificationsTab />}
         {activeTab === "playbooks" && isAnalyst && <PlaybooksPanel isAdmin={isAdmin} />}

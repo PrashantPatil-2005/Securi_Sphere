@@ -7,6 +7,19 @@ vi.mock("@/lib/api", () => ({
   API_URL: "http://localhost:8000",
 }));
 
+vi.mock("@/lib/download", () => ({
+  downloadAuthenticated: async (path: string, _filename: string) => {
+    const res = await fetch(`http://localhost:8000${path}`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      if (res.status === 403) throw new Error("Insufficient permissions");
+      throw new Error(`Server returned ${res.status}`);
+    }
+    await res.blob();
+  },
+}));
+
 const mockToast = vi.fn();
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: mockToast }),

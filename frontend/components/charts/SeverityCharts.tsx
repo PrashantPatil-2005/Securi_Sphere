@@ -58,7 +58,7 @@ function SeverityCharts({ distribution }: { distribution: Item[] }) {
         </ResponsiveContainer>
         <div className="mt-3 grid grid-cols-5 gap-1.5 text-center text-[11px]">
           {distribution.map((d) => (
-            <div key={d.severity} className="p-2 bg-[#0a1018] rounded border border-[var(--border-subtle)]">
+            <div key={d.severity} className="p-2 bg-[var(--card)] rounded border border-[var(--border-subtle)]">
               <p className="text-[var(--muted)] uppercase">{d.severity}</p>
               <p className="text-base font-semibold tabular-nums" style={{ color: COLORS[d.severity] }}>{d.percentage}%</p>
             </div>

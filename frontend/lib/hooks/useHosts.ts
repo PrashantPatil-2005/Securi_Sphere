@@ -72,22 +72,6 @@ export function useHostCreateMutation(options?: {
   });
 }
 
-export function useHostDeleteMutation(options?: {
-  onSuccess?: () => void;
-  onError?: (e: Error) => void;
-}) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      api(API.HOSTS.DETAIL(id), { method: "DELETE" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["hosts"] });
-      options?.onSuccess?.();
-    },
-    onError: options?.onError,
-  });
-}
-
 /** Fetch alerts for a specific host. */
 export function useHostAlerts(hostId: string | null, enabled = true) {
   return useQuery({

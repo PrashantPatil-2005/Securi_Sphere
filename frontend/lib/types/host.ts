@@ -1,5 +1,3 @@
-"use client";
-
 /**
  * Canonical Host types matching backend HostResponse schema.
  *

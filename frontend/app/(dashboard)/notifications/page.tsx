@@ -43,7 +43,7 @@ export default function NotificationsPage() {
       />
 
       <FilterBar>
-        <label className="flex items-center gap-2 text-sm text-[var(--muted)] cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
           <input
             type="checkbox"
             checked={unreadOnly}
@@ -55,7 +55,7 @@ export default function NotificationsPage() {
           Unread only
         </label>
         {data && (
-          <span className="text-sm text-[var(--muted)] ml-auto">
+          <span className="text-sm text-muted ml-auto">
             {data.unread_count} unread · {data.total} total
           </span>
         )}
@@ -87,14 +87,14 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         {item.severity && <SeverityBadge severity={item.severity} />}
-                        <span className="text-xs uppercase tracking-wide text-[var(--muted)]">{item.kind}</span>
+                        <span className="text-xs uppercase tracking-wide text-muted">{item.kind}</span>
                         {!item.read && (
                           <span className="text-[10px] font-semibold text-accent uppercase">New</span>
                         )}
                       </div>
                       <p className="font-medium text-sm">{item.title}</p>
-                      {item.body && <p className="text-sm text-[var(--muted)] mt-1">{item.body}</p>}
-                      <p className="text-[11px] text-[var(--muted)] mt-2 tabular-nums">
+                      {item.body && <p className="text-sm text-muted mt-1">{item.body}</p>}
+                      <p className="text-[11px] text-muted mt-2 tabular-nums">
                         {new Date(item.created_at).toLocaleString()}
                       </p>
                     </div>

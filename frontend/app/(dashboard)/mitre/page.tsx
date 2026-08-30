@@ -21,9 +21,9 @@ const LazyBarChart = dynamic(
         return (
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={data}>
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#7b8ba3" }} />
-              <YAxis domain={[0, 100]} stroke="#7b8ba3" />
-              <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: "var(--muted)" }} />
+              <YAxis domain={[0, 100]} stroke="var(--muted)" />
+              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)" }} />
               <Bar dataKey="coverage" fill="var(--accent)" isAnimationActive={false} name="Coverage %" />
             </BarChart>
           </ResponsiveContainer>

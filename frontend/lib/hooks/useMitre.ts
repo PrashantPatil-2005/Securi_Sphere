@@ -1,18 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type {
-  MitreTechnique,
   MitreMatrixResponse,
   MitreDrilldownResponse,
 } from "@/lib/types/mitre";
-
-export function useMitreTechniques() {
-  return useQuery({
-    queryKey: ["mitre", "techniques"],
-    queryFn: () => api<MitreTechnique[]>("/api/v1/mitre/techniques"),
-    staleTime: 300_000,
-  });
-}
 
 export function useMitreMatrix(params: {
   preset?: string;

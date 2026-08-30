@@ -80,7 +80,7 @@ export default function MetricsPage() {
     <div className="space-y-6">
       <PageHeader title="Host Metrics" subtitle="CPU, memory, and disk utilization over time" />
       <TimeRangeBar />
-      <select value={hostId} onChange={(e) => setHostId(e.target.value)} className="input-siem max-w-xs">
+      <select value={hostId} onChange={(e) => setHostId(e.target.value)} className="input-siem max-w-xs" aria-label="Select host">
         {hosts.map((h) => (
           <option key={h.id} value={h.id}>
             {h.name}
