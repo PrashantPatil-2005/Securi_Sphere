@@ -1,27 +1,54 @@
-import { chartColors } from "@/lib/design/tokens";
+/**
+ * Securi Sphere Chart Theme
+ *
+ * Theme-aware chart configuration for Recharts.
+ * All colors use CSS custom properties for dark/light mode support.
+ */
 
 export const CHART_THEME = {
-  grid: chartColors.grid,
-  axis: chartColors.secondary,
+  grid: "var(--border-subtle)",
+  axis: "var(--muted)",
   tooltip: {
     contentStyle: {
-      background: chartColors.tooltip.bg,
-      border: `1px solid ${chartColors.tooltip.border}`,
+      background: "var(--card-elevated)",
+      border: "1px solid var(--border)",
       borderRadius: "6px",
       fontSize: "12px",
     },
-    labelStyle: { color: chartColors.secondary },
+    labelStyle: { color: "var(--muted)" },
   },
   colors: {
-    primary: chartColors.primary,
-    danger: chartColors.danger,
-    success: chartColors.success,
-    warning: chartColors.warning,
+    primary: "var(--accent)",
+    danger: "var(--danger)",
+    success: "var(--success)",
+    warning: "var(--warning)",
   },
-  severity: [chartColors.critical, chartColors.high, chartColors.medium, chartColors.low, chartColors.info],
+  severity: [
+    "var(--severity-critical)",
+    "var(--severity-high)",
+    "var(--severity-medium)",
+    "var(--severity-low)",
+    "var(--severity-info)",
+  ],
+  series: [
+    "var(--accent)",
+    "var(--success)",
+    "var(--warning)",
+    "var(--severity-high)",
+    "var(--severity-critical)",
+    "var(--muted)",
+    "var(--severity-low)",
+    "var(--severity-info)",
+  ],
 } as const;
 
 export const axisProps = {
-  tick: { fontSize: 11, fill: chartColors.secondary },
-  stroke: chartColors.grid,
+  tick: { fontSize: 11, fill: "var(--muted)" },
+  stroke: "var(--border-subtle)",
 };
+
+export const CHART_MARGINS = {
+  compact: { top: 5, right: 5, bottom: 5, left: 5 },
+  default: { top: 5, right: 10, bottom: 5, left: 0 },
+  withLegend: { top: 5, right: 10, bottom: 20, left: 0 },
+} as const;
