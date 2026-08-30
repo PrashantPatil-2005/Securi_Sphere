@@ -172,8 +172,14 @@ async def ingest_metrics(
     if host.status in ("offline", "critical", "warning"):
         host.status = "online"
     await db.flush()
-    await run_detection_for_host(db, host)
-    await calculate_host_scores(db, host)
+
+    from app.jobs.queue import job_queue, JobPriority
+    host_id_str = str(host.id)
+    await job_queue.enqueue(
+        "detection_and_scores",
+        {"host_id": host_id_str},
+        priority=JobPriority.NORMAL,
+    )
     return {"ingested": len(body.metrics)}
 
 

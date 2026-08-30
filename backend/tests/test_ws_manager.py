@@ -2,6 +2,11 @@
 
 Tests connection lifecycle, broadcast, dead connection cleanup,
 and Redis pub/sub integration path.
+
+Production API (see app/routers/ws.py):
+  1. await websocket.accept()
+  2. ws_manager.connect(websocket)   # sync — just registers the connection
+  3. ws_manager.disconnect(websocket) # on disconnect
 """
 
 import asyncio
@@ -33,37 +38,32 @@ class TestConnectionManagerInit:
 
 
 class TestConnectDisconnect:
-    @pytest.mark.asyncio
-    async def test_connect_adds_to_active(self):
+    def test_connect_adds_to_active(self):
         mgr = ConnectionManager()
         ws = _mock_ws()
-        await mgr.connect(ws)
+        mgr.connect(ws)
         assert ws in mgr.active
         assert len(mgr.active) == 1
-        ws.accept.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_disconnect_removes_from_active(self):
+    def test_disconnect_removes_from_active(self):
         mgr = ConnectionManager()
         ws = _mock_ws()
-        await mgr.connect(ws)
+        mgr.connect(ws)
         mgr.disconnect(ws)
         assert ws not in mgr.active
 
-    @pytest.mark.asyncio
-    async def test_disconnect_nonexistent_is_noop(self):
+    def test_disconnect_nonexistent_is_noop(self):
         mgr = ConnectionManager()
         ws = _mock_ws()
         mgr.disconnect(ws)  # Should not raise
         assert mgr.active == []
 
-    @pytest.mark.asyncio
-    async def test_multiple_connections(self):
+    def test_multiple_connections(self):
         mgr = ConnectionManager()
         ws1, ws2, ws3 = _mock_ws(), _mock_ws(), _mock_ws()
-        await mgr.connect(ws1)
-        await mgr.connect(ws2)
-        await mgr.connect(ws3)
+        mgr.connect(ws1)
+        mgr.connect(ws2)
+        mgr.connect(ws3)
         assert len(mgr.active) == 3
         mgr.disconnect(ws2)
         assert len(mgr.active) == 2
@@ -76,8 +76,8 @@ class TestBroadcastLocal:
     async def test_broadcast_sends_to_all(self):
         mgr = ConnectionManager()
         ws1, ws2 = _mock_ws(), _mock_ws()
-        await mgr.connect(ws1)
-        await mgr.connect(ws2)
+        mgr.connect(ws1)
+        mgr.connect(ws2)
         msg = {"type": "test", "data": {"key": "value"}}
         await mgr._broadcast_local(msg)
         payload = json.dumps(msg)
@@ -96,8 +96,8 @@ class TestBroadcastLocal:
         ws_good = _mock_ws()
         ws_bad = _mock_ws()
         ws_bad.send_text.side_effect = ConnectionError("broken pipe")
-        await mgr.connect(ws_good)
-        await mgr.connect(ws_bad)
+        mgr.connect(ws_good)
+        mgr.connect(ws_bad)
         await mgr._broadcast_local({"type": "test"})
         assert ws_bad not in mgr.active
         assert ws_good in mgr.active
@@ -109,8 +109,8 @@ class TestBroadcastLocal:
         ws2 = _mock_ws()
         ws1.send_text.side_effect = ConnectionError("pipe1")
         ws2.send_text.side_effect = ConnectionError("pipe2")
-        await mgr.connect(ws1)
-        await mgr.connect(ws2)
+        mgr.connect(ws1)
+        mgr.connect(ws2)
         await mgr._broadcast_local({"type": "test"})
         assert mgr.active == []
 
@@ -120,8 +120,8 @@ class TestStop:
     async def test_stop_closes_all_connections(self):
         mgr = ConnectionManager()
         ws1, ws2 = _mock_ws(), _mock_ws()
-        await mgr.connect(ws1)
-        await mgr.connect(ws2)
+        mgr.connect(ws1)
+        mgr.connect(ws2)
         await mgr.stop()
         ws1.close.assert_awaited_once()
         ws2.close.assert_awaited_once()
@@ -132,7 +132,7 @@ class TestStop:
         mgr = ConnectionManager()
         ws = _mock_ws()
         ws.close.side_effect = Exception("already closed")
-        await mgr.connect(ws)
+        mgr.connect(ws)
         await mgr.stop()  # Should not raise
         assert mgr.active == []
 
@@ -163,7 +163,7 @@ class TestBroadcastMemory:
     async def test_broadcast_memory_calls_local(self):
         mgr = ConnectionManager()
         ws = _mock_ws()
-        await mgr.connect(ws)
+        mgr.connect(ws)
         msg = {"type": "alert", "data": {"id": 1}}
         with patch.object(mgr, "_broadcast_local", new_callable=AsyncMock) as mock_local:
             await mgr.broadcast(msg)
@@ -175,7 +175,7 @@ class TestBroadcastMemory:
         mgr = ConnectionManager()
         mgr._use_redis = True
         ws = _mock_ws()
-        await mgr.connect(ws)
+        mgr.connect(ws)
         msg = {"type": "alert"}
         with (
             patch("app.websocket.redis_pubsub.publish_ws_message", new_callable=AsyncMock, return_value=False),

@@ -60,8 +60,23 @@ async def handle_ueba_scan() -> None:
         await db.commit()
 
 
+async def handle_detection_and_scores(host_id: str) -> None:
+    from uuid import UUID as UUIDType
+    from app.services.detection import run_detection_for_host
+    from app.services.threat_score import calculate_host_scores
+    from app.models.host import Host
+
+    async with async_session() as db:
+        host = await db.get(Host, UUIDType(host_id))
+        if host:
+            await run_detection_for_host(db, host)
+            await calculate_host_scores(db, host)
+            await db.commit()
+
+
 def register_job_handlers() -> None:
     job_queue.register("notify_alert", handle_notify_alert)
     job_queue.register("notify_offense", handle_notify_offense)
     job_queue.register("playbook_dispatch", handle_playbook_dispatch)
     job_queue.register("correlation_pipeline", handle_correlation_pipeline)
+    job_queue.register("detection_and_scores", handle_detection_and_scores)

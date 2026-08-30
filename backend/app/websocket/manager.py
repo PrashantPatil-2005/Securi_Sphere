@@ -9,6 +9,9 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+WS_SEND_TIMEOUT_SECONDS = 5.0
+WS_BROADCAST_CONCURRENCY = 50
+
 
 class ConnectionManager:
     """WebSocket connections with optional Redis pub/sub for multi-instance broadcast."""
@@ -68,12 +71,17 @@ class ConnectionManager:
     async def _broadcast_local(self, message: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
         payload = json.dumps(message)
-        for ws in list(self.active):
-            try:
-                await ws.send_text(payload)
-            except Exception:
-                logger.debug("WebSocket send failed, marking dead", exc_info=True)
-                dead.append(ws)
+        sem = asyncio.Semaphore(WS_BROADCAST_CONCURRENCY)
+
+        async def _send_one(ws: WebSocket) -> None:
+            async with sem:
+                try:
+                    await asyncio.wait_for(ws.send_text(payload), timeout=WS_SEND_TIMEOUT_SECONDS)
+                except (asyncio.TimeoutError, Exception):
+                    logger.debug("WebSocket send failed, marking dead", exc_info=True)
+                    dead.append(ws)
+
+        await asyncio.gather(*[_send_one(ws) for ws in list(self.active)], return_exceptions=True)
         for ws in dead:
             self.disconnect(ws)
 

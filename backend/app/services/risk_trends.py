@@ -48,7 +48,12 @@ async def risk_score_trends(
         top = await top_risky_hosts(db, min(limit, 20))
         host_ids = [UUID(h["host_id"]) for h in top[:limit]]
 
-    hosts_map = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
+    hosts_map = {}
+    if host_ids:
+        host_rows = (
+            await db.execute(select(Host.id, Host.name).where(Host.id.in_(host_ids)))
+        ).all()
+        hosts_map = {row[0]: row[1] for row in host_rows}
     series: list[dict] = []
 
     for hid in host_ids:

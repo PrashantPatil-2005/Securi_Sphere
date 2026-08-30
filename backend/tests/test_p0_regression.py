@@ -453,5 +453,5 @@ class TestAgentBufferSizeLimit:
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         import inspect
-        source = inspect.getsource(mod.init_db)
+        source = inspect.getsource(mod._connect)
         assert "WAL" in source

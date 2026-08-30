@@ -14,6 +14,7 @@ import hmac
 import json
 import logging
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -31,6 +32,7 @@ INITIAL_BACKOFF_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 60.0
 BACKOFF_MULTIPLIER = 2.0
 MAX_RETRIES_BEFORE_BUFFER = 3
+MAX_CONSECUTIVE_FAILURES = 100
 
 
 def _sign(api_key: str, timestamp: str, nonce: str, body: bytes) -> str:
@@ -68,6 +70,7 @@ class Sender:
         self._consecutive_failures = 0
         self._current_backoff = INITIAL_BACKOFF_SECONDS
         self._last_attempt = 0.0
+        self._backoff_event = threading.Event()
 
     def _get_backoff(self) -> float:
         """Calculate current backoff with exponential increase + jitter."""
@@ -78,6 +81,15 @@ class Sender:
         # Add small jitter (0-20%) to prevent thundering herd
         jitter = base * 0.2 * secrets.randbelow(100) / 100
         return base + jitter
+
+    def _interruptible_sleep(self, seconds: float) -> None:
+        """Sleep that can be interrupted by calling _backoff_event.set()."""
+        self._backoff_event.clear()
+        self._backoff_event.wait(timeout=seconds)
+
+    def abort_backoff(self) -> None:
+        """Interrupt any current backoff sleep (e.g., on shutdown)."""
+        self._backoff_event.set()
 
     def _post(self, path: str, data: dict, buffer_kind: str | None = None) -> bool:
         body = json.dumps(data, separators=(",", ":"), default=str).encode()
@@ -96,7 +108,7 @@ class Sender:
         wait = self._get_backoff() - (now - self._last_attempt)
         if wait > 0 and self._consecutive_failures > 0:
             logger.info("Backing off %.1fs (attempt %d failed)", wait, self._consecutive_failures)
-            time.sleep(wait)
+            self._interruptible_sleep(wait)
 
         self._last_attempt = time.time()
 
@@ -104,14 +116,14 @@ class Sender:
             r = self.session.post(f"{self.base}{path}", data=body, headers=headers, timeout=15)
             if r.status_code == 401:
                 logger.error("Invalid API key or signature rejected")
-                self._consecutive_failures += 1
+                self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
                 return False
             if r.status_code == 429:
                 # Rate limited — back off aggressively
                 retry_after = int(r.headers.get("Retry-After", 30))
                 logger.warning("Rate limited, backing off %ds", retry_after)
-                time.sleep(retry_after)
-                self._consecutive_failures += 1
+                self._interruptible_sleep(retry_after)
+                self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
                 if buffer_kind:
                     enqueue(buffer_kind, data)
                 return False
@@ -121,7 +133,7 @@ class Sender:
             self._current_backoff = INITIAL_BACKOFF_SECONDS
             return True
         except requests.RequestException as e:
-            self._consecutive_failures += 1
+            self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
             logger.warning(
                 "Request failed (%d consecutive): %s",
                 self._consecutive_failures, e,

@@ -80,11 +80,17 @@ async def threat_intel_feed_job() -> None:
 
 
 def start_scheduler() -> None:
-    """Register all jobs and start the scheduler."""
+    """Register all jobs and start the scheduler.
+
+    All jobs use max_instances=1 to prevent overlapping runs.
+    coalesce=True: if a job misses multiple triggers, only one run is executed.
+    misfire_grace_time=60: jobs triggered within 60s of their schedule are still run.
+    """
     register_job_handlers()
     now = datetime.now()
     scheduler.add_job(status_job, "interval", seconds=30, id="host_status",
-                      next_run_time=now + timedelta(seconds=30), max_instances=1)
+                      next_run_time=now + timedelta(seconds=30), max_instances=1,
+                      coalesce=True, misfire_grace_time=60)
     scheduler.add_job(
         cross_host_correlation_job,
         "interval",
@@ -92,13 +98,18 @@ def start_scheduler() -> None:
         id="cross_host_correlation",
         next_run_time=now + timedelta(seconds=60),
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
     )
     scheduler.add_job(run_retention, "cron", hour=2, id="retention",
-                      next_run_time=now + timedelta(hours=1), max_instances=1)
+                      next_run_time=now + timedelta(hours=1), max_instances=1,
+                      coalesce=True, misfire_grace_time=3600)
     scheduler.add_job(backup_job, "cron", hour=settings.backup_schedule_hour, id="postgres_backup",
-                      next_run_time=now + timedelta(hours=1), max_instances=1)
+                      next_run_time=now + timedelta(hours=1), max_instances=1,
+                      coalesce=True, misfire_grace_time=3600)
     scheduler.add_job(analytics_job, "cron", hour=3, id="analytics",
-                      next_run_time=now + timedelta(hours=1), max_instances=1)
+                      next_run_time=now + timedelta(hours=1), max_instances=1,
+                      coalesce=True, misfire_grace_time=3600)
     scheduler.add_job(
         analytics_mv_job,
         "interval",
@@ -106,6 +117,8 @@ def start_scheduler() -> None:
         id="analytics_materialized_views",
         next_run_time=now + timedelta(minutes=5),
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
     )
     scheduler.add_job(
         threat_intel_feed_job,
@@ -114,10 +127,14 @@ def start_scheduler() -> None:
         id="threat_intel_feed_sync",
         next_run_time=now + timedelta(minutes=3),
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=120,
     )
     scheduler.add_job(ueba_scan_job, "interval", minutes=settings.ueba_scan_interval_minutes, id="ueba_scan",
-                      next_run_time=now + timedelta(minutes=2), max_instances=1)
+                      next_run_time=now + timedelta(minutes=2), max_instances=1,
+                      coalesce=True, misfire_grace_time=120)
     scheduler.add_job(saved_search_job, "interval", minutes=5, id="saved_search_alerts",
-                      next_run_time=now + timedelta(minutes=1), max_instances=1)
+                      next_run_time=now + timedelta(minutes=1), max_instances=1,
+                      coalesce=True, misfire_grace_time=120)
     scheduler.start()
     logger.info("Scheduler started")

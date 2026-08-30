@@ -22,22 +22,48 @@ async def shutdown_application(
     job_queue: JobQueue,
     ws_manager: ConnectionManager,
 ) -> None:
-    """Drain work and release resources within the configured grace window."""
+    """Drain work and release resources within the configured grace window.
+
+    Shutdown order:
+    1. Signal shutdown state (health probes return 503)
+    2. Stop scheduler (no new scheduled jobs)
+    3. Stop job queue (wait for active jobs with timeout)
+    4. Stop WebSocket manager (close connections, cancel Redis listener)
+    5. Close database connections
+    """
     shutdown_state.begin()
-    logger.info("graceful shutdown started", extra={"grace_seconds": settings.shutdown_grace_seconds})
+    grace = settings.shutdown_grace_seconds
+    logger.info("graceful shutdown started", extra={"grace_seconds": grace})
 
     if scheduler.running:
-        scheduler.shutdown(wait=False)
-
-    await ws_manager.stop()
+        try:
+            scheduler.shutdown(wait=True)
+        except Exception:
+            logger.warning("scheduler shutdown raised exception", exc_info=True)
 
     try:
         await asyncio.wait_for(
-            job_queue.stop(grace_seconds=settings.shutdown_grace_seconds),
-            timeout=settings.shutdown_grace_seconds,
+            job_queue.stop(grace_seconds=grace),
+            timeout=grace + 2,
         )
     except asyncio.TimeoutError:
         logger.warning("job queue stop timed out during shutdown")
 
-    await dispose_engines()
+    try:
+        await asyncio.wait_for(ws_manager.stop(), timeout=5)
+    except asyncio.TimeoutError:
+        logger.warning("websocket manager stop timed out")
+
+    from app.websocket.redis_pubsub import close_redis as close_ws_redis
+    from app.jobs.redis_broker import close_redis as close_broker_redis
+    try:
+        await asyncio.wait_for(asyncio.gather(close_ws_redis(), close_broker_redis()), timeout=5)
+    except asyncio.TimeoutError:
+        logger.warning("redis cleanup timed out")
+
+    try:
+        await asyncio.wait_for(dispose_engines(), timeout=5)
+    except asyncio.TimeoutError:
+        logger.warning("database dispose timed out")
+
     logger.info("graceful shutdown complete")

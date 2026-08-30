@@ -52,12 +52,15 @@ async def init_db() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.testing:
+        await init_db()
+        from app.jobs.handlers import register_job_handlers
+        register_job_handlers()
         from app.jobs.queue import job_queue
         job_queue.start()
         await ws_manager.start()
-    await init_db()
-    if not settings.testing:
         start_scheduler()
+    else:
+        await init_db()
     logger.info(f"{PRODUCT_NAME} backend started", extra={"environment": settings.environment})
     yield
     if not settings.testing:

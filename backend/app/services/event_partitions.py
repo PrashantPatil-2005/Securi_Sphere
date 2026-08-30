@@ -62,6 +62,9 @@ async def ensure_event_partitions(months_ahead: int = 3, months_back: int = 12) 
             y -= 1
 
     async with engine.begin() as conn:
+        # Use advisory lock to prevent concurrent DDL from multiple instances
+        # Lock ID 0x6576656E745F7061 = hash of "event_partition" as bigint
+        await conn.execute(text("SELECT pg_advisory_xact_lock(0x6576656E745F7061)"))
         for year, month in sorted(set(targets)):
             name = _partition_name(year, month)
             _validate_partition_name(name)

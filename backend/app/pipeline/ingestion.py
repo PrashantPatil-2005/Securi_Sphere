@@ -22,12 +22,19 @@ Security controls:
   - Field length limits: max 8192 chars for strings
   - Deduplication: SHA-256 fingerprint prevents re-ingestion
   - HMAC signing: agent signs each request (optional, prevents replay)
+
+Backpressure:
+  - Ingestion semaphore limits concurrent database writes
+  - When capacity is exhausted, clients receive 429 (Too Many Requests)
+  - Protects database pool from being saturated by agent bursts
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -43,6 +50,10 @@ from app.websocket.manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
+# Backpressure: limit concurrent ingestion to protect the database pool
+MAX_CONCURRENT_INGESTION = 20
+_ingestion_semaphore = asyncio.Semaphore(MAX_CONCURRENT_INGESTION)
+
 # Performance counter — tracks events/second across the lifetime of the process
 _INGESTION_COUNTER = {
     "total_events": 0,
@@ -54,6 +65,25 @@ _INGESTION_COUNTER = {
 
 
 async def ingest_event_batch(
+    db: AsyncSession,
+    host: Host,
+    events: list[EventIngest],
+    *,
+    async_pipeline: bool = True,
+) -> tuple[list[Event], list[str], int]:
+    if not _ingestion_semaphore.locked():
+        pass  # capacity available
+    else:
+        acquired = await asyncio.wait_for(_ingestion_semaphore.acquire(), timeout=5.0) if not _ingestion_semaphore.locked() else False
+        if not acquired:
+            raise HTTPException(status_code=429, detail="Ingestion capacity exhausted — retry later")
+        _ingestion_semaphore.release()
+
+    async with _ingestion_semaphore:
+        return await _ingest_event_batch_inner(db, host, events, async_pipeline=async_pipeline)
+
+
+async def _ingest_event_batch_inner(
     db: AsyncSession,
     host: Host,
     events: list[EventIngest],

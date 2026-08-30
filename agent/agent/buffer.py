@@ -9,12 +9,21 @@ DB_PATH = Path("/var/lib/securi/buffer.db")
 
 MAX_BUFFER_ITEMS = 50000
 MAX_BUFFER_SIZE_MB = 500
+SQLITE_BUSY_TIMEOUT_MS = 5000
+
+
+def _connect() -> sqlite3.Connection:
+    """Open a connection with WAL mode and busy timeout configured."""
+    conn = sqlite3.connect(DB_PATH, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    return conn
 
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn = _connect()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,7 +38,7 @@ def init_db() -> None:
 
 
 def queue_size() -> int:
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     count = conn.execute("SELECT COUNT(*) FROM queue").fetchone()[0]
     conn.close()
     return count
@@ -70,11 +79,11 @@ def enqueue(kind: str, payload: dict) -> bool:
             current_mb,
             MAX_BUFFER_SIZE_MB,
         )
-        conn = sqlite3.connect(DB_PATH)
+        conn = _connect()
         _purge_oldest(conn, MAX_BUFFER_ITEMS // 10)
         conn.close()
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     conn.execute(
         "INSERT INTO queue (kind, payload, created_at) VALUES (?, ?, ?)",
         (kind, json.dumps(payload), time.time()),
@@ -86,7 +95,7 @@ def enqueue(kind: str, payload: dict) -> bool:
 
 def dequeue_all() -> list[tuple[int, str, dict]]:
     """Return all items with their IDs so callers can remove only successful ones."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     rows = conn.execute("SELECT id, kind, payload FROM queue ORDER BY id").fetchall()
     conn.close()
     return [(r[0], r[1], json.loads(r[2])) for r in rows]
@@ -96,7 +105,7 @@ def remove_by_ids(ids: list[int]) -> None:
     """Remove only the items that were successfully sent."""
     if not ids:
         return
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     placeholders = ",".join("?" * len(ids))
     conn.execute(f"DELETE FROM queue WHERE id IN ({placeholders})", ids)
     conn.commit()
@@ -104,7 +113,7 @@ def remove_by_ids(ids: list[int]) -> None:
 
 
 def clear_queue() -> None:
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     conn.execute("DELETE FROM queue")
     conn.commit()
     conn.close()
@@ -114,7 +123,7 @@ def purge_stale(max_age_hours: int = 48) -> int:
     """Remove items older than max_age_hours to prevent unbounded growth."""
     import time
     cutoff = time.time() - (max_age_hours * 3600)
-    conn = sqlite3.connect(DB_PATH)
+    conn = _connect()
     cursor = conn.execute("DELETE FROM queue WHERE created_at < ?", (cutoff,))
     deleted = cursor.rowcount
     conn.commit()

@@ -373,10 +373,12 @@ async def refresh(
 
     token_hash = hash_token(refresh_token)
     result = await db.execute(
-        select(RefreshToken).where(
+        select(RefreshToken)
+        .where(
             RefreshToken.token_hash == token_hash,
             RefreshToken.expires_at > datetime.now(timezone.utc),
         )
+        .with_for_update()
     )
     stored = result.scalar_one_or_none()
     if not stored:
@@ -384,10 +386,12 @@ async def refresh(
 
     session = (
         await db.execute(
-            select(UserSession).where(
+            select(UserSession)
+            .where(
                 UserSession.refresh_token_hash == token_hash,
                 UserSession.revoked_at.is_(None),
             )
+            .with_for_update()
         )
     ).scalar_one_or_none()
     if not session:
@@ -470,22 +474,28 @@ async def reset_password(
 ):
     await check_reset_password(client_ip(request))
     token_hash = hash_token(body.token)
+
+    now = datetime.now(timezone.utc)
+    from sqlalchemy import update as sa_update
     result = await db.execute(
-        select(PasswordResetToken).where(
+        sa_update(PasswordResetToken)
+        .where(
             PasswordResetToken.token_hash == token_hash,
             PasswordResetToken.used_at.is_(None),
-            PasswordResetToken.expires_at > datetime.now(timezone.utc),
+            PasswordResetToken.expires_at > now,
         )
+        .values(used_at=now)
+        .returning(PasswordResetToken.user_id)
     )
-    reset_token = result.scalar_one_or_none()
-    if not reset_token:
+    row = result.first()
+    if not row:
         await record_reset_token_failure(body.token)
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    user_result = await db.execute(select(User).where(User.id == reset_token.user_id))
+    user_id = row[0]
+    user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one()
     user.hashed_password = hash_password(body.new_password)
-    reset_token.used_at = datetime.now(timezone.utc)
     await log_audit(db, "password_reset", user_id=user.id)
     return {"message": "Password reset successful"}
 

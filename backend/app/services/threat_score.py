@@ -142,9 +142,17 @@ async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore
 
 
 async def update_all_threat_scores(db: AsyncSession) -> None:
-    hosts = (await db.execute(select(Host))).scalars().all()
-    for host in hosts:
-        score_row = await calculate_host_scores(db, host)
-        host.health_status = (
-            "critical" if score_row.score >= 70 else "warning" if score_row.score >= 40 else "healthy"
-        )
+    batch_size = 100
+    offset = 0
+    while True:
+        hosts = (
+            await db.execute(select(Host).offset(offset).limit(batch_size))
+        ).scalars().all()
+        if not hosts:
+            break
+        for host in hosts:
+            score_row = await calculate_host_scores(db, host)
+            host.health_status = (
+                "critical" if score_row.score >= 70 else "warning" if score_row.score >= 40 else "healthy"
+            )
+        offset += batch_size

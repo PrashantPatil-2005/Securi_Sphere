@@ -143,13 +143,10 @@ class JobQueue:
                     )
             except asyncio.TimeoutError:
                 logger.error(
-                    "job timed out after %ds",
+                    "job timed out after %ds — not requeued (handler may still be running)",
                     DEFAULT_JOB_TIMEOUT,
-                    extra={"job_name": job.name, "job_id": job.id},
+                    extra={"job_name": job.name, "job_id": job.id, "retry_count": job.retry_count},
                 )
-                job.retry_count += 1
-                if job.retry_count <= job.max_retries:
-                    await self._requeue(job)
             except Exception:
                 job.retry_count += 1
                 if job.retry_count <= job.max_retries:
