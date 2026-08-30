@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { FileText, Server, ShieldAlert, ShieldCheck } from "lucide-react";
+import { FileText, Server, ShieldAlert, ShieldCheck, Download } from "lucide-react";
 import { api } from "@/lib/api";
 import { downloadAuthenticated } from "@/lib/download";
-import { PageHeader, Panel, StatCard, EmptyState } from "@/components/ui/Panel";
-import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Select";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/Panel";
+import { Card, CardHeader } from "@/components/design-system/Card";
+import { Button } from "@/components/design-system/Button";
+import { Select } from "@/components/design-system/Select";
+import { LoadingState } from "@/components/design-system/LoadingState";
 import { QueryError } from "@/components/ui/QueryError";
+import { EmptyState } from "@/components/design-system/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 
 interface Summary {
@@ -18,14 +20,17 @@ interface Summary {
   threat_scores: { host_id: string; score: number }[];
 }
 
-export default function ReportsPage() {
+function ReportsPageContent() {
   const { toast } = useToast();
   const [reportType, setReportType] = useState<"daily" | "weekly" | "monthly">("weekly");
   const [complianceFramework, setComplianceFramework] = useState<"soc2" | "iso27001">("soc2");
 
   const { data: templates } = useQuery({
     queryKey: ["reports", "compliance-templates"],
-    queryFn: () => api<{ id: string; name: string; control_count: number }[]>("/api/v1/reports/compliance/templates"),
+    queryFn: () =>
+      api<{ id: string; name: string; control_count: number }[]>(
+        "/api/v1/reports/compliance/templates",
+      ),
     staleTime: 300_000,
   });
 
@@ -69,11 +74,12 @@ export default function ReportsPage() {
         title="Security Reports"
         subtitle="Executive PDFs for leadership plus operational daily, weekly, and monthly exports"
       />
-      {isError ? (
-        <QueryError onRetry={() => refetch()} />
-      ) : isLoading ? (
-        <TableSkeleton rows={4} />
-      ) : data && data.total_hosts === 0 && data.open_alerts === 0 ? (
+
+      {isError && <QueryError onRetry={() => refetch()} />}
+
+      {isLoading && <LoadingState rows={4} />}
+
+      {!isLoading && !isError && data && data.total_hosts === 0 && data.open_alerts === 0 && (
         <EmptyState
           title="No data for reports yet"
           description="Add hosts or run an Attack Lab simulation to populate report summaries."
@@ -81,21 +87,39 @@ export default function ReportsPage() {
           action="/simulation"
           actionLabel="Open Attack Lab"
         />
-      ) : data ? (
-        <div className="grid md:grid-cols-3 gap-4">
-          <StatCard label="Total hosts" value={data.total_hosts} tone="info" href="/hosts" />
-          <StatCard label="Open alerts" value={data.open_alerts} tone="warning" href="/alerts" />
-          <StatCard label="Hosts scored" value={data.threat_scores.length} tone="default" href="/analytics" />
-        </div>
-      ) : (
-        <EmptyState
-          title="No summary data"
-          description="Unable to load report summary."
-          icon={<FileText className="w-10 h-10 opacity-40" />}
-        />
       )}
-      <Panel title="Executive PDF" subtitle="KPIs, MITRE, UEBA status, and recommendations for leadership">
-        <div className="space-y-4">
+
+      {/* Summary cards */}
+      {data && (
+        <div className="grid md:grid-cols-3 gap-4">
+          <Card>
+            <div className="p-4 text-center">
+              <p className="text-2xl font-semibold tabular-nums text-accent">{data.total_hosts}</p>
+              <p className="text-xs text-muted mt-1">Total hosts</p>
+            </div>
+          </Card>
+          <Card>
+            <div className="p-4 text-center">
+              <p className="text-2xl font-semibold tabular-nums text-warning">{data.open_alerts}</p>
+              <p className="text-xs text-muted mt-1">Open alerts</p>
+            </div>
+          </Card>
+          <Card>
+            <div className="p-4 text-center">
+              <p className="text-2xl font-semibold tabular-nums text-foreground">{data.threat_scores.length}</p>
+              <p className="text-xs text-muted mt-1">Hosts scored</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Executive PDF */}
+      <Card>
+        <CardHeader
+          title="Executive PDF"
+          subtitle="KPIs, MITRE, UEBA status, and recommendations for leadership"
+        />
+        <div className="p-4 space-y-4">
           <Select
             label="Report period"
             value={reportType}
@@ -111,13 +135,19 @@ export default function ReportsPage() {
             onClick={() => exportMutation.mutate({ format: "pdf", executive: true })}
             loading={exportMutation.isPending}
           >
-            <FileText className="w-4 h-4" />
+            <Download className="w-4 h-4" />
             Download executive PDF
           </Button>
         </div>
-      </Panel>
-      <Panel title="Compliance assessment" subtitle="SOC 2 and ISO 27001 control mapping with live platform evidence">
-        <div className="space-y-4">
+      </Card>
+
+      {/* Compliance */}
+      <Card>
+        <CardHeader
+          title="Compliance Assessment"
+          subtitle="SOC 2 and ISO 27001 control mapping with live platform evidence"
+        />
+        <div className="p-4 space-y-4">
           <div className="grid gap-3 md:grid-cols-2 max-w-2xl">
             <Select
               label="Framework"
@@ -153,9 +183,12 @@ export default function ReportsPage() {
             Download compliance PDF
           </Button>
         </div>
-      </Panel>
-      <Panel title="Operational export">
-        <div className="space-y-4">
+      </Card>
+
+      {/* Operational export */}
+      <Card>
+        <CardHeader title="Operational Export" subtitle="Generate JSON, CSV, or PDF reports for the selected period" />
+        <div className="p-4">
           <div className="flex flex-wrap gap-3">
             <Button
               type="button"
@@ -164,6 +197,7 @@ export default function ReportsPage() {
               loading={exportMutation.isPending}
               size="sm"
             >
+              <FileText className="w-4 h-4" />
               Export PDF
             </Button>
             <Button
@@ -173,27 +207,39 @@ export default function ReportsPage() {
               disabled={exportMutation.isPending}
               size="sm"
             >
+              <Download className="w-4 h-4" />
               Export CSV
             </Button>
           </div>
         </div>
-      </Panel>
-      <Panel title="What's included" subtitle="Each generated report bundles">
-        <ul className="text-sm text-muted space-y-2 list-disc list-inside">
-          <li className="flex items-center gap-2 list-none">
-            <Server className="w-4 h-4 text-accent shrink-0" aria-hidden />
-            Host inventory and connectivity summary
-          </li>
-          <li className="flex items-center gap-2 list-none">
-            <ShieldAlert className="w-4 h-4 text-warning shrink-0" aria-hidden />
-            Open and resolved alerts for the period
-          </li>
-          <li className="flex items-center gap-2 list-none">
-            <FileText className="w-4 h-4 text-muted shrink-0" aria-hidden />
-            Auto-generated recommendations for leadership action items
-          </li>
-        </ul>
-      </Panel>
+      </Card>
+
+      {/* What's included */}
+      <Card>
+        <CardHeader title="What's Included" subtitle="Each generated report bundles" />
+        <div className="p-4 space-y-3">
+          <div className="flex items-center gap-3 text-sm">
+            <Server className="w-4 h-4 text-accent shrink-0" />
+            <span>Host inventory and connectivity summary</span>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <ShieldAlert className="w-4 h-4 text-warning shrink-0" />
+            <span>Open and resolved alerts for the period</span>
+          </div>
+          <div className="flex items-center gap-3 text-sm">
+            <FileText className="w-4 h-4 text-muted shrink-0" />
+            <span>Auto-generated recommendations for leadership action items</span>
+          </div>
+        </div>
+      </Card>
     </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <Suspense fallback={<LoadingState rows={4} />}>
+      <ReportsPageContent />
+    </Suspense>
   );
 }
