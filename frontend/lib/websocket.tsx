@@ -118,7 +118,9 @@ const store = new WebSocketStore();
 const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
   new_event: [["events"], ["siem"]],
   new_alert: [["alerts"], ["siem"]],
+  alert_updated: [["alerts"], ["siem"]],
   alert_resolved: [["alerts"], ["siem"]],
+  alert_feedback: [["alerts"]],
   host_status: [["hosts"], ["siem"]],
   host_enrolled: [["hosts"], ["siem"]],
   // security_feed is handled by useSecurityFeedStore — no query invalidation
@@ -154,6 +156,15 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       const targets = INVALIDATION_BY_TYPE[msg.type];
       if (!targets) return;
       for (const queryKey of targets) scheduleInvalidation(queryKey);
+
+      // Targeted invalidation: if the event carries an alert ID, also
+      // refresh that specific alert's detail/investigation queries so
+      // the analyst's current view updates without a full list refetch.
+      const alertId = msg.data?.id;
+      if (typeof alertId === "string" && targets.some((k) => k[0] === "alerts")) {
+        scheduleInvalidation(["alerts", "detail", alertId]);
+        scheduleInvalidation(["alerts", "investigation", alertId]);
+      }
     });
 
     return () => {
