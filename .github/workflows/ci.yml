@@ -6,22 +6,42 @@ on:
   pull_request:
 
 jobs:
-  backend-test:
+  backend-unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Run backend unit tests (no DB/Redis required)
+        run: pytest tests/ -v --ignore=tests/integration -m "not integration"
+        env:
+          TESTING: "true"
+          REDIS_URL: ""
+          JOB_QUEUE_BACKEND: memory
+          WS_PUBSUB_BACKEND: memory
+          JWT_SECRET: ci-test-secret-key-minimum-length
+
+  backend-integration:
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: securi
+          POSTGRES_USER: securi_test
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: securi_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd pg_isready -U securi_test -d securi_test
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -35,12 +55,15 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt redis
-      - run: pytest tests/ -v
+      - name: Run all backend tests (PG + Redis available)
+        run: pytest tests/ -v --tb=short
         env:
           TESTING: "true"
-          DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
+          DATABASE_URL: postgresql+asyncpg://securi_test:testpass@localhost:5432/securi_test
           JWT_SECRET: ci-test-secret-key-minimum-length
           REDIS_URL: redis://localhost:6379/0
+          JOB_QUEUE_BACKEND: redis
+          WS_PUBSUB_BACKEND: redis
 
   backend-lint:
     runs-on: ubuntu-latest
@@ -68,6 +91,38 @@ jobs:
       - run: pip install bandit[toml]
       - run: bandit -r app -f json -o bandit-report.json --severity-level medium || true
       - run: bandit -r app --severity-level high
+
+  agent-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - name: Run agent tests
+        run: pytest tests/ -v --tb=short
+
+  frontend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Run frontend unit tests
+        run: npm run test:unit
+      - name: Typecheck
+        run: npx tsc --noEmit
 
   frontend-lint:
     runs-on: ubuntu-latest
@@ -125,16 +180,16 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: securi
+          POSTGRES_USER: securi_test
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: securi_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd pg_isready -U securi_test -d securi_test
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -161,7 +216,7 @@ jobs:
           echo "API failed to become ready"
           exit 1
         env:
-          DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
+          DATABASE_URL: postgresql+asyncpg://securi_test:testpass@localhost:5432/securi_test
           JWT_SECRET: ci-test-secret-key-minimum-length
           REDIS_URL: redis://localhost:6379/0
           TESTING: "false"
@@ -234,16 +289,16 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: securi
+          POSTGRES_USER: securi_test
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: securi_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
+          --health-cmd pg_isready -U securi_test -d securi_test
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -270,7 +325,7 @@ jobs:
           echo "API failed to become ready"
           exit 1
         env:
-          DATABASE_URL: postgresql+asyncpg://securi:testpass@localhost:5432/securi_test
+          DATABASE_URL: postgresql+asyncpg://securi_test:testpass@localhost:5432/securi_test
           JWT_SECRET: ci-test-secret-key-minimum-length
           REDIS_URL: redis://localhost:6379/0
           TESTING: "false"
