@@ -123,6 +123,13 @@ const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
   alert_feedback: [["alerts"]],
   host_status: [["hosts"], ["siem"]],
   host_enrolled: [["hosts"], ["siem"]],
+  // Offenses — backend does not emit these yet; entries added for forward compatibility.
+  new_offense: [["offenses"]],
+  offense_updated: [["offenses"]],
+  // Incidents — backend does not emit these yet; entries added for forward compatibility.
+  new_incident: [["incidents"]],
+  incident_updated: [["incidents"]],
+  incident_status_changed: [["incidents"]],
   // security_feed is handled by useSecurityFeedStore — no query invalidation
 };
 

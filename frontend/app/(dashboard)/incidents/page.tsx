@@ -1,237 +1,160 @@
 "use client";
 
-import { useState, Suspense } from "react";
-import Link from "next/link";
-import { ClipboardList } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { useDeepLinkedSelection, workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
-import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { TableSkeleton } from "@/components/ui/Skeleton";
-import { QueryError } from "@/components/ui/QueryError";
-import { InvestigationTrail } from "@/components/InvestigationTrail";
-import { useToast } from "@/components/ui/Toast";
-
-interface Incident {
-  id: string;
-  title: string;
-  description: string | null;
-  severity: string;
-  status: string;
-  host_id: string | null;
-  created_at: string;
-}
-
-interface IncidentDetail extends Incident {
-  notes: { id: string; content: string; user_id: string; created_at: string }[];
-  alert_ids: string[];
-}
+import { Suspense, useState } from "react";
+import { useIncidentList } from "@/lib/hooks/useIncidents";
+import { IncidentRow } from "@/components/incidents/IncidentRow";
+import { IncidentEmptyState } from "@/components/incidents/IncidentEmptyState";
+import { IncidentCreateForm } from "@/components/incidents/IncidentCreateForm";
+import { IncidentDetailHeader } from "@/components/incidents/IncidentDetailHeader";
+import { IncidentActions } from "@/components/incidents/IncidentActions";
+import { IncidentNotes } from "@/components/incidents/IncidentNotes";
+import { IncidentAlertsList } from "@/components/incidents/IncidentAlertsList";
+import { useIncidentDetail } from "@/lib/hooks/useIncidents";
+import { FilterChip } from "@/components/design-system/FilterChip";
+import { LoadingState, Skeleton } from "@/components/design-system/LoadingState";
+import { ErrorState } from "@/components/design-system/ErrorState";
+import { Drawer } from "@/components/ui/Drawer";
+import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
+import { INCIDENT_STATUSES } from "@/lib/types/incident";
 
 export default function IncidentsPage() {
   return (
-    <Suspense fallback={<TableSkeleton rows={6} />}>
+    <Suspense fallback={<LoadingState variant="table" rows={6} />}>
       <IncidentsPageContent />
     </Suspense>
   );
 }
 
 function IncidentsPageContent() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedId, setSelectedId] = useDeepLinkedSelection();
-  const [note, setNote] = useState("");
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const [showCreate, setShowCreate] = useState(false);
 
-  const { data: items = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ["incidents"],
-    queryFn: () => api<Incident[]>("/api/v1/incidents"),
-  });
+  const { data: items = [], isLoading, isError, refetch } = useIncidentList(
+    statusFilter ? { status: statusFilter } : undefined,
+  );
 
-  const { data: detail, isLoading: detailLoading, isError: detailError, refetch: refetchDetail } = useQuery({
-    queryKey: ["incidents", selectedId],
-    queryFn: () => api<IncidentDetail>(`/api/v1/incidents/${selectedId}`),
-    enabled: !!selectedId,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: () =>
-      api("/api/v1/incidents", {
-        method: "POST",
-        body: JSON.stringify({ title, description: desc, severity: "medium" }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["incidents"] });
-      setTitle("");
-      setDesc("");
-      toast("success", "Incident created");
-    },
-    onError: (e: Error) => toast("error", "Failed", e.message),
-  });
-
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api(`/api/v1/incidents/${id}/status?status=${status}`, { method: "PATCH" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["incidents"] });
-      if (selectedId) queryClient.invalidateQueries({ queryKey: ["incidents", selectedId] });
-    },
-    onError: (e: Error) => toast("error", "Failed", e.message),
-  });
-
-  const noteMutation = useMutation({
-    mutationFn: () =>
-      api(`/api/v1/incidents/${selectedId}/notes`, {
-        method: "POST",
-        body: JSON.stringify({ content: note }),
-      }),
-    onSuccess: () => {
-      setNote("");
-      queryClient.invalidateQueries({ queryKey: ["incidents", selectedId] });
-      toast("success", "Note added");
-    },
-    onError: (e: Error) => toast("error", "Failed", e.message),
-  });
+  const hasFilters = Boolean(statusFilter);
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Incidents" subtitle="Incident tracking, notes, and resolution workflow" />
-      <InvestigationTrail />
-      {isError && <QueryError onRetry={() => refetch()} />}
-      {isLoading && !isError && <TableSkeleton rows={4} />}
-      <Panel title="Create incident">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            createMutation.mutate();
-          }}
-          className="flex gap-3 flex-wrap items-end"
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Incidents</h1>
+          <p className="text-sm text-muted mt-1">
+            Security cases requiring investigation and response
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(!showCreate)}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
         >
-          <Input
-            required
-            label="Title"
-            placeholder="Title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="flex-1 min-w-[200px]"
-            disabled={createMutation.isPending}
-          />
-          <Input
-            label="Description"
-            placeholder="Description"
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            className="flex-1 min-w-[200px]"
-            disabled={createMutation.isPending}
-          />
-          <Button type="submit" loading={createMutation.isPending}>
-            Create
-          </Button>
-        </form>
-      </Panel>
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Panel title="Incidents">
-          <div className="space-y-2 max-h-[32rem] overflow-y-auto">
-            {!isError && items.map((i) => (
-              <button
+          {showCreate ? "Cancel" : "New Incident"}
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="p-4 rounded-xl border border-border-subtle bg-surface">
+          <IncidentCreateForm onCreated={() => setShowCreate(false)} />
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap gap-1">
+          {INCIDENT_STATUSES.map((s) => (
+            <FilterChip
+              key={s}
+              label={s.charAt(0).toUpperCase() + s.slice(1)}
+              active={statusFilter === s}
+              onClick={() => setStatusFilter(statusFilter === s ? "" : s)}
+            />
+          ))}
+        </div>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={() => setStatusFilter("")}
+            className="text-xs text-muted hover:text-foreground transition-colors"
+          >
+            Clear
+          </button>
+        )}
+        <span className="ml-auto text-xs text-muted">
+          {items.length} incident{items.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+
+      {isLoading && <LoadingState variant="table" rows={4} />}
+      {isError && <ErrorState variant="page" title="Failed to load incidents" onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && items.length === 0 && (
+        <IncidentEmptyState hasFilters={hasFilters} onClear={() => setStatusFilter("")} />
+      )}
+
+      {!isLoading && !isError && items.length > 0 && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            {items.map((i) => (
+              <IncidentRow
                 key={i.id}
-                type="button"
+                incident={i}
+                selected={selectedId === i.id}
                 onClick={() => setSelectedId(i.id)}
-                className={`w-full text-left p-4 border rounded-lg transition-colors ${selectedId === i.id ? "border-accent bg-accent/10" : "border-border-subtle hover:bg-[var(--sidebar-hover)]"}`}
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div>
-                    <span className={`text-xs severity-${i.severity} uppercase font-bold mr-2`}>{i.severity}</span>
-                    <span className="font-medium">{i.title}</span>
-                    <span className="text-xs text-muted ml-2 capitalize">{i.status}</span>
-                    {i.description && <p className="text-sm text-muted mt-1 line-clamp-2">{i.description}</p>}
-                  </div>
-                </div>
-              </button>
-            ))}
-            {!isLoading && !isError && items.length === 0 && (
-              <EmptyState
-                title="No incidents"
-                description="Use the form above to create an incident and begin an investigation."
-                icon={<ClipboardList className="w-10 h-10 opacity-40" />}
               />
+            ))}
+          </div>
+
+          <div className="hidden lg:block">
+            {selectedId ? (
+              <IncidentDetailInline incidentId={selectedId} />
+            ) : (
+              <div className="p-8 rounded-xl border border-border-subtle bg-surface text-center">
+                <p className="text-sm text-muted">Select an incident to view details</p>
+              </div>
             )}
           </div>
-        </Panel>
-        <Panel title="Incident detail">
-          {detailError && selectedId && <QueryError onRetry={() => refetchDetail()} />}
-          {detailLoading && !detailError && <TableSkeleton rows={4} />}
-          {detail && !detailLoading && !detailError && (
-            <>
-              <h2 className="font-semibold text-lg">{detail.title}</h2>
-              <p className="text-sm text-muted mb-4 capitalize">{detail.status} · {detail.severity}</p>
-              {detail.description && <p className="text-sm mb-4">{detail.description}</p>}
-              <div className="flex flex-wrap gap-2 mb-4">
-                <Link href={workspaceHref({ incidentId: detail.id })} className="btn-primary text-xs">
-                  Open Case Workspace
-                </Link>
-                {detail.status === "open" && (
-                  <>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "investigating" })}>
-                      Investigate
-                    </Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })}>
-                      Resolve
-                    </Button>
-                  </>
-                )}
-                {detail.status === "investigating" && (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => statusMutation.mutate({ id: detail.id, status: "resolved" })}>
-                    Resolve
-                  </Button>
-                )}
-              </div>
-              {detail.alert_ids.length > 0 && (
-                <div className="mb-4">
-                  <p className="text-caption normal-case text-muted mb-2">Linked alerts</p>
-                  <div className="flex flex-wrap gap-2">
-                    {detail.alert_ids.map((id) => (
-                      <a key={id} href={workspaceHref({ alertId: id })} className="text-xs font-mono text-accent hover:underline">
-                        {id.slice(0, 8)}…
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-                {detail.notes.map((n) => (
-                  <div key={n.id} className="p-2 rounded bg-[var(--input-bg)] text-sm">
-                    <p>{n.content}</p>
-                    <p className="text-[11px] text-muted mt-1">{new Date(n.created_at).toLocaleString()}</p>
-                  </div>
-                ))}
-                {detail.notes.length === 0 && <p className="text-sm text-muted">No analyst notes yet.</p>}
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (note.trim()) noteMutation.mutate();
-                }}
-                className="flex gap-2 items-end"
-              >
-                <Input
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Add investigation note…"
-                  aria-label="Investigation note"
-                  className="flex-1"
-                />
-                <Button type="submit" size="sm" loading={noteMutation.isPending}>
-                  Add
-                </Button>
-              </form>
-            </>
-          )}
-          {!selectedId && !detailLoading && !detailError && <EmptyState title="Select an incident" description="Choose an incident to review notes and linked alerts." />}
-        </Panel>
+        </div>
+      )}
+
+      <Drawer
+        open={!!selectedId && !isDesktop}
+        onClose={() => setSelectedId(null)}
+        title="Incident details"
+        side="bottom"
+        className="lg:hidden"
+      >
+        {selectedId && <IncidentDetailInline incidentId={selectedId} />}
+      </Drawer>
+    </div>
+  );
+}
+
+function IncidentDetailInline({ incidentId }: { incidentId: string }) {
+  const { data: incident, isLoading, isError, refetch } = useIncidentDetail(incidentId);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-4">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-32 w-full" />
       </div>
+    );
+  }
+
+  if (isError || !incident) {
+    return <ErrorState variant="card" title="Failed to load incident" onRetry={() => refetch()} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <IncidentDetailHeader incident={incident} />
+      <IncidentActions incidentId={incident.id} currentStatus={incident.status} />
+      <IncidentAlertsList alertIds={incident.alert_ids} />
+      <IncidentNotes incidentId={incident.id} notes={incident.notes} />
     </div>
   );
 }

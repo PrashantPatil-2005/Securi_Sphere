@@ -1,171 +1,107 @@
 "use client";
 
-import { Suspense } from "react";
-import { useRouter } from "next/navigation";
-import { ShieldAlert } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { buildQuery } from "@/lib/buildQuery";
-import { useTimeRange } from "@/lib/timeRange";
-import { useDeepLinkedSelection, workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
+import { Suspense, useCallback, useMemo, useState } from "react";
+import { useDeepLinkedSelection } from "@/lib/hooks/useDeepLinkedSelection";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import TimeRangeBar from "@/components/filters/TimeRangeBar";
-import { InvestigationTrail } from "@/components/InvestigationTrail";
-import { OffenseDetailPanel } from "@/components/offenses/OffenseDetailPanel";
-import { TableSkeleton } from "@/components/ui/Skeleton";
-import { PageHeader, Panel, EmptyState } from "@/components/ui/Panel";
-import { QueryError } from "@/components/ui/QueryError";
+import { useOffenseList, useOffenseDetail } from "@/lib/hooks/useOffenses";
+import { OffenseFilterBar } from "@/components/offenses/OffenseFilters";
+import { OffenseRow } from "@/components/offenses/OffenseRow";
+import { OffenseEmptyState } from "@/components/offenses/OffenseEmptyState";
+import { OffenseDetailHeader } from "@/components/offenses/OffenseDetailHeader";
+import { OffenseSummaryCards } from "@/components/offenses/OffenseSummaryCards";
+import { OffenseTimeline } from "@/components/offenses/OffenseTimeline";
+import { OffenseAlertsList } from "@/components/offenses/OffenseAlertsList";
+import { OffenseEventsList } from "@/components/offenses/OffenseEventsList";
+import { OffenseActions } from "@/components/offenses/OffenseActions";
+import { Pagination, PageSizeSelect } from "@/components/design-system/Pagination";
+import { LoadingState, Skeleton } from "@/components/design-system/LoadingState";
+import { ErrorState } from "@/components/design-system/ErrorState";
 import { Drawer } from "@/components/ui/Drawer";
-import { useToast } from "@/components/ui/Toast";
-
-interface Offense {
-  id: string;
-  offense_number: number;
-  host_id?: string;
-  host_name: string;
-  title: string;
-  risk_level: string;
-  status: string;
-  event_count: number;
-  created_at: string;
-}
-
-interface OffenseDetail extends Offense {
-  incident_id?: string | null;
-  events: { event_type: string; description: string | null; timestamp: string; severity: string }[];
-  alerts: { id: string; title: string; severity: string; status: string; created_at: string }[];
-  timeline?: { ts: string; type: string; detail: string }[];
-  related_hosts?: string[];
-  related_users?: string[];
-}
+import type { OffenseFilters } from "@/lib/types/offense";
 
 export default function OffensesPage() {
   return (
-    <Suspense fallback={<TableSkeleton rows={6} />}>
+    <Suspense fallback={<LoadingState variant="table" rows={6} />}>
       <OffensesPageContent />
     </Suspense>
   );
 }
 
 function OffensesPageContent() {
-  const router = useRouter();
-  const { queryParams } = useTimeRange();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [filters, setFilters] = useState<OffenseFilters>({});
   const [selectedId, setSelectedId] = useDeepLinkedSelection();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["offenses", queryParams],
-    queryFn: () => api<{ items: Offense[] }>(`/api/v1/offenses${buildQuery({}, queryParams)}`),
+  const handleFiltersChange = useCallback((f: OffenseFilters) => {
+    setFilters(f);
+    setPage(1);
+  }, []);
+
+  const { data, isLoading, isError, refetch } = useOffenseList({
+    page,
+    pageSize,
+    filters,
   });
 
-  const { data: selected, isLoading: detailLoading } = useQuery({
-    queryKey: ["offenses", selectedId],
-    queryFn: () => api<OffenseDetail>(`/api/v1/offenses/${selectedId}`),
-    enabled: !!selectedId,
-  });
-
-  const { data: aiBrief } = useQuery({
-    queryKey: ["offenses", "ai-brief", selectedId],
-    queryFn: () =>
-      api<{
-        brief: string;
-        key_findings: string[];
-        recommended_actions: string[];
-      }>(`/api/v1/offenses/${selectedId}/ai-brief`),
-    enabled: !!selectedId,
-    staleTime: 120_000,
-  });
-
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api(`/api/v1/offenses/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["offenses"] });
-      toast("success", "Offense updated");
-    },
-    onError: (e: Error) => toast("error", "Update failed", e.message),
-  });
-
-  const promoteMutation = useMutation({
-    mutationFn: (id: string) =>
-      api<{ incident_id: string; created: boolean; linked_alert_count: number }>(
-        `/api/v1/offenses/${id}/promote-to-incident`,
-        { method: "POST" },
-      ),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["offenses"] });
-      queryClient.invalidateQueries({ queryKey: ["incidents"] });
-      queryClient.invalidateQueries({ queryKey: ["incidents", "count"] });
-      toast("success", data.created ? "Incident opened in Case Workspace" : "Opening existing incident");
-      router.push(workspaceHref({ incidentId: data.incident_id }));
-    },
-    onError: (e: Error) => toast("error", "Promotion failed", e.message),
-  });
-
-  const offenses = data?.items ?? [];
-  const riskClass = (r: string) =>
-    r === "critical" ? "text-red-400" : r === "high" ? "text-orange-400" : r === "medium" ? "text-yellow-400" : "text-gray-400";
-
-  const detailPanel = (
-    <OffenseDetailPanel
-      selectedId={selectedId}
-      selected={selected}
-      detailLoading={detailLoading}
-      aiBrief={aiBrief}
-      promotePending={promoteMutation.isPending}
-      onPromote={(id) => promoteMutation.mutate(id)}
-      onViewInvestigation={(incidentId) => router.push(workspaceHref({ incidentId }))}
-      onStatus={(id, status) => statusMutation.mutate({ id, status })}
-    />
-  );
+  const offenses = useMemo(() => data?.items ?? [], [data?.items]);
+  const total = data?.total ?? 0;
+  const hasFilters = Boolean(filters.status || filters.host_id || filters.q);
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Offense Management" subtitle="Correlated security offenses grouped from related alerts and events" />
-      <InvestigationTrail
-        offenseId={selectedId ?? undefined}
-        hostId={selected?.host_id}
-        hostName={selected?.host_name}
-        incidentId={selected?.incident_id ?? undefined}
-      />
-      <TimeRangeBar />
-      {isLoading && <TableSkeleton rows={6} />}
-      {isError && <QueryError onRetry={() => refetch()} />}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <Panel title="Offenses">
-          <div className="space-y-2 max-h-[32rem] overflow-y-auto">
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold">Offenses</h1>
+        <p className="text-sm text-muted mt-1">
+          Security activity grouped into investigation clusters
+        </p>
+      </div>
+
+      <OffenseFilterBar filters={filters} onChange={handleFiltersChange} total={total} />
+
+      {isLoading && <LoadingState variant="table" rows={6} />}
+      {isError && <ErrorState variant="page" title="Failed to load offenses" onRetry={() => refetch()} />}
+
+      {!isLoading && !isError && offenses.length === 0 && (
+        <OffenseEmptyState hasFilters={hasFilters} onClear={() => handleFiltersChange({})} />
+      )}
+
+      {!isLoading && !isError && offenses.length > 0 && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="space-y-2">
             {offenses.map((o) => (
-              <button
+              <OffenseRow
                 key={o.id}
-                type="button"
+                offense={o}
+                selected={selectedId === o.id}
                 onClick={() => setSelectedId(o.id)}
-                className={`w-full text-left p-3 rounded border transition-colors ${selectedId === o.id ? "border-accent bg-accent/10" : "border-border-subtle hover:bg-[var(--sidebar-hover)]"}`}
-              >
-                <div className="flex justify-between items-start">
-                  <span className="font-mono text-accent">#{o.offense_number}</span>
-                  <span className={`text-xs uppercase ${riskClass(o.risk_level)}`}>{o.risk_level}</span>
-                </div>
-                <p className="font-medium mt-1">{o.title}</p>
-                <p className="text-xs text-muted mt-1">{o.host_name} · {o.event_count} events · {o.status}</p>
-              </button>
-            ))}
-            {!isLoading && offenses.length === 0 && (
-              <EmptyState
-                title="No offenses"
-                description="Offenses appear when correlation rules group related alerts. Try running a simulation."
-                icon={<ShieldAlert className="w-10 h-10 opacity-40" />}
-                action="/simulation"
-                actionLabel="Run simulation"
               />
+            ))}
+          </div>
+
+          <div className="hidden lg:block">
+            {selectedId ? (
+              <OffenseDetailInline offenseId={selectedId} />
+            ) : (
+              <div className="p-8 rounded-xl border border-border-subtle bg-surface text-center">
+                <p className="text-sm text-muted">Select an offense to view details</p>
+              </div>
             )}
           </div>
-        </Panel>
-        <Panel title="Details" className="hidden lg:block">
-          {detailPanel}
-        </Panel>
-      </div>
+        </div>
+      )}
+
+      {total > 0 && (
+        <div className="flex items-center justify-between">
+          <Pagination
+            page={page}
+            totalPages={Math.ceil(total / pageSize)}
+            onPageChange={setPage}
+          />
+          <PageSizeSelect value={pageSize} onChange={setPageSize} />
+        </div>
+      )}
 
       <Drawer
         open={!!selectedId && !isDesktop}
@@ -174,8 +110,41 @@ function OffensesPageContent() {
         side="bottom"
         className="lg:hidden"
       >
-        {detailPanel}
+        {selectedId && <OffenseDetailInline offenseId={selectedId} />}
       </Drawer>
+    </div>
+  );
+}
+
+function OffenseDetailInline({ offenseId }: { offenseId: string }) {
+  const { data: offense, isLoading, isError, refetch } = useOffenseDetail(offenseId);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 p-4">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (isError || !offense) {
+    return <ErrorState variant="card" title="Failed to load offense" onRetry={() => refetch()} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <OffenseDetailHeader offense={offense} />
+      <OffenseSummaryCards offense={offense} />
+      <OffenseActions
+        offenseId={offense.id}
+        currentStatus={offense.status}
+        incidentId={offense.incident_id}
+      />
+      <OffenseTimeline timeline={offense.timeline} />
+      <OffenseAlertsList alerts={offense.alerts} />
+      <OffenseEventsList events={offense.events} />
     </div>
   );
 }
