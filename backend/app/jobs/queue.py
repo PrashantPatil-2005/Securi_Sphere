@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 JobHandler = Callable[..., Awaitable[Any]]
 
 DEFAULT_JOB_TIMEOUT = 120  # seconds
+JOB_RETRY_BASE_DELAY = 2  # seconds — base delay for exponential backoff
 
 
 class JobPriority(str, Enum):
@@ -142,26 +143,50 @@ class JobQueue:
                     extra={"job_name": job.name, "job_id": job.id, "worker_id": worker_id},
                     )
             except asyncio.TimeoutError:
-                logger.error(
-                    "job timed out after %ds — not requeued (handler may still be running)",
-                    DEFAULT_JOB_TIMEOUT,
-                    extra={"job_name": job.name, "job_id": job.id, "retry_count": job.retry_count},
-                )
-            except Exception:
                 job.retry_count += 1
                 if job.retry_count <= job.max_retries:
                     await self._requeue(job)
                     logger.warning(
-                        "job retry scheduled",
-                        extra={"job_name": job.name, "retry": job.retry_count},
-                        exc_info=True,
+                        "job timed out — requeued for retry",
+                        extra={
+                            "job_name": job.name,
+                            "job_id": job.id,
+                            "retry": job.retry_count,
+                            "timeout": DEFAULT_JOB_TIMEOUT,
+                        },
                     )
                 else:
                     logger.error(
-                        "job failed permanently",
+                        "job timed out permanently — sent to dead-letter",
+                        extra={"job_name": job.name, "job_id": job.id},
+                    )
+                    if self._use_redis:
+                        from app.jobs.redis_broker import enqueue_dead_letter
+                        await enqueue_dead_letter(job)
+            except Exception:
+                job.retry_count += 1
+                if job.retry_count <= job.max_retries:
+                    delay = min(JOB_RETRY_BASE_DELAY * (2 ** (job.retry_count - 1)), 60)
+                    logger.warning(
+                        "job retry scheduled",
+                        extra={
+                            "job_name": job.name,
+                            "retry": job.retry_count,
+                            "delay_seconds": delay,
+                        },
+                        exc_info=True,
+                    )
+                    await asyncio.sleep(delay)
+                    await self._requeue(job)
+                else:
+                    logger.error(
+                        "job failed permanently — sent to dead-letter",
                         extra={"job_name": job.name, "job_id": job.id},
                         exc_info=True,
                     )
+                    if self._use_redis:
+                        from app.jobs.redis_broker import enqueue_dead_letter
+                        await enqueue_dead_letter(job)
             finally:
                 self._in_flight = max(0, self._in_flight - 1)
 

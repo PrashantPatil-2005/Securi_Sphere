@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.brand import PRODUCT_NAME
 from app.config import settings
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -161,10 +161,13 @@ async def bulk_update_alerts(
             },
         )
         if body.status in ("resolved", "closed"):
-            for alert in alerts:
-                await ws_manager.broadcast(
-                    {"type": "alert_resolved", "data": {"id": str(alert.id)}}
-                )
+            # Defer broadcasts to post-commit (outbox pattern)
+            if "post_commit_hooks" not in db.info:
+                db.info["post_commit_hooks"] = []
+            _resolved_ids = [str(alert.id) for alert in alerts]
+            db.info["post_commit_hooks"].append(lambda ids=_resolved_ids: ws_manager.broadcast(
+                {"type": "alert_resolved", "data": {"ids": ids}}
+            ) if ids else None)
 
     return AlertBulkUpdateResponse(updated=len(alerts), not_found=not_found)
 
@@ -286,7 +289,14 @@ async def update_alert_status(
         alert.resolved_by = user.id
     await update_host_statuses(db)
     await log_audit(db, "alert_status_update", user_id=user.id, resource_type="alert", resource_id=alert_id, details={"status": body.status})
-    await ws_manager.broadcast({"type": "alert_updated", "data": {"id": str(alert.id), "status": body.status}})
+    # Defer broadcast to post-commit
+    if "post_commit_hooks" not in db.info:
+        db.info["post_commit_hooks"] = []
+    _alert_id = str(alert.id)
+    _status = body.status
+    db.info["post_commit_hooks"].append(
+        lambda aid=_alert_id, st=_status: ws_manager.broadcast({"type": "alert_updated", "data": {"id": aid, "status": st}})
+    )
     if old_status != body.status:
         from app.services.playbooks import schedule_playbook_dispatch
         await schedule_playbook_dispatch(
@@ -335,7 +345,14 @@ async def update_alert_feedback(
         resource_id=alert_id,
         details={"label": body.label, "has_note": bool((body.note or "").strip())},
     )
-    await ws_manager.broadcast(
-        {"type": "alert_feedback", "data": {"id": str(alert.id), "feedback_label": alert.feedback_label}}
+    # Defer broadcast to post-commit
+    if "post_commit_hooks" not in db.info:
+        db.info["post_commit_hooks"] = []
+    _alert_id = str(alert.id)
+    _label = alert.feedback_label
+    db.info["post_commit_hooks"].append(
+        lambda aid=_alert_id, lb=_label: ws_manager.broadcast(
+            {"type": "alert_feedback", "data": {"id": aid, "feedback_label": lb}}
+        )
     )
     return _to_response(alert)

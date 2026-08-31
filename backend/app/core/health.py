@@ -55,6 +55,8 @@ async def readiness() -> dict:
         checks["job_broker"] = "ok" if await redis_ping() else "error"
         if not settings.job_queue_run_workers:
             checks["job_queue"] = checks["job_broker"]
+    else:
+        checks["job_queue"] = "ok"
     if settings.ws_pubsub_backend == "redis" and settings.redis_url:
         checks["ws_pubsub"] = "ok" if await ws_pubsub_ping() else "error"
     if settings.opensearch_url and settings.search_backend == "opensearch":

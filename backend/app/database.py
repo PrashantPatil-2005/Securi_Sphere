@@ -61,6 +61,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+        else:
+            # Execute post-commit side effects (WebSocket broadcasts, OpenSearch, job enqueues)
+            hooks = session.info.pop("post_commit_hooks", [])
+            for hook in hooks:
+                try:
+                    import asyncio
+                    result = hook()
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception:
+                    logger.warning("post-commit hook failed", exc_info=True)
 
 
 async def get_db_read() -> AsyncGenerator[AsyncSession, None]:

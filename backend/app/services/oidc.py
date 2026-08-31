@@ -189,10 +189,13 @@ async def resolve_user_from_claims(db: AsyncSession, claims: dict[str, Any]) -> 
 
     sub = claims.get("sub")
     email = (claims.get("email") or "").strip().lower()
+    email_verified = claims.get("email_verified")
     if not sub:
         raise HTTPException(status_code=401, detail="OIDC subject missing")
     if not email:
         raise HTTPException(status_code=401, detail="OIDC email claim required")
+    if email_verified is False:
+        raise HTTPException(status_code=401, detail="OIDC email not verified by identity provider")
 
     full_name = claims.get("name") or claims.get("preferred_username")
 

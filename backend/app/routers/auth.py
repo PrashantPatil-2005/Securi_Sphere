@@ -132,6 +132,10 @@ async def seed_demo_users(db: AsyncSession) -> None:
     """Seed pilot demo admin when DEMO_MODE=true."""
     if not settings.demo_mode or settings.testing:
         return
+    # Safety guard: never seed demo users in production
+    if settings.environment == "production":
+        logger.error("DEMO_MODE=true in production — refusing to seed demo users")
+        return
     if not DEMO_USER_PASSWORD:
         logger.warning(
             "DEMO_USER_PASSWORD not set — skipping demo user seeding. "
@@ -163,7 +167,7 @@ async def seed_demo_users(db: AsyncSession) -> None:
         )
 
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=UserResponse, status_code=201)
 async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     await seed_roles(db)
     count = await db.execute(select(func.count()).select_from(User))
@@ -196,6 +200,14 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    # IP-based rate limiting on login to prevent brute-force attacks
+    from app.services.recovery_rate_limit import _enforce
+    await _enforce(
+        f"login:ip:{client_ip(request)}",
+        settings.account_lockout_attempts * 2,  # 10 attempts per window
+        settings.account_lockout_minutes * 60,   # per lockout window (seconds)
+    )
+
     result = await db.execute(
         select(User).options(selectinload(User.role)).where(User.email == body.email)
     )
@@ -496,6 +508,18 @@ async def reset_password(
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one()
     user.hashed_password = hash_password(body.new_password)
+
+    # Revoke all existing sessions for this user (security: prevent stale session reuse)
+    from sqlalchemy import update as sa_update
+    from app.models.refresh_token import RefreshToken
+    from app.models.user_session import UserSession
+    await db.execute(
+        sa_update(RefreshToken).where(RefreshToken.user_id == user_id).values(revoked_at=now)
+    )
+    await db.execute(
+        sa_update(UserSession).where(UserSession.user_id == user_id).values(revoked_at=now)
+    )
+
     await log_audit(db, "password_reset", user_id=user.id)
     return {"message": "Password reset successful"}
 
@@ -537,5 +561,22 @@ async def change_password(
     user.hashed_password = hash_password(body.new_password)
     user.failed_login_attempts = 0
     user.locked_until = None
+
+    # Revoke all existing sessions for this user (security: prevent stale session reuse)
+    from datetime import datetime as dt, timezone as tz
+    from sqlalchemy import update as sa_update
+    from app.models.refresh_token import RefreshToken
+    from app.models.user_session import UserSession
+    now_rev = dt.now(tz.utc)
+    try:
+        await db.execute(
+            sa_update(RefreshToken).where(RefreshToken.user_id == user.id).values(revoked_at=now_rev)
+        )
+        await db.execute(
+            sa_update(UserSession).where(UserSession.user_id == user.id).values(revoked_at=now_rev)
+        )
+    except Exception:
+        logger.warning("Failed to revoke sessions on password change for user %s", user.id, exc_info=True)
+
     await log_audit(db, "password_change", user_id=user.id, ip_address=client_ip(request))
     return {"message": "Password updated"}

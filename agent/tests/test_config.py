@@ -1,7 +1,5 @@
 import json
-import os
 import sys
-import stat
 from pathlib import Path
 
 import pytest
@@ -54,3 +52,21 @@ def test_save_config_roundtrip(tmp_config_path: Path) -> None:
     assert cfg["server_url"] == "https://api.test.io"
     assert cfg["api_key"] == "key_abc"
     assert cfg["signing_enabled"] is False
+
+
+def test_load_config_invalid_url_scheme(tmp_config_path: Path) -> None:
+    tmp_config_path.write_text(json.dumps({"server_url": "ftp://bad.example.com", "api_key": "k"}))
+    with pytest.raises(SystemExit, match="Invalid server_url scheme"):
+        load_config()
+
+
+def test_load_config_invalid_url_no_hostname(tmp_config_path: Path) -> None:
+    tmp_config_path.write_text(json.dumps({"server_url": "https://", "api_key": "k"}))
+    with pytest.raises(SystemExit, match="missing hostname"):
+        load_config()
+
+
+def test_load_config_malformed_json(tmp_config_path: Path) -> None:
+    tmp_config_path.write_text("{not valid json!!!")
+    with pytest.raises(SystemExit, match="Cannot parse config"):
+        load_config()

@@ -81,7 +81,13 @@ async def enqueue_job(job: Job) -> None:
     redis = await get_redis()
     if not redis:
         raise RuntimeError("Redis job broker is not available")
-    await redis.lpush(queue_for_priority(job.priority), job_to_json(job))
+    qname = queue_for_priority(job.priority)
+    # Cap queue size to prevent unbounded memory growth
+    queue_len = await redis.llen(qname)
+    if queue_len >= 10000:
+        logger.warning("job queue %s at capacity (%d) — dropping job", qname, queue_len)
+        return
+    await redis.lpush(qname, job_to_json(job))
 
 
 async def dequeue_job(timeout: int = 5) -> Job | None:

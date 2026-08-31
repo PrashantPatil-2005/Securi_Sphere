@@ -38,5 +38,5 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(ACCESS_COOKIE, path="/")
-    response.delete_cookie(REFRESH_COOKIE, path="/")
+    response.delete_cookie(ACCESS_COOKIE, path="/", secure=_cookie_secure(), samesite="lax")
+    response.delete_cookie(REFRESH_COOKIE, path="/", secure=_cookie_secure(), samesite="lax")

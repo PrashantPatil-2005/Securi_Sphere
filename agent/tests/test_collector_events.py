@@ -1,8 +1,5 @@
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from agent.collector.events import LogTailer, parse_line
 

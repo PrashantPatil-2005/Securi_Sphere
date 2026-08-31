@@ -45,7 +45,7 @@ async def get_incident(
         created_at=inc.created_at,
         resolved_at=inc.resolved_at,
         notes=[{"id": str(n.id), "content": n.content, "user_id": str(n.user_id), "created_at": n.created_at.isoformat()} for n in inc.notes],
-        alert_ids=[str(l.alert_id) for l in inc.alert_links],
+        alert_ids=[str(link.alert_id) for link in inc.alert_links],
     )
 
 
@@ -64,7 +64,7 @@ async def list_incidents(
     return list(result.scalars().all())
 
 
-@router.post("", response_model=IncidentResponse)
+@router.post("", response_model=IncidentResponse, status_code=201)
 async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
     if body.severity not in VALID_SEVERITIES:
         raise HTTPException(status_code=400, detail=f"Severity must be one of {VALID_SEVERITIES}")
@@ -77,7 +77,7 @@ async def create_incident(body: IncidentCreate, db: AsyncSession = Depends(get_d
     return inc
 
 
-@router.patch("/{incident_id}/status")
+@router.patch("/{incident_id}/status", response_model=IncidentResponse)
 async def update_status(incident_id: UUID, status: str, db: AsyncSession = Depends(get_db), user: User = Depends(require_roles("admin", "analyst"))):
     if status not in VALID_INCIDENT_STATUSES:
         raise HTTPException(status_code=400, detail=f"Status must be one of {VALID_INCIDENT_STATUSES}")

@@ -33,6 +33,7 @@ async def promote_offense_to_incident(
             select(Offense)
             .options(selectinload(Offense.links))
             .where(Offense.id == offense_id)
+            .with_for_update()
         )
     ).scalar_one_or_none()
     if not offense:

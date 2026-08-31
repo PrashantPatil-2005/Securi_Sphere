@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.correlation import CorrelationResult, CorrelationRule
 from app.models.event import Event
-from app.services.correlation.framework import MATCHERS, CoOccurrenceMatcher, SequenceMatcher
+from app.services.correlation.framework import MATCHERS
 from app.services.correlation.rules import CO_OCCURRENCE_RULES, CROSS_HOST_RULES, DEFAULT_CORRELATION_RULES
 
 
@@ -58,6 +58,11 @@ async def seed_correlation_rules(db: AsyncSession) -> None:
 
 async def run_correlation_engine(db: AsyncSession, host_id) -> list[CorrelationResult]:
     from app.services.detection import create_alert
+
+    # Serialize correlation runs per host to prevent duplicate results
+    from sqlalchemy import text
+    lock_key = int.from_bytes(host_id.bytes[:8], "big") if hasattr(host_id, "bytes") else hash(str(host_id))
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key % (2**31)})
 
     results: list[CorrelationResult] = []
     rules = (await db.execute(select(CorrelationRule).where(CorrelationRule.enabled.is_(True)))).scalars().all()
@@ -111,6 +116,10 @@ async def run_correlation_engine(db: AsyncSession, host_id) -> list[CorrelationR
 async def run_cross_host_correlation(db: AsyncSession) -> list[CorrelationResult]:
     """Evaluate cross-host rules against recent events cluster-wide."""
     from app.services.detection import create_alert
+    from sqlalchemy import text
+
+    # Serialize cross-host correlation to prevent duplicate results
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": 0x636F7272})  # "corr" in hex
 
     results: list[CorrelationResult] = []
     rules = (

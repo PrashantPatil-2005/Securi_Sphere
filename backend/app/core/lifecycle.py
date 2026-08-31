@@ -56,8 +56,20 @@ async def shutdown_application(
 
     from app.websocket.redis_pubsub import close_redis as close_ws_redis
     from app.jobs.redis_broker import close_redis as close_broker_redis
+    from app.middleware.rate_limit import close_redis as close_rl_redis
+    from app.services.recovery_rate_limit import close_redis as close_recovery_redis
+    from app.services.ingest_dedup import close_redis as close_dedup_redis
     try:
-        await asyncio.wait_for(asyncio.gather(close_ws_redis(), close_broker_redis()), timeout=5)
+        await asyncio.wait_for(
+            asyncio.gather(
+                close_ws_redis(),
+                close_broker_redis(),
+                close_rl_redis(),
+                close_recovery_redis(),
+                close_dedup_redis(),
+            ),
+            timeout=5,
+        )
     except asyncio.TimeoutError:
         logger.warning("redis cleanup timed out")
 

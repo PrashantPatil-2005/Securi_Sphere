@@ -99,25 +99,21 @@ async def list_notification_history(
 
 
 async def mark_notification_read(db: AsyncSession, user_id: UUID, notification_id: UUID) -> bool:
-    exists = (
-        await db.execute(select(InAppNotification.id).where(InAppNotification.id == notification_id))
-    ).scalar_one_or_none()
-    if not exists:
-        return False
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    already = (
-        await db.execute(
-            select(InAppNotificationRead.notification_id).where(
-                InAppNotificationRead.user_id == user_id,
-                InAppNotificationRead.notification_id == notification_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if already:
-        return True
-
-    db.add(InAppNotificationRead(user_id=user_id, notification_id=notification_id))
+    stmt = (
+        pg_insert(InAppNotificationRead)
+        .values(user_id=user_id, notification_id=notification_id)
+        .on_conflict_do_nothing(index_elements=["user_id", "notification_id"])
+    )
+    result = await db.execute(stmt)
     await db.flush()
+    # Check if notification exists (if insert returned nothing, it might be duplicate or missing)
+    if result.rowcount == 0:
+        exists = (
+            await db.execute(select(InAppNotification.id).where(InAppNotification.id == notification_id))
+        ).scalar_one_or_none()
+        return exists is not None
     return True
 
 
@@ -134,8 +130,10 @@ async def mark_all_notifications_read(db: AsyncSession, user_id: UUID) -> int:
         )
     ).scalars().all()
 
-    for nid in unread_ids:
-        db.add(InAppNotificationRead(user_id=user_id, notification_id=nid))
+    if not unread_ids:
+        return 0
+
+    db.add_all([InAppNotificationRead(user_id=user_id, notification_id=nid) for nid in unread_ids])
     await db.flush()
     return len(unread_ids)
 

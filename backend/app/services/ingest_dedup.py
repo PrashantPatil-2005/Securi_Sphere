@@ -2,9 +2,8 @@
 
 import hashlib
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
-from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,12 +26,28 @@ async def _get_redis():
     if _redis_client is None:
         try:
             from redis.asyncio import Redis
-            _redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
+            _redis_client = Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_timeout=5,
+                socket_connect_timeout=3,
+                max_connections=5,
+            )
             await _redis_client.ping()
         except Exception as exc:
             logger.warning("Redis unavailable for dedup: %s", exc)
-            _redis_client = False
-    return _redis_client if _redis_client is not False else None
+            _redis_client = None
+    return _redis_client if _redis_client is not None else None
+
+
+async def close_redis() -> None:
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            await _redis_client.aclose()
+        except Exception:
+            pass
+    _redis_client = None
 
 
 async def is_duplicate(db: AsyncSession, fingerprint: str) -> bool:

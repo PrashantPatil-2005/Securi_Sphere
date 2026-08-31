@@ -125,7 +125,7 @@ async def get_correlation_rule(
     return _to_response(rule)
 
 
-@router.post("", response_model=CorrelationRuleResponse)
+@router.post("", response_model=CorrelationRuleResponse, status_code=201)
 async def create_correlation_rule(
     body: CorrelationRuleCreate,
     db: AsyncSession = Depends(get_db),
@@ -223,7 +223,7 @@ async def update_correlation_rule(
     return _to_response(rule)
 
 
-@router.delete("/{rule_id}")
+@router.delete("/{rule_id}", status_code=204)
 async def delete_correlation_rule(
     rule_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -244,4 +244,3 @@ async def delete_correlation_rule(
         details={"name": rule.name},
     )
     await db.delete(rule)
-    return {"message": "deleted"}

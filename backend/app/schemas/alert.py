@@ -1,10 +1,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.schemas.event import EventResponse
 from app.schemas.validators import InetStr
+
+VALID_ALERT_STATUSES = ("open", "investigating", "resolved", "closed")
+VALID_ALERT_SEVERITIES = ("critical", "high", "medium", "low")
 
 
 class AlertResponse(BaseModel):
@@ -37,7 +40,7 @@ class AlertListResponse(BaseModel):
 
 
 class AlertStatusUpdate(BaseModel):
-    status: str
+    status: str = Field(..., pattern="^(open|investigating|resolved|closed)$")
     assigned_to: UUID | None = None
 
 
@@ -48,7 +51,7 @@ class AlertFeedbackUpdate(BaseModel):
 
 class AlertBulkUpdate(BaseModel):
     alert_ids: list[UUID]
-    status: str | None = None
+    status: str | None = Field(default=None, pattern="^(open|investigating|resolved|closed)$")
     assigned_to: UUID | None = None
 
 

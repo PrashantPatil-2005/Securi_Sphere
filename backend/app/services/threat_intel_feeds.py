@@ -97,12 +97,20 @@ async def sync_reference_set_feed(db: AsyncSession, reference_set: ReferenceSet)
         ).scalars().all()
     )
     added = 0
+    batch: list = []
+    FLUSH_BATCH_SIZE = 5000
     for value in values:
         if value in existing:
             continue
-        db.add(ReferenceSetEntry(set_id=reference_set.id, value=value, note="feed_sync"))
+        batch.append(ReferenceSetEntry(set_id=reference_set.id, value=value, note="feed_sync"))
         existing.add(value)
         added += 1
+        if len(batch) >= FLUSH_BATCH_SIZE:
+            db.add_all(batch)
+            await db.flush()
+            batch.clear()
+    if batch:
+        db.add_all(batch)
 
     reference_set.feed_format = feed_format
     reference_set.feed_last_sync_at = datetime.now(timezone.utc)

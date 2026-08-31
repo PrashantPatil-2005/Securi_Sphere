@@ -32,7 +32,6 @@ Backpressure:
 import asyncio
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -186,26 +185,44 @@ async def _ingest_event_batch_inner(
 
     for event in ingested:
         await link_event_to_offense(db, event)
-        await ws_manager.broadcast({
-            "type": "security_feed",
-            "data": {
-                "id": str(event.id),
-                "host_id": str(host.id),
-                "host_name": host.name,
-                "event_type": event.event_type,
-                "severity": event.severity,
-                "category": event.category,
-                "username": event.username,
-                "source_ip": event.source_ip,
-                "description": event.description,
-                "timestamp": event.timestamp.isoformat(),
-                "normalized_event": event.normalized_event,
-            },
-        })
 
-    from app.search.indexer import index_events_batch
+    # Record post-commit side effects (outbox pattern)
+    if "post_commit_hooks" not in db.info:
+        db.info["post_commit_hooks"] = []
+    hooks: list = db.info["post_commit_hooks"]
 
-    await index_events_batch(ingested, {host.id: host.name})
+    _host_id = host.id
+    _host_name = host.name
+    _event_snapshots = [
+        {
+            "id": str(event.id),
+            "host_id": str(_host_id),
+            "host_name": _host_name,
+            "event_type": event.event_type,
+            "severity": event.severity,
+            "category": event.category,
+            "username": event.username,
+            "source_ip": event.source_ip,
+            "description": event.description,
+            "timestamp": event.timestamp.isoformat(),
+            "normalized_event": event.normalized_event,
+        }
+        for event in ingested
+    ]
+
+    async def _post_commit():
+        for snap in _event_snapshots:
+            try:
+                await ws_manager.broadcast({"type": "security_feed", "data": snap})
+            except Exception:
+                pass
+        try:
+            from app.search.indexer import index_events_batch
+            await index_events_batch(ingested, {_host_id: _host_name})
+        except Exception:
+            pass
+
+    hooks.append(_post_commit)
 
     # Performance metrics
     _INGESTION_COUNTER["total_events"] += len(ingested)

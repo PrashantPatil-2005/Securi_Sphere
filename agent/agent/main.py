@@ -1,6 +1,6 @@
 import logging
 import signal
-import socket
+import threading
 import time
 
 from agent.buffer import init_db
@@ -19,6 +19,7 @@ METRICS_INTERVAL = 30
 LOG_INTERVAL = 10
 
 _shutdown_requested = False
+_shutdown_event = threading.Event()
 
 
 def _handle_shutdown(signum, frame):
@@ -26,6 +27,7 @@ def _handle_shutdown(signum, frame):
     sig_name = signal.Signals(signum).name
     logger.info("Received %s — shutting down gracefully", sig_name)
     _shutdown_requested = True
+    _shutdown_event.set()
 
 
 def main() -> None:
@@ -51,26 +53,42 @@ def main() -> None:
     try:
         while not _shutdown_requested:
             now = time.time()
-            sender.flush_buffer()
+            try:
+                sender.flush_buffer()
+            except Exception:
+                logger.exception("Error flushing buffer")
 
             if now - last_heartbeat >= HEARTBEAT_INTERVAL:
-                sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": AGENT_VERSION})
+                try:
+                    sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": AGENT_VERSION})
+                except Exception:
+                    logger.exception("Heartbeat failed")
                 last_heartbeat = now
 
             if now - last_metrics >= METRICS_INTERVAL:
-                sender.send_metrics([collect_metrics()])
+                try:
+                    sender.send_metrics([collect_metrics()])
+                except Exception:
+                    logger.exception("Metrics collection failed")
                 last_metrics = now
 
             if now - last_logs >= LOG_INTERVAL:
-                events = collect_events(tailer)
-                if events:
-                    sender.send_events(events)
+                try:
+                    events = collect_events(tailer)
+                    if events:
+                        sender.send_events(events)
+                except Exception:
+                    logger.exception("Log collection failed")
                 last_logs = now
 
-            time.sleep(1)
+            _shutdown_event.wait(timeout=1.0)
     finally:
         logger.info("Flushing remaining buffer before exit...")
-        sender.flush_buffer()
+        try:
+            sender.flush_buffer()
+        except Exception:
+            logger.exception("Final buffer flush failed")
+        sender.close()
         logger.info("Agent shutdown complete")
 
 

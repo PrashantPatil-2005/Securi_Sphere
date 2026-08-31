@@ -10,6 +10,7 @@ DB_PATH = Path("/var/lib/securi/buffer.db")
 MAX_BUFFER_ITEMS = 50000
 MAX_BUFFER_SIZE_MB = 500
 SQLITE_BUSY_TIMEOUT_MS = 5000
+MAX_EVENT_SIZE_BYTES = 100_000  # 100KB per event payload
 
 
 def _connect() -> sqlite3.Connection:
@@ -63,6 +64,14 @@ def _purge_oldest(conn: sqlite3.Connection, count: int) -> int:
 def enqueue(kind: str, payload: dict) -> bool:
     import time
 
+    payload_json = json.dumps(payload)
+    if len(payload_json.encode()) > MAX_EVENT_SIZE_BYTES:
+        logger.warning(
+            "Event payload too large (%d bytes) — dropping",
+            len(payload_json.encode()),
+        )
+        return False
+
     current_size = queue_size()
     current_mb = _buffer_size_mb()
 
@@ -86,7 +95,7 @@ def enqueue(kind: str, payload: dict) -> bool:
     conn = _connect()
     conn.execute(
         "INSERT INTO queue (kind, payload, created_at) VALUES (?, ?, ?)",
-        (kind, json.dumps(payload), time.time()),
+        (kind, payload_json, time.time()),
     )
     conn.commit()
     conn.close()

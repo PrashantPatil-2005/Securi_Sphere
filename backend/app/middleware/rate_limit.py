@@ -24,13 +24,29 @@ async def _redis_client():
     if _redis is None:
         try:
             from redis.asyncio import Redis
-            _redis = Redis.from_url(settings.redis_url, decode_responses=True)
+            _redis = Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_timeout=5,
+                socket_connect_timeout=3,
+                max_connections=5,
+            )
             await _redis.ping()
         except Exception as exc:
             logger.warning("Redis rate limiter unavailable: %s", exc)
-            _redis = False
+            _redis = None
             return None
     return _redis
+
+
+async def close_redis() -> None:
+    global _redis
+    if _redis is not None and _redis is not False:
+        try:
+            await _redis.aclose()
+        except Exception:
+            pass
+    _redis = None
 
 
 def _client_ip(request: Request) -> str:
@@ -45,6 +61,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     LIMITS: dict[str, tuple[int, int]] = {
         "/api/v1/auth": (20, 60),
         "/api/v1/agent": (120, 60),
+        "/api/v1/search": (30, 60),
+        "/api/v1/reports": (10, 60),
+        "/api/v1/analytics": (60, 60),
+        "/api/v1/assistant": (15, 60),
+        "/api/v1/siem": (60, 60),
     }
 
     def __init__(self, app):

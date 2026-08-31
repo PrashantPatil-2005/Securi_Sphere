@@ -17,6 +17,7 @@ from app.models.user_invite import UserInvite
 from app.schemas.auth import RoleResponse
 from app.security import generate_reset_token, hash_password, hash_token
 from app.services.notifications import send_email
+from app.schemas.auth import _validate_password
 
 
 INVITE_TTL_DAYS = 7
@@ -65,6 +66,9 @@ async def provision_user(
 
     if not sso_only and not password:
         raise HTTPException(status_code=400, detail="Password required unless sso_only is true")
+
+    if password:
+        _validate_password(password)
 
     role = await _role_by_name(db, role_name)
     user = User(
@@ -155,6 +159,7 @@ async def accept_invite(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     if password:
+        _validate_password(password)
         hashed = hash_password(password)
     else:
         hashed = None

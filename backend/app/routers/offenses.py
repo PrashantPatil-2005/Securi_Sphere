@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -9,11 +9,11 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.dependencies import client_ip, get_current_user, require_roles
 from app.models.host import Host
-from app.models.siem import Offense, OffenseEvent
+from app.models.siem import Offense
 from app.models.user import User
 from app.config import settings
 from app.schemas.assistant import OffenseAIBriefResponse
-from app.schemas.offense import OffenseStatusUpdate
+from app.schemas.offense import OffenseStatusUpdate, OffenseListResponse, OffenseDetail, OffenseSummary, OffenseEventRef, OffenseAlertRef
 from app.services.ai.summaries import generate_offense_brief
 from app.utils.query import ListParams, resolve_time_range
 from app.services.incident_promotion import promote_offense_to_incident
@@ -21,7 +21,7 @@ from app.services.incident_promotion import promote_offense_to_incident
 router = APIRouter(prefix="/offenses", tags=["offenses"])
 
 
-@router.get("")
+@router.get("", response_model=OffenseListResponse)
 async def list_offenses(
     status: str | None = None,
     host_id: UUID | None = None,
@@ -60,31 +60,31 @@ async def list_offenses(
         select(Host).where(Host.id.in_({o.host_id for o in page_rows}))
     )).scalars().all()}
 
-    return {
-        "items": [
-            {
-                "id": str(o.id),
-                "offense_number": o.offense_number,
-                "host_id": str(o.host_id),
-                "host_name": hosts.get(o.host_id, "?"),
-                "title": o.title,
-                "description": o.description,
-                "risk_level": o.risk_level,
-                "status": o.status,
-                "event_count": o.event_count,
-                "alert_count": o.alert_count,
-                "incident_id": str(o.incident_id) if o.incident_id else None,
-                "related_hosts": o.related_hosts or [],
-                "related_users": o.related_users or [],
-                "created_at": o.created_at.isoformat(),
-                "updated_at": o.updated_at.isoformat(),
-            }
+    return OffenseListResponse(
+        items=[
+            OffenseSummary(
+                id=str(o.id),
+                offense_number=o.offense_number,
+                host_id=str(o.host_id),
+                host_name=hosts.get(o.host_id, "?"),
+                title=o.title,
+                description=o.description,
+                risk_level=o.risk_level,
+                status=o.status,
+                event_count=o.event_count,
+                alert_count=o.alert_count,
+                incident_id=str(o.incident_id) if o.incident_id else None,
+                related_hosts=o.related_hosts or [],
+                related_users=o.related_users or [],
+                created_at=o.created_at.isoformat(),
+                updated_at=o.updated_at.isoformat(),
+            )
             for o in page_rows
         ],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    }
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/{offense_id}/ai-brief", response_model=OffenseAIBriefResponse)
@@ -101,7 +101,7 @@ async def get_offense_ai_brief(
     return OffenseAIBriefResponse(**result)
 
 
-@router.get("/{offense_id}")
+@router.get("/{offense_id}", response_model=OffenseDetail)
 async def get_offense(
     offense_id: UUID,
     db: AsyncSession = Depends(get_db),
@@ -132,13 +132,13 @@ async def get_offense(
     if event_ids:
         rows = (await db.execute(select(Event).where(Event.id.in_(event_ids)))).scalars().all()
         events = [
-            {
-                "id": str(ev.id),
-                "event_type": ev.event_type,
-                "description": ev.description,
-                "severity": ev.severity,
-                "timestamp": ev.timestamp.isoformat(),
-            }
+            OffenseEventRef(
+                id=str(ev.id),
+                event_type=ev.event_type,
+                description=ev.description,
+                severity=ev.severity,
+                timestamp=ev.timestamp.isoformat(),
+            )
             for ev in rows
         ]
 
@@ -146,36 +146,36 @@ async def get_offense(
     if alert_ids:
         rows = (await db.execute(select(Alert).where(Alert.id.in_(alert_ids)))).scalars().all()
         alerts = [
-            {
-                "id": str(al.id),
-                "title": al.title,
-                "severity": al.severity,
-                "status": al.status,
-                "created_at": al.created_at.isoformat(),
-            }
+            OffenseAlertRef(
+                id=str(al.id),
+                title=al.title,
+                severity=al.severity,
+                status=al.status,
+                created_at=al.created_at.isoformat(),
+            )
             for al in rows
         ]
 
-    return {
-        "id": str(offense.id),
-        "offense_number": offense.offense_number,
-        "host_id": str(offense.host_id),
-        "host_name": host.name if host else "?",
-        "title": offense.title,
-        "description": offense.description,
-        "risk_level": offense.risk_level,
-        "status": offense.status,
-        "event_count": offense.event_count,
-        "alert_count": offense.alert_count,
-        "incident_id": str(offense.incident_id) if offense.incident_id else None,
-        "timeline": offense.timeline or [],
-        "related_hosts": offense.related_hosts or [],
-        "related_users": offense.related_users or [],
-        "events": events,
-        "alerts": alerts,
-        "created_at": offense.created_at.isoformat(),
-        "updated_at": offense.updated_at.isoformat(),
-    }
+    return OffenseDetail(
+        id=str(offense.id),
+        offense_number=offense.offense_number,
+        host_id=str(offense.host_id),
+        host_name=host.name if host else "?",
+        title=offense.title,
+        description=offense.description,
+        risk_level=offense.risk_level,
+        status=offense.status,
+        event_count=offense.event_count,
+        alert_count=offense.alert_count,
+        incident_id=str(offense.incident_id) if offense.incident_id else None,
+        timeline=offense.timeline or [],
+        related_hosts=offense.related_hosts or [],
+        related_users=offense.related_users or [],
+        events=events,
+        alerts=alerts,
+        created_at=offense.created_at.isoformat(),
+        updated_at=offense.updated_at.isoformat(),
+    )
 
 
 @router.patch("/{offense_id}/status")
@@ -201,7 +201,6 @@ async def update_offense_status(
         offense.closed_at = datetime.now(timezone.utc)
     from app.services.audit import log_audit
     await log_audit(db, "offense_status_change", user_id=user.id, resource_type="offense", resource_id=offense_id)
-    await db.commit()
     return {"id": str(offense.id), "status": offense.status}
 
 

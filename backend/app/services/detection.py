@@ -12,11 +12,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+
 from app.models.alert import Alert
 from app.models.alert_rule import AlertRule
 from app.models.event import Event
@@ -70,10 +70,10 @@ class RuleChecker(ABC):
 _CHECKER_REGISTRY: dict[str, RuleChecker] = {}
 
 
-def register_checker(checker: RuleChecker) -> RuleChecker:
-    """Register a rule checker. Called at module load time."""
-    _CHECKER_REGISTRY[checker.rule_type] = checker
-    return checker
+def register_checker(checker_cls: type[RuleChecker]) -> type[RuleChecker]:
+    """Register a rule checker instance. Called at module load time."""
+    _CHECKER_REGISTRY[checker_cls.rule_type] = checker_cls()
+    return checker_cls
 
 
 def get_checker(rule_type: str) -> RuleChecker | None:
@@ -275,7 +275,7 @@ async def create_alert(
             )
             .on_conflict_do_nothing(
                 index_elements=["host_id", "rule_id"],
-                where=Alert.status == "open",
+                index_where=text("(status)::text = 'open' AND rule_id IS NOT NULL"),
             )
             .returning(Alert)
         )
@@ -296,7 +296,7 @@ async def create_alert(
             )
             .on_conflict_do_nothing(
                 index_elements=["host_id", "title"],
-                where=Alert.status == "open",
+                index_where=text("(status)::text = 'open' AND rule_id IS NULL"),
             )
             .returning(Alert)
         )
@@ -308,9 +308,13 @@ async def create_alert(
 
     await db.flush()
     host = await db.get(Host, host_id)
-    from app.search.indexer import index_alert
-    await index_alert(alert, host.name if host else "")
 
+    # Record side effects to execute after commit (outbox pattern)
+    if "post_commit_hooks" not in db.info:
+        db.info["post_commit_hooks"] = []
+    hooks: list = db.info["post_commit_hooks"]
+
+    # In-app notification must stay inside the transaction
     from app.services.in_app_notifications import record_in_app_notification
     await record_in_app_notification(
         db, kind="alert", title=title, body=description,
@@ -320,24 +324,46 @@ async def create_alert(
     from app.services.offense_engine import process_new_alert
     await process_new_alert(db, alert)
 
-    from app.jobs.queue import job_queue
-    await job_queue.enqueue("notify_alert", {"alert_id": str(alert.id)})
+    # These side effects execute after commit via the outbox
+    hooks.append(lambda: _execute_alert_post_commit(alert, host, host_id, title, severity, confidence))
 
-    from app.services.playbooks import schedule_playbook_dispatch
-    await schedule_playbook_dispatch("alert_created", "alert", alert.id)
-
-    await ws_manager.broadcast({
-        "type": "new_alert",
-        "data": {
-            "id": str(alert.id),
-            "title": title,
-            "severity": severity,
-            "confidence": confidence,
-            "host_id": str(host_id),
-            "timestamp": alert.created_at.isoformat(),
-        },
-    })
     return alert
+
+
+async def _execute_alert_post_commit(alert, host, host_id, title, severity, confidence):
+    """Run post-commit side effects for alert creation. Safe to fail — logged and retried."""
+    try:
+        from app.search.indexer import index_alert
+        await index_alert(alert, host.name if host else "")
+    except Exception:
+        logger.warning("post-commit: index_alert failed for %s", alert.id, exc_info=True)
+
+    try:
+        from app.jobs.queue import job_queue
+        await job_queue.enqueue("notify_alert", {"alert_id": str(alert.id)})
+    except Exception:
+        logger.warning("post-commit: notify_alert enqueue failed for %s", alert.id, exc_info=True)
+
+    try:
+        from app.services.playbooks import schedule_playbook_dispatch
+        await schedule_playbook_dispatch("alert_created", "alert", alert.id)
+    except Exception:
+        logger.warning("post-commit: playbook_dispatch failed for %s", alert.id, exc_info=True)
+
+    try:
+        await ws_manager.broadcast({
+            "type": "new_alert",
+            "data": {
+                "id": str(alert.id),
+                "title": title,
+                "severity": severity,
+                "confidence": confidence,
+                "host_id": str(host_id),
+                "timestamp": alert.created_at.isoformat(),
+            },
+        })
+    except Exception:
+        logger.warning("post-commit: new_alert broadcast failed for %s", alert.id, exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -451,10 +477,17 @@ async def update_host_statuses(db: AsyncSession) -> None:
 
     maintenance_host_ids: set = set()
     if offline_rule:
-        from app.services.maintenance import is_host_in_maintenance
-        for h in hosts_with_api_key:
-            if await is_host_in_maintenance(db, h.id):
-                maintenance_host_ids.add(h.id)
+        # Batch-load active maintenance windows for all hosts with API keys
+        from app.models.maintenance import MaintenanceWindow
+        now_maint = datetime.now(timezone.utc)
+        maint_result = await db.execute(
+            select(MaintenanceWindow.host_id).where(
+                MaintenanceWindow.host_id.in_([h.id for h in hosts_with_api_key]),
+                MaintenanceWindow.starts_at <= now_maint,
+                MaintenanceWindow.ends_at >= now_maint,
+            )
+        )
+        maintenance_host_ids = set(maint_result.scalars().all())
 
     for host in hosts:
         old_status = host.status

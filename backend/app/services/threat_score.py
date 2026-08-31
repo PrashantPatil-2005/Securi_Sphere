@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert
@@ -101,19 +102,28 @@ async def calculate_host_scores(db: AsyncSession, host: Host) -> HostThreatScore
     threat_score = min(int(sum(factors.values())), 100)
     health_score = max(0, 100 - threat_score)
 
-    existing = (
-        await db.execute(select(HostThreatScore).where(HostThreatScore.host_id == host.id))
-    ).scalar_one_or_none()
-
-    if existing:
-        existing.score = threat_score
-        existing.health_score = health_score
-        existing.factors = factors
-        existing.calculated_at = now
-        score_row = existing
-    else:
-        score_row = HostThreatScore(host_id=host.id, score=threat_score, health_score=health_score, factors=factors)
-        db.add(score_row)
+    upsert_stmt = (
+        pg_insert(HostThreatScore)
+        .values(
+            host_id=host.id,
+            score=threat_score,
+            health_score=health_score,
+            factors=factors,
+            calculated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=["host_id"],
+            set_={
+                "score": threat_score,
+                "health_score": health_score,
+                "factors": factors,
+                "calculated_at": now,
+            },
+        )
+        .returning(HostThreatScore)
+    )
+    result = await db.execute(upsert_stmt)
+    score_row = result.scalar_one()
 
     last_hist = (
         await db.execute(

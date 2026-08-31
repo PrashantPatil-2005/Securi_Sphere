@@ -1,9 +1,9 @@
 import requests
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from agent.sender import Sender, MAX_CONSECUTIVE_FAILURES, MAX_RETRIES_BEFORE_BUFFER, _sign
+from agent.sender import Sender, MAX_CONSECUTIVE_FAILURES, MAX_RETRIES_BEFORE_BUFFER
 
 
 @pytest.fixture()
@@ -139,3 +139,100 @@ def test_sender_is_online(sender, mock_session):
     mock_session.post.return_value = resp
     sender.heartbeat()
     assert sender.is_online is True
+
+
+def test_sender_401_sets_auth_failed(sender, mock_session):
+    resp = MagicMock()
+    resp.status_code = 401
+    mock_session.post.return_value = resp
+    result = sender.heartbeat()
+    assert result is False
+    assert sender.is_auth_failed is True
+
+
+def test_sender_401_does_not_buffer(sender, mock_session):
+    import agent.buffer as buf
+    resp = MagicMock()
+    resp.status_code = 401
+    mock_session.post.return_value = resp
+    for _ in range(MAX_RETRIES_BEFORE_BUFFER + 5):
+        sender.send_events([{"type": "test"}])
+    assert buf.queue_size() == 0
+
+
+def test_sender_success_resets_auth_failed(sender, mock_session):
+    resp_401 = MagicMock()
+    resp_401.status_code = 401
+    mock_session.post.return_value = resp_401
+    sender.heartbeat()
+    assert sender.is_auth_failed is True
+    resp_200 = MagicMock()
+    resp_200.status_code = 200
+    mock_session.post.return_value = resp_200
+    sender.heartbeat()
+    assert sender.is_auth_failed is False
+
+
+def test_sender_close(sender, mock_session):
+    sender.close()
+    mock_session.close.assert_called_once()
+
+
+def test_sender_flush_batch_size(tmp_buffer_db, sender, mock_session):
+    import agent.buffer as buf
+    buf.init_db()
+    mock_session.post.side_effect = requests.ConnectionError("down")
+    for _ in range(MAX_RETRIES_BEFORE_BUFFER + 5):
+        sender.send_events([{"n": 1}])
+    total_buffered = buf.queue_size()
+    assert total_buffered > 0
+    mock_session.post.side_effect = None
+    resp = MagicMock()
+    resp.status_code = 200
+    mock_session.post.return_value = resp
+    sender.flush_buffer()
+    assert buf.queue_size() == 0
+
+
+def test_sender_flush_batch_chunking(tmp_buffer_db):
+    import agent.buffer as buf
+    from agent.sender import Sender, MAX_FLUSH_BATCH_SIZE
+    buf.init_db()
+    s = Sender("https://server.example.com", "test-key", signing=False)
+    s._interruptible_sleep = lambda seconds: None
+    original = MAX_FLUSH_BATCH_SIZE
+    try:
+        import agent.sender as sender_mod
+        sender_mod.MAX_FLUSH_BATCH_SIZE = 2
+        for i in range(6):
+            buf.enqueue("events", {"seq": i})
+        assert buf.queue_size() == 6
+        mock = MagicMock()
+        resp = MagicMock()
+        resp.status_code = 200
+        mock.post.return_value = resp
+        s.session = mock
+        s.flush_buffer()
+        assert buf.queue_size() == 0
+        assert mock.post.call_count == 3
+    finally:
+        sender_mod.MAX_FLUSH_BATCH_SIZE = original
+
+
+def test_sender_429_respects_retry_after(sender, mock_session):
+    resp = MagicMock()
+    resp.status_code = 429
+    resp.headers = {"Retry-After": "5"}
+    mock_session.post.return_value = resp
+    sender._interruptible_sleep = lambda s: None
+    sender.send_events([{"type": "test"}])
+    assert sender._consecutive_failures > 0
+
+
+def test_sender_logging_throttle(sender, mock_session):
+    mock_session.post.side_effect = requests.ConnectionError("down")
+    sender._last_failure_log_time = 0.0
+    sender.heartbeat()
+    sender._failure_log_suppressed = False
+    sender.heartbeat()
+    assert sender._failure_log_suppressed is True

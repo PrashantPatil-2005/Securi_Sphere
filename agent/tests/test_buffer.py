@@ -2,8 +2,6 @@ import sqlite3
 import threading
 import time
 
-import pytest
-
 import agent.buffer as buf
 
 
@@ -145,3 +143,32 @@ def test_concurrent_flush_and_enqueue(tmp_buffer_db):
     t1.join()
     t2.join()
     assert errors == []
+
+
+def test_event_size_limit(tmp_buffer_db):
+    buf.init_db()
+    original = buf.MAX_EVENT_SIZE_BYTES
+    buf.MAX_EVENT_SIZE_BYTES = 100
+    try:
+        small = {"data": "x" * 50}
+        assert buf.enqueue("events", small) is True
+        large = {"data": "x" * 200}
+        assert buf.enqueue("events", large) is False
+        assert buf.queue_size() == 1
+    finally:
+        buf.MAX_EVENT_SIZE_BYTES = original
+
+
+def test_purge_stale_returns_zero_when_nothing_old(tmp_buffer_db):
+    buf.init_db()
+    buf.enqueue("events", {"fresh": True})
+    deleted = buf.purge_stale(max_age_hours=48)
+    assert deleted == 0
+    assert buf.queue_size() == 1
+
+
+def test_remove_by_ids_empty_list(tmp_buffer_db):
+    buf.init_db()
+    buf.enqueue("events", {"a": 1})
+    buf.remove_by_ids([])
+    assert buf.queue_size() == 1

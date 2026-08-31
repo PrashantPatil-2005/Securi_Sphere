@@ -24,12 +24,28 @@ async def _redis_client():
         try:
             from redis.asyncio import Redis
 
-            _redis = Redis.from_url(settings.redis_url, decode_responses=True)
+            _redis = Redis.from_url(
+                settings.redis_url,
+                decode_responses=True,
+                socket_timeout=5,
+                socket_connect_timeout=3,
+                max_connections=5,
+            )
             await _redis.ping()
         except Exception as exc:
             logger.warning("Redis recovery rate limiter unavailable: %s", exc)
-            _redis = False
-    return _redis if _redis is not False else None
+            _redis = None
+    return _redis if _redis is not None else None
+
+
+async def close_redis() -> None:
+    global _redis
+    if _redis is not None:
+        try:
+            await _redis.aclose()
+        except Exception:
+            pass
+    _redis = None
 
 
 async def _sliding_window(key: str, max_requests: int, window_seconds: int) -> tuple[bool, int]:

@@ -37,9 +37,11 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     if exc.status_code == 429:
         code = "rate_limit_exceeded"
     detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+    headers = dict(exc.headers) if exc.headers else None
     return JSONResponse(
         status_code=exc.status_code,
         content=error_body(code=code, message=detail, status_code=exc.status_code),
+        headers=headers,
     )
 
 
@@ -56,7 +58,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.error("Unhandled exception: %s\n%s", exc, traceback.format_exc())
+    logger.error("Unhandled exception on %s %s: %s\n%s", request.method, request.url.path, exc, traceback.format_exc())
     return JSONResponse(
         status_code=500,
         content=error_body(code="internal_error", message="Internal server error", status_code=500),

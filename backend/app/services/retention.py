@@ -20,16 +20,17 @@ RETENTION_BATCH_SIZE = 5000
 
 async def _batch_delete(db, model, column, cutoff) -> int:
     """Delete old rows in batches to avoid locking the table."""
+    pk_col = model.__table__.primary_key.columns.values()[0]
     total_deleted = 0
     while True:
         subq = (
-            select(model.id)
+            select(pk_col)
             .where(column < cutoff)
             .limit(RETENTION_BATCH_SIZE)
             .subquery()
         )
         result = await db.execute(
-            delete(model).where(model.id.in_(select(subq.c.id)))
+            delete(model).where(pk_col.in_(select(subq.c[pk_col.name])))
         )
         deleted = result.rowcount
         total_deleted += deleted

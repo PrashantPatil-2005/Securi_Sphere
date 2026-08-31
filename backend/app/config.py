@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     agent_request_signing: bool = False
     account_lockout_attempts: int = 5
     account_lockout_minutes: int = 15
+    max_concurrent_sessions: int = 10
     recovery_forgot_ip_limit: int = 5
     recovery_forgot_ip_window_seconds: int = 3600
     recovery_forgot_email_limit: int = 3

@@ -3,13 +3,13 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IncidentCreate(BaseModel):
     title: str
     description: str | None = None
-    severity: str = "medium"
+    severity: str = Field(default="medium", pattern="^(low|medium|high|critical)$")
     host_id: UUID | None = None
 
 

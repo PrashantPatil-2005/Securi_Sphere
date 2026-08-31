@@ -15,8 +15,6 @@ from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, Event
 from app.security import generate_api_key, hash_token
 from app.services.agent_integrity import check_agent_integrity
 from app.services.audit import log_audit
-from app.services.detection import run_detection_for_host
-from app.services.threat_score import calculate_host_scores
 from app.pipeline.ingestion import ingest_event_batch
 from app.pipeline.flow_collector import flows_to_events
 from app.pipeline.windows_collector import windows_events_to_ingest
@@ -103,6 +101,7 @@ async def heartbeat(
     if payload.agent_hash or payload.agent_version:
         await check_agent_integrity(db, host, payload.agent_hash, payload.agent_version)
     if status_changed:
+        await db.flush()
         from app.search.indexer import index_host
         await index_host(host)
     return {"status": "ok"}

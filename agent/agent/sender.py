@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from agent.buffer import clear_queue, dequeue_all, enqueue, queue_size, remove_by_ids
+from agent.buffer import dequeue_all, enqueue, queue_size, remove_by_ids
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +33,9 @@ MAX_BACKOFF_SECONDS = 60.0
 BACKOFF_MULTIPLIER = 2.0
 MAX_RETRIES_BEFORE_BUFFER = 3
 MAX_CONSECUTIVE_FAILURES = 100
+
+# Buffer flush limits
+MAX_FLUSH_BATCH_SIZE = 500
 
 
 def _sign(api_key: str, timestamp: str, nonce: str, body: bytes) -> str:
@@ -71,6 +74,11 @@ class Sender:
         self._current_backoff = INITIAL_BACKOFF_SECONDS
         self._last_attempt = 0.0
         self._backoff_event = threading.Event()
+        # Permanent auth failure flag (401)
+        self._auth_failed = False
+        # Log throttle: suppress repeated identical messages
+        self._last_failure_log_time: float = 0.0
+        self._failure_log_suppressed = False
 
     def _get_backoff(self) -> float:
         """Calculate current backoff with exponential increase + jitter."""
@@ -115,7 +123,9 @@ class Sender:
         try:
             r = self.session.post(f"{self.base}{path}", data=body, headers=headers, timeout=15)
             if r.status_code == 401:
-                logger.error("Invalid API key or signature rejected")
+                if not self._auth_failed:
+                    logger.error("Credentials permanently rejected — agent authentication failed")
+                self._auth_failed = True
                 self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
                 return False
             if r.status_code == 429:
@@ -131,22 +141,48 @@ class Sender:
             # Success — reset backoff
             self._consecutive_failures = 0
             self._current_backoff = INITIAL_BACKOFF_SECONDS
+            self._auth_failed = False
+            self._failure_log_suppressed = False
             return True
         except requests.RequestException as e:
             self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
-            logger.warning(
-                "Request failed (%d consecutive): %s",
-                self._consecutive_failures, e,
-            )
-            if buffer_kind and self._consecutive_failures >= MAX_RETRIES_BEFORE_BUFFER:
-                logger.info("Buffering to SQLite after %d failures", self._consecutive_failures)
+            now = time.time()
+            if now - self._last_failure_log_time > 60:
+                logger.warning(
+                    "Request failed (%d consecutive): %s",
+                    self._consecutive_failures, e,
+                )
+                self._last_failure_log_time = now
+                self._failure_log_suppressed = False
+            elif not self._failure_log_suppressed:
+                logger.warning(
+                    "Request failed (%d consecutive) — suppressing further messages for 60s",
+                    self._consecutive_failures,
+                )
+                self._failure_log_suppressed = True
+            if (
+                buffer_kind
+                and self._consecutive_failures >= MAX_RETRIES_BEFORE_BUFFER
+                and not self._auth_failed
+            ):
+                if self._consecutive_failures == MAX_RETRIES_BEFORE_BUFFER:
+                    logger.info("Buffering to SQLite after %d failures", self._consecutive_failures)
                 enqueue(buffer_kind, data)
             return False
+
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        self.session.close()
 
     @property
     def is_online(self) -> bool:
         """Whether the agent considers itself connected to the server."""
         return self._consecutive_failures == 0
+
+    @property
+    def is_auth_failed(self) -> bool:
+        """Whether the agent's credentials are permanently rejected."""
+        return self._auth_failed
 
     def heartbeat(self, payload: dict | None = None) -> bool:
         return self._post("/api/v1/agent/heartbeat", payload or {})
@@ -164,9 +200,10 @@ class Sender:
     def flush_buffer(self) -> None:
         """Drain the offline SQLite buffer and replay to server.
 
-        Only removes items that were successfully sent. Failed items stay
-        in SQLite for the next retry cycle, preventing silent data loss
-        on partial network failures.
+        Processes in bounded batches to avoid backend overload after
+        prolonged offline periods. Only removes items that were
+        successfully sent. Failed items stay in SQLite for the next
+        retry cycle.
         """
         buffered = queue_size()
         if buffered > 0:
@@ -176,36 +213,43 @@ class Sender:
         if not items:
             return
 
-        events_batch: list[dict] = []
-        metrics_batch: list[dict] = []
-        event_ids: list[int] = []
-        metric_ids: list[int] = []
-
-        for item_id, kind, payload in items:
-            if kind == "events":
-                events_batch.extend(payload.get("events", [payload]))
-                event_ids.append(item_id)
-            elif kind == "metrics":
-                metrics_batch.extend(payload.get("metrics", [payload]))
-                metric_ids.append(item_id)
-
         sent_ids: list[int] = []
-        if events_batch:
-            if self.send_events(events_batch):
-                sent_ids.extend(event_ids)
-            else:
-                logger.warning("Failed to send %d buffered events — will retry", len(events_batch))
-        if metrics_batch:
-            if self.send_metrics(metrics_batch):
-                sent_ids.extend(metric_ids)
-            else:
-                logger.warning("Failed to send %d buffered metrics — will retry", len(metrics_batch))
+        total_events = 0
+        total_metrics = 0
+
+        for batch_start in range(0, len(items), MAX_FLUSH_BATCH_SIZE):
+            batch = items[batch_start:batch_start + MAX_FLUSH_BATCH_SIZE]
+            events_batch: list[dict] = []
+            metrics_batch: list[dict] = []
+            event_ids: list[int] = []
+            metric_ids: list[int] = []
+
+            for item_id, kind, payload in batch:
+                if kind == "events":
+                    events_batch.extend(payload.get("events", [payload]))
+                    event_ids.append(item_id)
+                elif kind == "metrics":
+                    metrics_batch.extend(payload.get("metrics", [payload]))
+                    metric_ids.append(item_id)
+
+            if events_batch:
+                if self.send_events(events_batch):
+                    sent_ids.extend(event_ids)
+                    total_events += len(events_batch)
+                else:
+                    logger.warning("Failed to send %d buffered events — will retry", len(events_batch))
+            if metrics_batch:
+                if self.send_metrics(metrics_batch):
+                    sent_ids.extend(metric_ids)
+                    total_metrics += len(metrics_batch)
+                else:
+                    logger.warning("Failed to send %d buffered metrics — will retry", len(metrics_batch))
 
         if sent_ids:
             remove_by_ids(sent_ids)
             logger.info(
                 "Buffer flushed: %d/%d items sent (%d events, %d metrics)",
-                len(sent_ids), len(items), len(events_batch), len(metrics_batch),
+                len(sent_ids), len(items), total_events, total_metrics,
             )
         if len(sent_ids) < len(items):
             remaining = len(items) - len(sent_ids)
