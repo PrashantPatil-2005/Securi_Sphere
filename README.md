@@ -1,213 +1,90 @@
-# Securi — A SIEM That Tells a Story
+# Securi Sphere — A SIEM That Tells a Story
 
 A lightweight Security Information and Event Management platform for small Linux fleets. Built as a final year engineering project, inspired by IBM QRadar's architecture.
 
 ---
 
-## The Story: A Day in the Life of an Attack
+## What is Securi Sphere?
 
-A company runs **20 Linux servers**. Securi is monitoring all of them. Nothing unusual — until now.
+Securi Sphere is a complete SOC (Security Operations Center) platform that monitors Linux servers in real time. It collects telemetry, detects threats, correlates attacks, groups them into offenses, and presents everything through a modern dashboard — giving analysts the full picture of an attack from first login to final resolution.
 
-### Chapter 1 — The Agent Wakes Up
-
-On every server, a lightweight Python agent is running. It collects system logs, authentication logs, CPU usage, memory usage, running processes, and network connections.
-
-```
-Jul 18 10:01:21 sshd: Failed password for root from 185.23.x.x
-```
-
-**Code:** `agent/agent/collector/events.py` — parses SSH failures, sudo usage, service events
-**Code:** `agent/agent/collector/metrics.py` — collects CPU/memory/disk via psutil
-
-### Chapter 2 — The Network Dies
-
-The internet connection drops. Most projects lose the logs. The agent stores everything in a local SQLite database. Hours later, when the network returns, it uploads everything in order. Nothing is lost.
-
-**Code:** `agent/agent/buffer.py` — SQLite offline buffer with `enqueue()`, `dequeue_all()`, `purge_stale()`
-
-### Chapter 3 — Sending Securely
-
-The agent signs every request with HMAC-SHA256. The signature covers the timestamp, a nonce, and the request body. If an attacker replays yesterday's packet, the server rejects it.
-
-```
-POST /api/v1/agent/events
-Headers:
-  X-Agent-Timestamp: 1689676881
-  X-Agent-Nonce: a1b2c3d4
-  X-Agent-Signature: sha256=...
-```
-
-**Code:** `agent/agent/sender.py` — `_sign()` computes HMAC, `Sender._post()` attaches headers
-
-### Chapter 4 — The Gatekeeper
-
-FastAPI receives the request. Before looking at events, it verifies the HMAC signature using constant-time comparison (prevents timing attacks). Checks the nonce (single-use, stored in DB). Validates the timestamp (rejects if >5 minutes old).
-
-Only genuine, fresh requests pass.
-
-**Code:** `backend/app/services/agent_auth.py` — `verify_agent_signature()`, `validate_agent_request()`
-**Code:** `backend/app/dependencies_agent.py` — `get_authenticated_agent()` FastAPI dependency
-
-### Chapter 5 — The Cleaner
-
-Events enter the ingestion pipeline. The first question: "Have I seen this before?" A SHA-256 fingerprint is computed from host + timestamp + event type + raw log. Redis checks first (fast path), then PostgreSQL. Duplicates are discarded.
-
-**Code:** `backend/app/services/ingest_dedup.py` — `event_fingerprint()`, `is_duplicate()`
-
-### Chapter 6 — The Translator
-
-Linux logs are messy. Ubuntu writes "Failed password". Another distro writes "Authentication failure". The normalizer converts them into a common format:
-
-```json
-{
-  "host": "web-01",
-  "user": "root",
-  "type": "ssh_login_failure",
-  "ip": "185.23.x.x",
-  "severity": "high",
-  "category": "authentication"
-}
-```
-
-**Code:** `backend/app/pipeline/normalizer.py` — `normalize_event_type()`, `build_normalized_event()`
-**Code:** `backend/app/pipeline/validator.py` — batch size, timestamp, field length validation
-
-### Chapter 7 — Into the Database
-
-The normalized event is stored in PostgreSQL. The Event model has 17 columns: UUID primary key, host foreign key, event type, severity, category, MITRE technique ID, source IP (INET), username, raw log, normalized event (JSONB), metadata (JSONB), and indexed timestamp.
-
-**Code:** `backend/app/models/event.py` — `class Event(Base)` with all columns
-
-### Chapter 8 — The Detective Arrives
-
-The detection engine wakes up. It iterates every enabled rule, queries the database for matching conditions, and creates alerts when thresholds are exceeded.
-
-Built-in rules:
-- **Failed logins** — 5+ SSH failures in 5 minutes
-- **Brute force** — 10+ SSH failures (supersedes failed logins)
-- **High CPU/Memory/Disk** — metric threshold alerts
-- **Service failure** — systemd service crash detection
-- **Agent offline** — heartbeat staleness
-
-**Code:** `backend/app/services/detection.py` — `RuleChecker` ABC + `@register_checker` registry pattern
-
-### Chapter 9 — One Alert Isn't Enough
-
-The correlation engine asks: "Is this related to anything else?" Three algorithms detect attack patterns:
-
-1. **Sequence matching** — ordered events within a time window (e.g., failed login → success → sudo = brute force with privilege escalation)
-2. **Co-occurrence** — related events appearing together regardless of order (e.g., service stop + agent disconnect = host compromise)
-3. **Cross-host** — same attacker across multiple hosts (e.g., same IP fails SSH on 3 servers = lateral movement)
-
-Each match gets a confidence score based on heuristics: base score + privilege escalation bonus + high-volume bonus + compressed timeline bonus.
-
-**Code:** `backend/app/services/correlation/framework.py` — `SequenceMatcher`, `CoOccurrenceMatcher`, `CrossHostMatcher`
-**Code:** `backend/app/services/correlation_engine.py` — engine loop evaluating rules against events
-
-### Chapter 10 — Creating an Offense
-
-Instead of flooding analysts with alerts, the system groups related activity into offenses. A 30-minute window clusters alerts from the same host or attack chain. Each offense gets a sequential number, related hosts, related users, and a timeline.
-
-**Code:** `backend/app/services/offense_engine.py` — `find_or_create_offense()`, `link_alert_to_offense()`
-
-### Chapter 11 — The Timeline
-
-The offense page doesn't show random logs. It reconstructs the attack chain:
-
-```
-10:01  Failed Login
-10:03  Failed Login
-10:04  Successful Login
-10:05  sudo executed
-10:06  New user created
-10:08  SSH outbound connection
-```
-
-A SHA-256 fingerprint deduplicates timelines. Confidence scoring uses: base 30 + failures × 5 + success bonus + privilege escalation bonus + compressed timeline bonus (max 100).
-
-**Code:** `backend/app/services/timeline.py` — `build_timelines()`, `_chain_confidence()`
-
-### Chapter 12 — The Dashboard Comes Alive
-
-As soon as the offense is created, Redis publishes a message. WebSocket receives it. Every browser updates instantly — without refreshing. The SOC analyst sees the critical offense in real time.
-
-**Code:** `backend/app/websocket/redis_pubsub.py` — `publish_ws_message()` via `securi:ws:broadcast` channel
-**Code:** `backend/app/websocket/manager.py` — `ConnectionManager` with Redis pub/sub for multi-instance broadcast
-**Code:** `frontend/lib/websocket.tsx` — client-side auto-reconnect, typed message handlers
-
-### Chapter 13 — The Analyst
-
-The analyst clicks the alert. They don't just see "CPU: 90%". They see:
-
-- Host details and previous alerts
-- Attack timeline reconstruction
-- MITRE ATT&CK technique mapping
-- Related events across the timeline
-- IOC lookup panel (VirusTotal integration)
-- AI assistant summary
-- Risk score and investigation notes
-
-**Code:** `frontend/app/(dashboard)/alerts/page.tsx` — alerts dashboard with virtual scrolling
-**Code:** `frontend/components/AlertInvestigationPane.tsx` — full investigation drawer
-
-### Chapter 14 — Resolution and Audit Trail
-
-The analyst marks the offense as "True Positive" and resolves it. The platform stores who resolved it, when, why — and everything is recorded in a tamper-evident audit log with SHA-256 hash chaining (each entry's hash includes the previous entry's hash).
-
-**Code:** `backend/app/models/audit.py` — `AuditLog` with chain_seq, prev_hash, entry_hash
-**Code:** `backend/app/services/audit.py` — `log_audit()` with advisory lock + hash chain
-**Code:** `backend/app/services/audit_chain.py` — `verify_audit_chain()` for integrity verification
+**Inspired by IBM QRadar** — the same 3-layer pipeline architecture used by enterprise SIEM tools costing $1M+, built as an open-source educational project.
 
 ---
 
-## The Complete Pipeline
+## Features
+
+### Telemetry Collection
+- **Linux agent** — lightweight Python daemon collecting system logs, auth logs, CPU/memory/disk metrics, running processes, network connections
+- **Offline buffer** — SQLite local buffer when network is down; auto-replays on reconnect
+- **HMAC-SHA256 signing** — every request is cryptographically signed with nonce + timestamp validation
+
+### Detection & Correlation
+- **7 built-in detection rules** — failed logins, brute force, high CPU/memory/disk, service failure, agent offline
+- **Extensible rule engine** — registry pattern; add new rules by registering a checker class
+- **3 correlation algorithms** — sequence matching, co-occurrence, cross-host attack detection
+- **Offense engine** — groups related alerts into offenses with confidence scoring
+- **Attack timeline reconstruction** — chains events into chronological attack narratives
+
+### Investigation
+- **Alert investigation pane** — host details, related events, MITRE ATT&CK mapping, IOC lookup (VirusTotal)
+- **MITRE ATT&CK heatmap** — visual matrix of technique coverage
+- **UEBA (User & Entity Behavior Analytics)** — anomaly detection with z-score thresholding
+- **AI Security Assistant** — local-first copilot for alert explanation, NL search, investigation summaries
+
+### Operations
+- **Real-time WebSocket updates** — live feed of alerts, offenses, host status changes
+- **Tamper-evident audit log** — SHA-256 hash chain integrity verification
+- **RBAC** — admin, analyst, viewer roles with enforced permissions
+- **MFA** — TOTP-based multi-factor authentication
+- **Session management** — concurrent session limits, refresh token rotation, session revocation
+- **Rate limiting** — login brute-force protection with Retry-After headers
+- **Incident management** — offense → incident promotion with notes and workflow
+
+### Dashboard
+- **SOC dashboard** — KPI cards, active threats, severity distribution, host risk, live feed
+- **24 dedicated pages** — alerts, offenses, incidents, MITRE, UEBA, hosts, events, settings, reports
+- **Dark mode** — optimized SOC aesthetic with glass panels and ambient gradient
+- **Virtualized lists** — performant rendering of thousands of alerts/events
+
+---
+
+## Architecture
 
 ```
-Linux Server
-    |
-    v
-Agent (collector/events.py + metrics.py)
-    |
-    v
-Offline Buffer (buffer.py)  <--- if network is down
-    |
-    v
-HMAC Signing (sender.py)
-    |
-    v
-Gatekeeper (agent_auth.py)  <--- verify HMAC, nonce, timestamp
-    |
-    v
-Ingestion Pipeline (pipeline/ingestion.py)
-    |
-    +---> Deduplication (ingest_dedup.py)
-    +---> Normalization (normalizer.py)
-    +---> Storage (models/event.py)
-    |
-    v
-Detection Engine (services/detection.py)
-    |
-    v
-Correlation Engine (services/correlation/framework.py)
-    |
-    v
-Offense Engine (services/offense_engine.py)
-    |
-    v
-Timeline Reconstruction (services/timeline.py)
-    |
-    +---> Redis Pub/Sub (websocket/redis_pubsub.py)
-    +---> WebSocket (websocket/manager.py)
-    |
-    v
-Dashboard (frontend/)
-    |
-    v
-Analyst Investigation (components/AlertInvestigationPane.tsx)
-    |
-    v
-Resolution + Audit Trail (services/audit.py + audit_chain.py)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SECURI PLATFORM                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────┐    HTTPS/JSON     ┌──────────────┐    WebSocket     │
+│  │  Linux    │ ──────────────▶  │   FastAPI     │ ◀────────────▶  │
+│  │  Agent    │  (HMAC-signed)   │   Backend     │   (real-time)   │
+│  │  (Python) │                  │   (Python)    │                 │
+│  └──────────┘                  └──────┬───────┘                 │
+│       │                               │                          │
+│       │  heartbeat (30s)              │  SQL (async)             │
+│       │  metrics (30s)                ▼                          │
+│       │  logs (10s)            ┌──────────────┐                  │
+│       │                        │  PostgreSQL   │                  │
+│       ▼                        │  (primary +   │                  │
+│  ┌──────────┐                  │   replica)    │                  │
+│  │  SQLite   │                 └──────────────┘                  │
+│  │  (offline │                        │                          │
+│  │  buffer)  │                 ┌──────┴───────┐                 │
+│  └──────────┘                  │    Redis      │                 │
+│                                │  (queue +     │                 │
+│                                │   pub/sub)    │                 │
+│                                └──────────────┘                  │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                    Next.js Dashboard                          │  │
+│  │  Alerts • Offenses • Incidents • MITRE • UEBA • Hosts       │  │
+│  │  Events • Settings • Reports • AI Assistant                  │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full pipeline map.
 
 ---
 
@@ -224,39 +101,218 @@ Resolution + Audit Trail (services/audit.py + audit_chain.py)
 | Auth | JWT (HS256/RS256) + HttpOnly cookies + MFA (TOTP) |
 | Agent Auth | HMAC-SHA256 + nonce + timestamp validation |
 
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | 3.11+ | Backend and agent |
+| Node.js | 20+ | Frontend |
+| Docker | latest | PostgreSQL, Redis, optional OpenSearch |
+| Docker Compose | v2+ | Multi-container orchestration |
+
+---
+
 ## Quick Start
 
-```bash
-# 1. Start PostgreSQL + Redis
-docker compose up -d
+### 1. Clone and configure
 
-# 2. Backend
+```bash
+git clone <repository-url>
+cd securi-sphere
+cp .env.example .env
+```
+
+Edit `.env` and set at minimum:
+- `POSTGRES_PASSWORD` — database password
+- `JWT_SECRET` — random secret for JWT signing (generate with `openssl rand -base64 48`)
+- `DATABASE_URL` — connection string (default: `postgresql+asyncpg://securi:securi_dev@localhost:5432/securi`)
+
+### 2. Start dependencies
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL (port 5432) and Redis (port 6379).
+
+### 3. Start backend
+
+```bash
 cd backend
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --port 8000
+```
 
-# 3. Frontend
+Migrations run automatically on first startup.
+
+### 4. Start frontend
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Dashboard: http://localhost:3000 | API docs: http://localhost:8000/docs
+### 5. Access the platform
+
+- **Dashboard:** http://localhost:3000
+- **API docs:** http://localhost:8000/docs
+- **Health check:** http://localhost:8000/health/ready
+
+### 6. Register and explore
+
+1. Open http://localhost:3000/register
+2. Create your first account (first user becomes admin)
+3. Add a host from the dashboard
+4. Enroll an agent — see [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md)
+5. Run a simulation from the Simulation page to generate test telemetry
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `POSTGRES_PASSWORD` | Yes | — | Database password |
+| `JWT_SECRET` | Yes | — | JWT signing secret |
+| `DATABASE_URL` | Yes | — | PostgreSQL connection string |
+| `REDIS_URL` | No | — | Redis connection (optional, defaults to in-memory) |
+| `SERVER_URL` | No | `http://localhost:8000` | Backend public URL |
+| `FRONTEND_URL` | No | `http://localhost:3000` | Frontend public URL |
+| `ENVIRONMENT` | No | `development` | `development` or `production` |
+| `DEBUG` | No | `false` | Enable debug logging |
+| `ALLOW_REGISTRATION` | No | `true` | Allow new user registrations |
+| `ENABLE_SIMULATION` | No | `true` | Enable attack simulation |
+
+### Frontend Configuration
+
+Create `frontend/.env.local`:
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+### Agent Configuration
+
+The agent is configured via its install script or config file. See [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md).
+
+### Production Toggles
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `JOB_QUEUE_BACKEND` | `memory` | Set `redis` for durable background jobs |
+| `WS_PUBSUB_BACKEND` | `memory` | Set `redis` for multi-instance WebSockets |
+| `JWT_ALGORITHM` | `HS256` | Set `RS256` for asymmetric JWT with key pairs |
+| `AGENT_MTLS_ENABLED` | `false` | Enable agent TLS certificate verification |
+| `SEARCH_BACKEND` | `postgres` | Set `opensearch` with `OPENSEARCH_URL` for scale |
+| `UEBA_ENABLED` | `true` | Enable anomaly detection scans |
+| `VIRUSTOTAL_API_KEY` | — | Enable IOC enrichment in investigation |
+
+Full production checklist: [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md)
+
+---
 
 ## Testing
 
+### Backend (541 tests)
+
 ```bash
-# Backend (193+ unit tests)
-cd backend && pytest tests/ -v
+cd backend
 
-# Frontend unit tests
-cd frontend && npm run test:unit
+# Unit tests (no DB required)
+pytest tests/ -v --ignore=tests/integration -m "not integration"
 
-# Frontend E2E
-cd frontend && npx playwright test
+# All tests (requires PostgreSQL + Redis via Docker)
+pytest tests/ -v
+
+# Security scan
+bandit -r app --severity-level high
 ```
+
+### Agent (67 tests)
+
+```bash
+cd agent
+pytest tests/ -v
+```
+
+### Frontend (249 tests)
+
+```bash
+cd frontend
+
+# Unit tests
+npm run test:unit
+
+# TypeScript check
+npx tsc --noEmit
+
+# Lint
+npm run lint
+
+# Build
+npm run build
+
+# E2E tests (requires Playwright)
+npx playwright install chromium
+npx playwright test
+```
+
+### Docker Integration
+
+```bash
+# Full stack with Docker
+docker compose up -d --build
+
+# Smoke test
+./scripts/compose-smoke.sh  # Linux
+.\scripts\compose-smoke.ps1  # Windows
+```
+
+---
+
+## Security
+
+- **JWT authentication** with HS256/RS256 support and refresh token rotation
+- **RBAC** — admin, analyst, viewer roles enforced on all mutation endpoints
+- **MFA** — TOTP-based multi-factor authentication
+- **Rate limiting** — login brute-force protection with Retry-After headers
+- **HMAC-SHA256** — agent request signing with nonce and timestamp validation
+- **Security headers** — X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy
+- **CORS** — whitelist-only origin validation
+- **Tamper-evident audit log** — SHA-256 hash chain integrity
+- **Session management** — concurrent session limits, revocation on logout
+- **Password security** — bcrypt hashing, complexity requirements
+
+Full security checklist: [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md)
+
+---
+
+## Demo Mode
+
+Enable demo mode for a pre-configured demonstration environment:
+
+```bash
+# In .env
+DEMO_MODE=true
+```
+
+This creates a demo admin account:
+- **Email:** demo@securi.local
+- **Password:** Demo1234!
+
+Demo mode includes pre-seeded detection rules, sample hosts, and attack simulation scenarios.
+
+For a full walkthrough: [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md)
+
+---
 
 ## Project Structure
 
@@ -274,17 +330,20 @@ backend/
     models/            # 34 SQLAlchemy models
     routers/           # 37 API routers (183 endpoints)
     middleware/         # Rate limiting, security headers, timeouts
-  tests/               # 222 unit + integration tests
+  tests/               # 541 unit + integration tests
 
 frontend/
   app/(dashboard)/     # 24 pages (alerts, offenses, MITRE, timeline, ...)
-  components/          # 42 React components
+  components/          # 42+ React components
   lib/                 # API client, hooks, WebSocket
 
 agent/
   agent/               # Python agent (collector, sender, buffer)
+  tests/               # 67 agent tests
   install.sh           # One-line installer
 ```
+
+---
 
 ## Key Metrics
 
@@ -293,11 +352,58 @@ agent/
 | Backend routers | 37 |
 | API endpoints | 183 |
 | Database models | 34 |
+| Alembic migrations | 24 |
 | Frontend pages | 24 |
-| UI components | 22 |
-| Backend tests | 222 |
-| Config settings | 123 |
-| Alembic migrations | 20 |
+| UI components | 42+ |
+| Backend tests | 541 |
+| Agent tests | 67 |
+| Frontend tests | 249 |
+| Total tests | 857 |
+
+---
+
+## Deployment
+
+### Docker Compose (recommended)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### Kubernetes
+
+See [docs/KUBERNETES.md](docs/KUBERNETES.md) and [k8s/](k8s/) manifests.
+
+### Helm
+
+See [docs/HELM.md](docs/HELM.md) and [helm/](helm/) chart.
+
+### Render
+
+See `render.yaml` for Render.com deployment configuration.
+
+### Linux VPS
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and `scripts/deploy-linux.sh`.
+
+---
+
+## Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/API.md](docs/API.md) | REST API reference |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pipeline architecture |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Production deployment |
+| [docs/AGENT_INSTALL.md](docs/AGENT_INSTALL.md) | Agent setup guide |
+| [docs/AGENT_MTLS.md](docs/AGENT_MTLS.md) | Agent mTLS hardening |
+| [docs/PRODUCTION_SECURITY.md](docs/PRODUCTION_SECURITY.md) | Security checklist |
+| [docs/KUBERNETES.md](docs/KUBERNETES.md) | K8s deployment |
+| [docs/HELM.md](docs/HELM.md) | Helm chart |
+| [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md) | Attack lab walkthrough |
+| [docs/GUIDE_DEMO.md](docs/GUIDE_DEMO.md) | 5-minute demo guide |
+
+---
 
 ## License
 

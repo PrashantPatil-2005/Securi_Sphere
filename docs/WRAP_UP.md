@@ -30,7 +30,7 @@ See [SIEM_PIPELINE_ARCHITECTURE.md](SIEM_PIPELINE_ARCHITECTURE.md) for the full 
 - [x] FastAPI backend + PostgreSQL + optional Redis/OpenSearch
 - [x] Next.js 14 dashboard with real-time WebSockets
 - [x] Python Linux agent (enrollment, heartbeat, log collection)
-- [x] Alembic migrations `001` → `020` (baseline, indexes, constraints, partitions, agent cert, OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, reference intel, immutable audit, false-positive feedback, threat intel, analytics MVs, reports, telemetry)
+- [x] Alembic migrations `001` → `024` (baseline, indexes, constraints, partitions, agent cert, OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, reference intel, immutable audit, false-positive feedback, threat intel, analytics MVs, reports, telemetry, alert source, atomic alert dedup, additional indexes, refresh token revocation)
 - [x] Docker Compose (Postgres, Redis, backend, worker, frontend)
 
 ### Detection & response

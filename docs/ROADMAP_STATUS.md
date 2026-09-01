@@ -15,7 +15,7 @@ The platform supports register/invite → Attack Lab → offenses → investigat
 - Correlation rule CRUD, OpenSearch SIEM search with live host indexing
 - Reference sets in **search and real-time detection**
 - Redis job queue + worker, Redis WebSocket pub/sub
-- Alembic migrations **001–020** (OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, simulation runs, reference intel, immutable audit, false-positive feedback, threat intel, analytics MVs, reports, telemetry)
+- Alembic migrations **001–024** (OIDC, invites, UEBA, playbooks, notification rules, dashboard layouts, simulation runs, reference intel, immutable audit, false-positive feedback, threat intel, analytics MVs, reports, telemetry, alert source, atomic alert dedup, additional indexes, refresh token revocation)
 - Event partition auto-drop on retention
 - k6 load smoke + Playwright smoke + **SOC lab golden-path E2E** in CI (`scripts/validate-demo-flow.ps1` locally)
 - Compose smoke job (`docker-compose.ci.yml`) + release workflow publishing images on `v*` tags
