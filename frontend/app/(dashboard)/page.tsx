@@ -4,12 +4,9 @@ import { useState } from "react";
 import {
   Shield,
   Clock,
-  LayoutGrid,
 } from "lucide-react";
-import { Button } from "@/components/design-system/Button";
 import TimeRangeBar from "@/components/filters/TimeRangeBar";
 import { HostRiskDrawer } from "@/components/HostRiskDrawer";
-import { DashboardCustomizer } from "@/components/dashboard/DashboardCustomizer";
 import { Card, CardHeader } from "@/components/design-system/Card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
@@ -32,17 +29,17 @@ function SystemStatusDot() {
       <span className="relative flex h-2 w-2">
         <span
           className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-40 ${
-            connected ? "bg-success" : "bg-danger"
+            connected ? "bg-success" : "bg-warning"
           }`}
         />
         <span
           className={`relative inline-flex rounded-full h-2 w-2 ${
-            connected ? "bg-success" : "bg-danger"
+            connected ? "bg-success" : "bg-warning"
           }`}
         />
       </span>
       <span className="text-muted">
-        System: {connected ? "Healthy" : "Disconnected"}
+        Live feed: {connected ? "Connected" : "Connecting\u2026"}
       </span>
     </div>
   );
@@ -60,7 +57,6 @@ function LastUpdated() {
 
 export default function ExecutiveDashboard() {
   const [riskHostId, setRiskHostId] = useState<string | null>(null);
-  const [customizeOpen, setCustomizeOpen] = useState(false);
 
   return (
     <div className="space-y-5">
@@ -78,15 +74,6 @@ export default function ExecutiveDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <TimeRangeBar />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setCustomizeOpen(true)}
-            icon={<LayoutGrid className="w-4 h-4" />}
-          >
-            Customize
-          </Button>
         </div>
       </header>
 
@@ -212,7 +199,6 @@ export default function ExecutiveDashboard() {
       </div>
 
       <HostRiskDrawer hostId={riskHostId} onClose={() => setRiskHostId(null)} />
-      <DashboardCustomizer open={customizeOpen} onClose={() => setCustomizeOpen(false)} />
     </div>
   );
 }

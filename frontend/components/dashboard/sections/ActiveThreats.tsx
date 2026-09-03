@@ -7,7 +7,6 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SeverityBadge, StatusBadge } from "@/components/design-system";
 import { LoadingState } from "@/components/design-system/LoadingState";
-import { ErrorState } from "@/components/design-system/ErrorState";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import { useTimeRange } from "@/lib/timeRange";
 import { buildQuery } from "@/lib/buildQuery";
@@ -49,7 +48,19 @@ export const ActiveThreats = memo(function ActiveThreats() {
   }
 
   if (isError) {
-    return <ErrorState variant="card" title="Failed to load threats" onRetry={() => refetch()} />;
+    return (
+      <div className="flex items-center gap-3 py-4 px-2 text-sm text-muted">
+        <AlertTriangle className="w-4 h-4 text-danger shrink-0" />
+        <span className="flex-1">Unable to load threats</span>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="text-xs text-accent hover:underline shrink-0"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   const threats = (data?.items ?? []).filter(

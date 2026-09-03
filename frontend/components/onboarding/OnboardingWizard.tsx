@@ -24,7 +24,10 @@ const STEP_HINTS: Record<string, string> = {
 
 export function OnboardingWizard() {
   const pathname = usePathname();
-  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress();
+  const wizardDismissed = isOnboardingWizardDismissed();
+  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress({
+    enabled: !wizardDismissed,
+  });
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
 

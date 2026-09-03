@@ -24,7 +24,9 @@ interface CoachTip {
 export function ActivationCoach() {
   const enabled = useUxEnabled("ux_activation_coach_enabled");
   const pathname = usePathname();
-  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress();
+  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress({
+    enabled,
+  });
   const [dismissedId, setDismissedId] = useState<string | null>(null);
 
   const tip = useMemo((): CoachTip | null => {

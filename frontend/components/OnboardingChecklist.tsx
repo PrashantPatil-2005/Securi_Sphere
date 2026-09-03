@@ -11,7 +11,9 @@ import { useOnboardingProgress } from "@/lib/hooks/useOnboardingProgress";
 
 export function OnboardingChecklist() {
   const [dismissed, setDismissed] = useState(true);
-  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress();
+  const { steps, progress, completedCount, totalSteps } = useOnboardingProgress({
+    enabled: !dismissed,
+  });
 
   useEffect(() => {
     setDismissed(localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "1");

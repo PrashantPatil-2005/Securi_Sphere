@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useWsConnected } from "@/lib/websocket";
@@ -54,7 +55,7 @@ function HealthItem({ label, status }: HealthItemProps) {
 
 export const SystemHealthPanel = memo(function SystemHealthPanel() {
   const wsConnected = useWsConnected();
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["system-health"],
     queryFn: () => api<SystemHealth>("/api/v1/system/health"),
     staleTime: 60_000,
@@ -68,11 +69,19 @@ export const SystemHealthPanel = memo(function SystemHealthPanel() {
   if (isError || !data) {
     return (
       <div className="space-y-1">
-        <HealthItem label="API" status="unknown" />
+        <HealthItem label="API" status="error" />
         <HealthItem label="WebSocket" status={wsConnected ? "ok" : "error"} />
         <HealthItem label="Database" status="unknown" />
         <HealthItem label="Redis" status="unknown" />
         <HealthItem label="Search" status="unknown" />
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="flex items-center gap-1.5 mt-2 text-[11px] text-muted hover:text-accent transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" />
+          Retry health check
+        </button>
       </div>
     );
   }

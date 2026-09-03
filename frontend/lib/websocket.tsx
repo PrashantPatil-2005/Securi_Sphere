@@ -114,29 +114,69 @@ class WebSocketStore {
 
 const store = new WebSocketStore();
 
-/** Map WS message types to the query families that actually need refetching. */
+/**
+ * Targeted WS invalidation map.
+ *
+ * Each message type maps to the specific query key prefixes that actually
+ * need refreshing. React Query invalidates all queries whose key starts
+ * with the given prefix (prefix matching).
+ *
+ * Dashboard SIEM query keys (all under ["siem", "<endpoint>", ...]):
+ *   - executive       → SecurityKpis + AlertTrendChart
+ *   - severity-distribution → SeverityBreakdown
+ *   - top-risky-hosts → HostRiskPanel
+ *   - attack-timelines → AttackTimelines
+ *
+ * Removed: broad ["siem"] prefix that was causing all 5 SIEM dashboard
+ * queries to refetch on every WS message type.
+ */
 const INVALIDATION_BY_TYPE: Record<string, readonly (readonly string[])[]> = {
-  new_event: [["events"], ["siem"]],
-  new_alert: [["alerts"], ["siem"]],
-  alert_updated: [["alerts"], ["siem"]],
-  alert_resolved: [["alerts"], ["siem"]],
+  // Raw events: update executive summary (total_events) and attack timelines
+  // (which include event details). Do NOT refresh severity-distribution
+  // (alerts only) or top-risky-hosts (threat scores, not events).
+  new_event: [["siem", "executive"], ["siem", "attack-timelines"]],
+  // New alert: update alert lists, executive summary (active/critical counts),
+  // and severity distribution. Do NOT refresh top-risky-hosts or timelines.
+  new_alert: [["alerts"], ["siem", "executive"], ["siem", "severity-distribution"]],
+  // Alert updated (status, assignment, etc.): same as new_alert
+  alert_updated: [["alerts"], ["siem", "executive"], ["siem", "severity-distribution"]],
+  // Alert resolved: same as new_alert
+  alert_resolved: [["alerts"], ["siem", "executive"], ["siem", "severity-distribution"]],
+  // Alert feedback: only alert detail/investigation queries (no dashboard analytics)
   alert_feedback: [["alerts"]],
-  host_status: [["hosts"], ["siem"]],
-  host_enrolled: [["hosts"], ["siem"]],
-  // Offenses — backend does not emit these yet; entries added for forward compatibility.
+  // Host status change: update host lists, executive summary (online_hosts),
+  // and top-risky-hosts (host risk scores depend on host status).
+  host_status: [["hosts"], ["siem", "executive"], ["siem", "top-risky-hosts"]],
+  // New host enrolled: update host lists and executive summary (total_hosts)
+  host_enrolled: [["hosts"], ["siem", "executive"]],
+  // Offenses (backend does not emit these yet; forward compatibility)
   new_offense: [["offenses"]],
   offense_updated: [["offenses"]],
-  // Incidents — backend does not emit these yet; entries added for forward compatibility.
+  // Incidents (backend does not emit these yet; forward compatibility)
   new_incident: [["incidents"]],
   incident_updated: [["incidents"]],
   incident_status_changed: [["incidents"]],
-  // security_feed carries real-time events; also invalidate the events list
-  // so the analyst's view stays current. Debouncing (600ms) prevents
-  // excessive refetches during burst ingestion.
-  security_feed: [["events"], ["siem"]],
+  // security_feed: real-time events flow directly to LiveFeed via
+  // useSecurityFeedStore (no HTTP needed). Only invalidate the executive
+  // summary so KPIs eventually reflect new event counts.
+  security_feed: [["siem", "executive"]],
 };
 
-const INVALIDATION_DEBOUNCE_MS = 600;
+/**
+ * Throttle interval for batching WS-triggered query invalidations.
+ *
+ * Previous 600ms debounce allowed ~1.7 flushes/sec under continuous
+ * traffic, causing repeated HTTP requests every ~600ms.
+ *
+ * 2-second throttle means at most 1 flush per 2 seconds regardless of
+ * incoming WS message rate. Multiple events arriving within the window
+ * are coalesced into a single invalidation batch with deduplicated keys.
+ *
+ * LiveFeed messages bypass this entirely — they flow directly through
+ * useSecurityFeedStore → useSyncExternalStore, never touching the
+ * invalidation pipeline.
+ */
+const INVALIDATION_THROTTLE_MS = 2_000;
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -146,9 +186,11 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
     const pending = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastFlushAt = 0;
 
     const flush = () => {
       timer = null;
+      lastFlushAt = Date.now();
       const keys = Array.from(pending);
       pending.clear();
       for (const serialized of keys) {
@@ -159,7 +201,16 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
     const scheduleInvalidation = (queryKey: readonly string[]) => {
       pending.add(JSON.stringify(queryKey));
-      if (!timer) timer = setTimeout(flush, INVALIDATION_DEBOUNCE_MS);
+      if (timer) return; // already scheduled — coalesce
+
+      const elapsed = Date.now() - lastFlushAt;
+      if (elapsed >= INVALIDATION_THROTTLE_MS) {
+        // Enough time has passed — flush immediately
+        flush();
+      } else {
+        // Schedule a flush for when the throttle window expires
+        timer = setTimeout(flush, INVALIDATION_THROTTLE_MS - elapsed);
+      }
     };
 
     const unsub = store.subscribe((msg) => {

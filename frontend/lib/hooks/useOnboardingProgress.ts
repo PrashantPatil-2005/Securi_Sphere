@@ -67,7 +67,13 @@ async function fetchAlertTotal(status: string): Promise<number> {
   return res.total ?? 0;
 }
 
-export function useOnboardingProgress() {
+interface UseOnboardingProgressOptions {
+  /** Set to false to skip all API queries (e.g. when wizard/checklist are dismissed). */
+  enabled?: boolean;
+}
+
+export function useOnboardingProgress(opts?: UseOnboardingProgressOptions) {
+  const enabled = opts?.enabled !== false;
   const [searchCompleted, setSearchCompleted] = useState(false);
 
   useEffect(() => {
@@ -86,6 +92,7 @@ export function useOnboardingProgress() {
     queryFn: () =>
       api<{ total_hosts: number }>("/api/v1/overview"),
     staleTime: 30_000,
+    enabled,
   });
 
   const { data: simulationRuns = 0 } = useQuery({
@@ -96,18 +103,21 @@ export function useOnboardingProgress() {
     },
     staleTime: 30_000,
     retry: false,
+    enabled,
   });
 
   const { data: investigatingAlerts = 0 } = useQuery({
     queryKey: ["alerts", "count", "investigating"],
     queryFn: () => fetchAlertTotal("investigating"),
     staleTime: 30_000,
+    enabled,
   });
 
   const { data: resolvedAlerts = 0 } = useQuery({
     queryKey: ["alerts", "count", "resolved"],
     queryFn: () => fetchAlertTotal("resolved"),
     staleTime: 30_000,
+    enabled,
   });
 
   const { data: offenseCount = 0 } = useQuery({
@@ -117,6 +127,7 @@ export function useOnboardingProgress() {
       return res.total ?? 0;
     },
     staleTime: 30_000,
+    enabled,
   });
 
   const { data: incidentCount = 0 } = useQuery({
@@ -126,6 +137,7 @@ export function useOnboardingProgress() {
       return res.total ?? 0;
     },
     staleTime: 30_000,
+    enabled,
   });
 
   const { data: notifSettings } = useQuery({
@@ -137,6 +149,7 @@ export function useOnboardingProgress() {
         slack_enabled: boolean;
       }>("/api/v1/notifications/settings"),
     staleTime: 60_000,
+    enabled,
   });
 
   const progress: OnboardingProgress = useMemo(() => ({
@@ -156,6 +169,7 @@ export function useOnboardingProgress() {
   const completedCount = ONBOARDING_STEPS.filter((s) => s.isComplete(progress)).length;
 
   useEffect(() => {
+    if (!enabled) return;
     const key = "securi_onboarding_completed_steps";
     let prev: string[] = [];
     try {
@@ -171,7 +185,7 @@ export function useOnboardingProgress() {
       }
     }
     sessionStorage.setItem(key, JSON.stringify(now));
-  }, [progress]);
+  }, [progress, enabled]);
 
   return {
     progress,

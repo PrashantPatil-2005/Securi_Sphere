@@ -40,7 +40,9 @@ describe("WebSocket alert invalidation", () => {
 
     // Verify alert_updated is in the INVALIDATION_BY_TYPE map
     expect(source).toContain("alert_updated:");
-    expect(source).toContain('[["alerts"], ["siem"]]');
+    expect(source).toContain('"alerts"]');
+    expect(source).toContain('"siem", "executive"');
+    expect(source).toContain('"siem", "severity-distribution"');
   });
 
   it("alert_feedback is handled in the invalidation map", async () => {

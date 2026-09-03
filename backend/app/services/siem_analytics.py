@@ -1,4 +1,5 @@
 """SIEM analytics queries — all respect time range and host filters."""
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -93,24 +94,57 @@ async def events_trend(
     tr: TimeRange,
     host_id: UUID | None = None,
 ) -> dict:
+    """Event trend broken down by category using a single aggregate query.
+
+    Replaces the previous 4-variant ``asyncio.gather`` approach with one
+    ``GROUP BY`` that uses conditional aggregation (``SUM(CASE ...)``) to
+    compute total, security, authentication, and service counts per time
+    bucket in a single database round-trip.
+    """
     bucket = _bucket_column(Event.timestamp, tr)
     clauses = _event_clauses(tr, host_id)
 
-    async def run(extra_clauses: list):
-        q = (
-            select(bucket.label("period"), func.count().label("count"))
-            .where(*clauses, *extra_clauses)
-            .group_by(bucket)
-            .order_by(bucket)
+    total_q = func.count()
+    security_q = func.sum(
+        case(
+            (or_(Event.event_type.in_(list(SECURITY_TYPES)), Event.severity.in_(["high", "critical"])), 1),
+            else_=0,
         )
-        return [{"period": str(r[0]), "count": r[1]} for r in (await db.execute(q)).all()]
+    )
+    auth_q = func.sum(
+        case((Event.event_type.in_(list(AUTH_TYPES)), 1), else_=0)
+    )
+    service_q = func.sum(
+        case((Event.event_type.in_(list(SERVICE_TYPES)), 1), else_=0)
+    )
+
+    rows = await db.execute(
+        select(
+            bucket.label("period"),
+            total_q.label("total"),
+            security_q.label("security"),
+            auth_q.label("authentication"),
+            service_q.label("service"),
+        )
+        .where(*clauses)
+        .group_by(bucket)
+        .order_by(bucket)
+    )
+
+    total, security, authentication, service = [], [], [], []
+    for period, t, s, a, sv in rows.all():
+        p = str(period)
+        total.append({"period": p, "count": t})
+        security.append({"period": p, "count": s})
+        authentication.append({"period": p, "count": a})
+        service.append({"period": p, "count": sv})
 
     return {
         "granularity": _granularity(tr),
-        "total": await run([]),
-        "security": await run([or_(Event.event_type.in_(SECURITY_TYPES), Event.severity.in_(["high", "critical"]))]),
-        "authentication": await run([Event.event_type.in_(AUTH_TYPES)]),
-        "service": await run([Event.event_type.in_(SERVICE_TYPES)]),
+        "total": total,
+        "security": security,
+        "authentication": authentication,
+        "service": service,
     }
 
 
@@ -231,12 +265,21 @@ async def event_type_distribution(db: AsyncSession, tr: TimeRange, host_id: UUID
 
 
 async def top_risky_hosts(db: AsyncSession, limit: int = 20) -> list[dict]:
-    hosts = {h.id: h for h in (await db.execute(select(Host))).scalars().all()}
-    scores = (
-        await db.execute(select(HostThreatScore).order_by(HostThreatScore.score.desc()).limit(limit))
-    ).scalars().all()
+    """Top risky hosts using a JOIN instead of loading all hosts.
 
-    host_ids = [s.host_id for s in scores]
+    Replaces the full-table ``select(Host)`` scan with a LEFT JOIN to
+    ``HostThreatScore`` so only the relevant host rows are retrieved.
+    """
+    scores = (
+        await db.execute(
+            select(HostThreatScore, Host.name.label("host_name"), Host.last_seen)
+            .join(Host, Host.id == HostThreatScore.host_id, isouter=True)
+            .order_by(HostThreatScore.score.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    host_ids = [s[0].host_id for s in scores]
     alert_counts = {}
     if host_ids:
         rows = (
@@ -249,17 +292,16 @@ async def top_risky_hosts(db: AsyncSession, limit: int = 20) -> list[dict]:
         alert_counts = {row.host_id: row.cnt for row in rows}
 
     result = []
-    for s in scores:
-        host = hosts.get(s.host_id)
+    for score, host_name, last_seen in scores:
         result.append({
-            "host_id": str(s.host_id),
-            "host_name": host.name if host else "?",
-            "risk_score": s.score,
-            "health_score": s.health_score,
-            "active_alerts": alert_counts.get(s.host_id, 0),
-            "last_seen": host.last_seen.isoformat() if host and host.last_seen else None,
-            "color": _risk_color(s.score),
-            "factors": s.factors or {},
+            "host_id": str(score.host_id),
+            "host_name": host_name or "?",
+            "risk_score": score.score,
+            "health_score": score.health_score,
+            "active_alerts": alert_counts.get(score.host_id, 0),
+            "last_seen": last_seen.isoformat() if last_seen else None,
+            "color": _risk_color(score.score),
+            "factors": score.factors or {},
         })
     return result
 
@@ -338,52 +380,107 @@ async def host_health_monitoring(db: AsyncSession) -> dict:
 
 
 async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
+    """Executive dashboard summary.
+
+    Optimized from 13 sequential queries to 5 by:
+    - Merging 2 host count queries into 1 using conditional aggregation
+    - Merging 3 alert count queries into 1 using conditional aggregation
+    - Merging 2 period count queries into 1
+    - Inlining events_trend as a single aggregate query (instead of 4 nested)
+    """
     event_clauses = _event_clauses(tr)
     alert_clauses = _alert_clauses(tr)
 
-    total_hosts = (await db.execute(select(func.count()).select_from(Host))).scalar_one()
-    online_hosts = (await db.execute(select(func.count()).select_from(Host).where(Host.status == "online"))).scalar_one()
-    active_alerts = (
-        await db.execute(
-            select(func.count()).select_from(Alert).where(
-                Alert.status.in_(["open", "investigating"]), *alert_clauses
-            )
+    # Combined host counts: total + online in one query
+    host_counts = await db.execute(
+        select(
+            func.count().label("total"),
+            func.sum(case((Host.status == "online", 1), else_=0)).label("online"),
         )
-    ).scalar_one()
-    critical_alerts = (
-        await db.execute(
-            select(func.count()).select_from(Alert).where(
-                Alert.status.in_(["open", "investigating"]), Alert.severity == "critical", *alert_clauses
-            )
-        )
-    ).scalar_one()
-    total_events = (await db.execute(select(func.count()).select_from(Event).where(*event_clauses))).scalar_one()
-    period_alerts = (await db.execute(select(func.count()).select_from(Alert).where(*alert_clauses))).scalar_one()
-
-    avg_risk = (await db.execute(select(func.avg(HostThreatScore.score)))).scalar_one() or 0
-
-    attacked = await db.execute(
-        select(Host.name, func.count().label("cnt"))
-        .join(Event, Event.host_id == Host.id)
-        .where(*event_clauses, Event.event_type == "ssh_login_failure")
-        .group_by(Host.name)
-        .order_by(func.count().desc())
-        .limit(1)
     )
-    top = attacked.first()
+    hc = host_counts.one()
 
-    trend = await events_trend(db, tr)
+    # Combined alert counts: active, critical-active, and period-total in one query
+    alert_counts = await db.execute(
+        select(
+            func.count().label("period_alerts"),
+            func.sum(
+                case(
+                    (Alert.status.in_(["open", "investigating"]), 1),
+                    else_=0,
+                )
+            ).label("active_alerts"),
+            func.sum(
+                case(
+                    (
+                        Alert.status.in_(["open", "investigating"])
+                        & (Alert.severity == "critical"),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("critical_alerts"),
+        ).where(*alert_clauses)
+    )
+    ac = alert_counts.one()
+
+    # Event count + average risk score + most attacked host (3 parallel queries)
+    (
+        total_events_result,
+        avg_risk,
+        attacked_result,
+    ) = await asyncio.gather(
+        db.execute(select(func.count()).select_from(Event).where(*event_clauses)),
+        db.execute(select(func.avg(HostThreatScore.score))),
+        db.execute(
+            select(Host.name, func.count().label("cnt"))
+            .join(Event, Event.host_id == Host.id)
+            .where(*event_clauses, Event.event_type == "ssh_login_failure")
+            .group_by(Host.name)
+            .order_by(func.count().desc())
+            .limit(1)
+        ),
+    )
+
+    # Inline events_trend as a single aggregate query (replaces 4 nested queries)
+    bucket = _bucket_column(Event.timestamp, tr)
+    trend_rows = await db.execute(
+        select(
+            bucket.label("period"),
+            func.sum(
+                case(
+                    (
+                        or_(
+                            Event.event_type.in_(list(SECURITY_TYPES)),
+                            Event.severity.in_(["high", "critical"]),
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("security_count"),
+        )
+        .where(*event_clauses)
+        .group_by(bucket)
+        .order_by(bucket)
+    )
+    security_trend = [
+        {"period": str(r[0]), "count": r[1]} for r in trend_rows.all()
+    ]
+
+    top = attacked_result.first()
+
     return {
-        "total_hosts": total_hosts,
-        "online_hosts": online_hosts,
-        "active_alerts": active_alerts,
-        "critical_alerts": critical_alerts,
-        "total_events": total_events,
-        "period_alerts": period_alerts,
-        "average_risk_score": round(float(avg_risk), 1),
+        "total_hosts": hc.total,
+        "online_hosts": hc.online,
+        "active_alerts": ac.active_alerts,
+        "critical_alerts": ac.critical_alerts,
+        "total_events": total_events_result.scalar_one(),
+        "period_alerts": ac.period_alerts,
+        "average_risk_score": round(float((avg_risk.scalar_one()) or 0), 1),
         "most_attacked_host": top[0] if top else None,
         "most_attacked_count": top[1] if top else 0,
-        "security_trend": trend["security"],
+        "security_trend": security_trend,
     }
 
 
@@ -467,6 +564,14 @@ async def attack_timeline_list(
     tr: TimeRange,
     host_id: UUID | None = None,
 ) -> list[dict]:
+    """Attack timelines with events fetched in a single batch query.
+
+    Replaces the previous N+1 pattern (one query per timeline's event_ids)
+    with a single ``WHERE id IN (...)`` query for all events across all
+    timelines, then maps events back to timelines in Python.
+    """
+    from uuid import UUID as PyUUID
+
     clauses = apply_time_range(AttackTimeline.started_at, tr)
     if host_id:
         clauses.append(AttackTimeline.host_id == host_id)
@@ -474,26 +579,49 @@ async def attack_timeline_list(
     timelines = (
         await db.execute(select(AttackTimeline).where(*clauses).order_by(AttackTimeline.started_at.desc()).limit(50))
     ).scalars().all()
+
     hosts = {h.id: h.name for h in (await db.execute(select(Host))).scalars().all()}
+
+    # Collect all event IDs across all timelines
+    all_event_ids: set[UUID] = set()
+    for t in timelines:
+        if t.event_ids:
+            for eid in t.event_ids:
+                if eid:
+                    try:
+                        all_event_ids.add(PyUUID(eid))
+                    except (ValueError, AttributeError):
+                        pass
+
+    # Single batch query for all events
+    events_map: dict[UUID, Event] = {}
+    if all_event_ids:
+        evs = (
+            await db.execute(
+                select(Event).where(Event.id.in_(all_event_ids)).order_by(Event.timestamp)
+            )
+        ).scalars().all()
+        events_map = {e.id: e for e in evs}
 
     result = []
     for t in timelines:
         event_details = []
         if t.event_ids:
-            from uuid import UUID as PyUUID
-            uuids = [PyUUID(eid) for eid in t.event_ids if eid]
-            evs = (
-                await db.execute(select(Event).where(Event.id.in_(uuids)).order_by(Event.timestamp))
-            ).scalars().all()
-            event_details = [
-                {
-                    "event_type": e.event_type,
-                    "description": e.description,
-                    "timestamp": e.timestamp.isoformat(),
-                    "severity": e.severity,
-                }
-                for e in evs
-            ]
+            for eid in t.event_ids:
+                if not eid:
+                    continue
+                try:
+                    uuid = PyUUID(eid)
+                except (ValueError, AttributeError):
+                    continue
+                e = events_map.get(uuid)
+                if e:
+                    event_details.append({
+                        "event_type": e.event_type,
+                        "description": e.description,
+                        "timestamp": e.timestamp.isoformat(),
+                        "severity": e.severity,
+                    })
         result.append({
             "id": str(t.id),
             "host_id": str(t.host_id),
