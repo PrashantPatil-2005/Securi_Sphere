@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HostRow } from "@/components/hosts/HostRow";
 import { HostEmptyState } from "@/components/hosts/HostEmptyState";
@@ -132,8 +132,16 @@ describe("HostDetailHeader", () => {
 
 describe("HostSummaryCards", () => {
   it("renders alert count", () => {
-    wrap(<HostSummaryCards hostId="h1" alertCount={5} />);
-    expect(screen.getByText("5")).toBeTruthy();
+    vi.useFakeTimers();
+    try {
+      wrap(<HostSummaryCards hostId="h1" alertCount={5} />);
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(screen.getByText("5")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders zero alert count", () => {

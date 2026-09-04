@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MitreDrilldown } from "@/components/mitre/MitreDrilldown";
 import { MitreMatrix } from "@/components/mitre/MitreMatrix";
 import { MITRE_TACTIC_ORDER } from "@/lib/types/mitre";
@@ -86,10 +86,18 @@ describe("MitreDrilldown", () => {
   });
 
   it("renders event and alert counts", () => {
-    const d = makeDrilldown({ event_count: 42, alert_count: 7 });
-    render(<MitreDrilldown data={d} isLoading={false} onClose={() => {}} />);
-    expect(screen.getByText("42")).toBeTruthy();
-    expect(screen.getByText("7")).toBeTruthy();
+    vi.useFakeTimers();
+    try {
+      const d = makeDrilldown({ event_count: 42, alert_count: 7 });
+      render(<MitreDrilldown data={d} isLoading={false} onClose={() => {}} />);
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(screen.getByText("42")).toBeTruthy();
+      expect(screen.getByText("7")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders top hosts", () => {

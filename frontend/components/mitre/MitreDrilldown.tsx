@@ -5,6 +5,7 @@ import { Card, CardHeader } from "@/components/design-system/Card";
 import { SeverityBadge } from "@/components/design-system/Badge";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import type { MitreDrilldownResponse } from "@/lib/types/mitre";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 import Link from "next/link";
 
 interface MitreDrilldownProps {
@@ -52,11 +53,15 @@ function MitreDrilldownInner({ data, isLoading }: MitreDrilldownProps) {
         {/* Counts */}
         <div className="grid grid-cols-2 gap-3">
           <div className="text-center p-3 rounded-lg bg-card-elevated border border-border-subtle">
-            <p className="text-2xl font-semibold tabular-nums text-accent">{data.event_count}</p>
+            <p className="text-2xl font-semibold tabular-nums text-accent">
+              <AnimatedNumber value={data.event_count} />
+            </p>
             <p className="text-xs text-muted mt-1">Events</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-card-elevated border border-border-subtle">
-            <p className="text-2xl font-semibold tabular-nums text-warning">{data.alert_count}</p>
+            <p className="text-2xl font-semibold tabular-nums text-warning">
+              <AnimatedNumber value={data.alert_count} />
+            </p>
             <p className="text-xs text-muted mt-1">Alerts</p>
           </div>
         </div>

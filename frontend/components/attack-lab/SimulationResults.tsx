@@ -5,6 +5,7 @@ import { CheckCircle2, ExternalLink } from "lucide-react";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { EmotionBanner } from "@/components/ui/EmotionState";
 import { GuidedInvestigationBar } from "@/components/attack-lab/GuidedInvestigationBar";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 import type { SimulationRunResult } from "@/lib/types/simulation";
 
 interface Props {
@@ -65,7 +66,9 @@ export function SimulationResults({ result, onRunAgain }: Props) {
           { label: "Timelines", value: result.timeline_ids.length },
         ].map((stat) => (
           <div key={stat.label} className="rounded-lg border border-border-subtle p-3 text-center">
-            <p className="text-2xl font-semibold tabular-nums text-accent">{stat.value}</p>
+            <p className="text-2xl font-semibold tabular-nums text-accent">
+              <AnimatedNumber value={stat.value} />
+            </p>
             <p className="text-xs text-muted mt-0.5">{stat.label}</p>
           </div>
         ))}

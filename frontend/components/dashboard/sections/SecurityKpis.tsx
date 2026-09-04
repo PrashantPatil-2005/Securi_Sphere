@@ -78,7 +78,7 @@ export const SecurityKpis = memo(function SecurityKpis() {
       />
       <KpiCard
         label="Events"
-        value={d.total_events?.toLocaleString() ?? "—"}
+        value={d.total_events}
         icon={<Activity className="w-4 h-4" />}
         href="/events"
       />

@@ -4,6 +4,7 @@ export { Input } from "./Input";
 export { Select } from "./Select";
 export { Badge, SeverityBadge, StatusBadge } from "./Badge";
 export { KpiCard } from "./KpiCard";
+export { AnimatedNumber } from "./AnimatedNumber";
 export { Card, CardHeader } from "./Card";
 export { SearchBar } from "./SearchBar";
 export { Dropdown, DropdownTrigger } from "./Dropdown";

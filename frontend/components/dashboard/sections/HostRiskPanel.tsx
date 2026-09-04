@@ -7,6 +7,7 @@ import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { ErrorState } from "@/components/design-system/ErrorState";
 import { EmptyState } from "@/components/design-system/EmptyState";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 interface RiskyHost {
   host_id: string;
@@ -70,7 +71,7 @@ export const HostRiskPanel = memo(function HostRiskPanel() {
               />
             </div>
             <span className="w-8 text-right text-xs font-semibold tabular-nums text-muted">
-              {host.risk_score}
+              <AnimatedNumber value={host.risk_score} />
             </span>
           </Link>
         ))}

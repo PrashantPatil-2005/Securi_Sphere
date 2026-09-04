@@ -11,6 +11,7 @@ import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { GlassPanel } from "@/components/ui/GlassPanel";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 interface DrilldownData {
   technique_id: string;
@@ -79,11 +80,15 @@ export function MitreTechniqueDrilldown({ techniqueId, queryParams, onClose }: M
 
           <div className="grid grid-cols-2 gap-3">
             <GlassPanel className="text-center py-3">
-              <p className="text-2xl font-semibold tabular-nums text-accent">{data.event_count}</p>
+              <p className="text-2xl font-semibold tabular-nums text-accent">
+                <AnimatedNumber value={data.event_count} />
+              </p>
               <p className="text-caption text-muted">Events</p>
             </GlassPanel>
             <GlassPanel className="text-center py-3">
-              <p className="text-2xl font-semibold tabular-nums text-accent">{data.alert_count}</p>
+              <p className="text-2xl font-semibold tabular-nums text-accent">
+                <AnimatedNumber value={data.alert_count} />
+              </p>
               <p className="text-caption text-muted">Alerts</p>
             </GlassPanel>
           </div>

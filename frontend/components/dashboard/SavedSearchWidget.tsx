@@ -8,6 +8,7 @@ import { useTimeRange } from "@/lib/timeRange";
 import { Panel } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 interface SavedSearchWidgetProps {
   searchId: string;
@@ -61,11 +62,15 @@ export function SavedSearchWidget({ searchId }: SavedSearchWidgetProps) {
       {data && (
         <div className="grid grid-cols-2 gap-4">
           <div className="text-center">
-            <p className="text-2xl font-semibold tabular-nums text-accent">{data.total_events}</p>
+            <p className="text-2xl font-semibold tabular-nums text-accent">
+              <AnimatedNumber value={data.total_events} />
+            </p>
             <p className="text-caption text-muted">Events</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-semibold tabular-nums text-accent">{data.total_alerts}</p>
+            <p className="text-2xl font-semibold tabular-nums text-accent">
+              <AnimatedNumber value={data.total_alerts} />
+            </p>
             <p className="text-caption text-muted">Alerts</p>
           </div>
         </div>

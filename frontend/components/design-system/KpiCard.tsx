@@ -3,16 +3,27 @@
 import { memo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils/cn";
+import { AnimatedNumber } from "./AnimatedNumber";
 
 interface KpiCardProps {
   label: string;
-  value: ReactNode;
+  value?: ReactNode;
   delta?: number | null;
   deltaLabel?: string;
   icon?: ReactNode;
   href?: string;
   className?: string;
   loading?: boolean;
+}
+
+/** Returns the numeric interpretation of a value, or null when it isn't one. */
+function toNumeric(value: ReactNode): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 export const KpiCard = memo(function KpiCard({
@@ -26,6 +37,8 @@ export const KpiCard = memo(function KpiCard({
   loading,
 }: KpiCardProps) {
   const reduceMotion = useReducedMotion();
+  const numeric = toNumeric(value);
+  const isTextual = typeof value === "string" || typeof value === "number";
   const content = (
     <div className={cn("kpi-card group", className)}>
       <div className="flex items-center justify-between">
@@ -38,9 +51,15 @@ export const KpiCard = memo(function KpiCard({
       </div>
       {loading ? (
         <div className="skeleton h-8 w-20 mt-1 rounded" />
-      ) : (
+      ) : value == null ? (
+        <span className="kpi-value">{"\u2014"}</span>
+      ) : numeric !== null ? (
         <span className="kpi-value">
-          {(typeof value === "string" || typeof value === "number") && !reduceMotion ? (
+          <AnimatedNumber value={numeric} />
+        </span>
+      ) : isTextual ? (
+        <span className="kpi-value">
+          {!reduceMotion ? (
             <motion.span
               key={String(value)}
               initial={{ opacity: 0, y: 5 }}
@@ -48,12 +67,14 @@ export const KpiCard = memo(function KpiCard({
               transition={{ duration: 0.22, ease: "easeOut" }}
               className="inline-block"
             >
-              {value ?? "\u2014"}
+              {value}
             </motion.span>
           ) : (
-            (value ?? "\u2014")
+            value
           )}
         </span>
+      ) : (
+        <span className="kpi-value">{value}</span>
       )}
       {delta != null && (
         <span

@@ -7,6 +7,7 @@ import { GlassPanel } from "@/components/ui/GlassPanel";
 import { QueryError } from "@/components/ui/QueryError";
 import { HostRiskHistoryChart } from "@/components/charts/HostRiskHistoryChart";
 import { TableSkeleton } from "@/components/ui/Skeleton";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 interface RiskData {
   host_id: string;
@@ -44,11 +45,15 @@ export function HostRiskDrawer({
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <GlassPanel padding className="text-center">
-              <p className="text-3xl font-semibold tabular-nums text-danger">{data.score}</p>
+              <p className="text-3xl font-semibold tabular-nums text-danger">
+                <AnimatedNumber value={data.score} />
+              </p>
               <p className="text-caption normal-case text-muted mt-1">Threat score</p>
             </GlassPanel>
             <GlassPanel padding className="text-center">
-              <p className="text-3xl font-semibold tabular-nums text-success">{data.health_score}</p>
+              <p className="text-3xl font-semibold tabular-nums text-success">
+                <AnimatedNumber value={data.health_score} />
+              </p>
               <p className="text-caption normal-case text-muted mt-1">Health score</p>
             </GlassPanel>
           </div>

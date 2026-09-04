@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/Panel";
 import { Card, CardHeader } from "@/components/design-system/Card";
 import { QueryError } from "@/components/ui/QueryError";
 import { LoadingState } from "@/components/design-system/LoadingState";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import { useMitreMatrix, useMitreDrilldown } from "@/lib/hooks/useMitre";
 import { MitreMatrix } from "@/components/mitre/MitreMatrix";
@@ -72,19 +73,28 @@ function MitrePageContent() {
           <div className="grid md:grid-cols-3 gap-4">
             <Card className="text-center">
               <div className="p-4">
-                <p className="text-3xl font-semibold tabular-nums text-accent">{data.coverage_pct}%</p>
+                <p className="text-3xl font-semibold tabular-nums text-accent">
+                  <AnimatedNumber
+                    value={data.coverage_pct}
+                    format={(n) => `${Math.round(n)}%`}
+                  />
+                </p>
                 <p className="text-xs text-muted mt-1">Overall coverage</p>
               </div>
             </Card>
             <Card className="text-center">
               <div className="p-4">
-                <p className="text-3xl font-semibold tabular-nums text-foreground">{data.total_techniques}</p>
+                <p className="text-3xl font-semibold tabular-nums text-foreground">
+                  <AnimatedNumber value={data.total_techniques} />
+                </p>
                 <p className="text-xs text-muted mt-1">Techniques seeded</p>
               </div>
             </Card>
             <Card className="text-center">
               <div className="p-4">
-                <p className="text-3xl font-semibold tabular-nums text-danger">{totalHits}</p>
+                <p className="text-3xl font-semibold tabular-nums text-danger">
+                  <AnimatedNumber value={totalHits} />
+                </p>
                 <p className="text-xs text-muted mt-1">Total event matches</p>
               </div>
             </Card>

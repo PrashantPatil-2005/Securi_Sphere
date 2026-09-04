@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UebaAnomalyList } from "@/components/ueba/UebaAnomalyList";
 import { UebaSummaryCards } from "@/components/ueba/UebaSummaryCards";
@@ -262,16 +262,32 @@ describe("UebaAnomalyList", () => {
 
 describe("UebaSummaryCards", () => {
   it("renders open count", () => {
-    const s = makeSummary();
-    wrap(<UebaSummaryCards summary={s} isLoading={false} />);
-    expect(screen.getByText("5")).toBeTruthy();
+    vi.useFakeTimers();
+    try {
+      const s = makeSummary();
+      wrap(<UebaSummaryCards summary={s} isLoading={false} />);
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(screen.getByText("5")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders severity counts", () => {
-    const s = makeSummary();
-    wrap(<UebaSummaryCards summary={s} isLoading={false} />);
-    expect(screen.getByText("1")).toBeTruthy(); // critical
-    expect(screen.getAllByText("2").length).toBe(2); // high and medium both = 2
+    vi.useFakeTimers();
+    try {
+      const s = makeSummary();
+      wrap(<UebaSummaryCards summary={s} isLoading={false} />);
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(screen.getByText("1")).toBeTruthy(); // critical
+      expect(screen.getAllByText("2").length).toBe(2); // high and medium both = 2
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders all four summary cards", () => {

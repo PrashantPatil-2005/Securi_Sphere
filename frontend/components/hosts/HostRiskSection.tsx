@@ -5,6 +5,7 @@ import { Card, CardHeader } from "@/components/design-system/Card";
 import { HostRiskHistoryChart } from "@/components/charts/HostRiskHistoryChart";
 import { hostRiskColor } from "@/lib/types/host";
 import type { HostRiskDetail } from "@/lib/types/host";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 interface HostRiskSectionProps {
   risk: HostRiskDetail | undefined;
@@ -44,13 +45,13 @@ function HostRiskSectionInner({ risk, isLoading }: HostRiskSectionProps) {
         <div className="grid grid-cols-2 gap-4">
           <div className="text-center p-3 rounded-lg bg-card-elevated border border-border-subtle">
             <p className={`text-2xl font-semibold tabular-nums ${hostRiskColor(risk.score)}`}>
-              {risk.score}
+              <AnimatedNumber value={risk.score} />
             </p>
             <p className="text-xs text-muted mt-1">Threat Score</p>
           </div>
           <div className="text-center p-3 rounded-lg bg-card-elevated border border-border-subtle">
             <p className="text-2xl font-semibold tabular-nums text-success">
-              {risk.health_score}
+              <AnimatedNumber value={risk.health_score} />
             </p>
             <p className="text-xs text-muted mt-1">Health Score</p>
           </div>

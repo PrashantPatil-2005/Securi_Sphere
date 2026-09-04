@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import { Card } from "@/components/design-system/Card";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 import type { UebaSummary } from "@/lib/types/ueba";
 
 interface UebaSummaryCardsProps {
@@ -34,7 +35,9 @@ function UebaSummaryCardsInner({ summary, isLoading }: UebaSummaryCardsProps) {
       {items.map((item) => (
         <Card key={item.label}>
           <div className="p-3 text-center">
-            <p className={`text-2xl font-semibold tabular-nums ${item.color}`}>{item.value}</p>
+            <p className={`text-2xl font-semibold tabular-nums ${item.color}`}>
+              <AnimatedNumber value={item.value} />
+            </p>
             <p className="text-[10px] text-muted mt-1">{item.label}</p>
           </div>
         </Card>

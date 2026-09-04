@@ -124,9 +124,9 @@ export const API = {
 
   // Timeline
   TIMELINE: {
-    LIST: "/api/v1/timeline",
-    DETAIL: (id: string) => `/api/v1/timeline/${id}`,
-    EVENTS: (id: string) => `/api/v1/timeline/${id}/events`,
+    LIST: "/api/v1/timelines",
+    DETAIL: (id: string) => `/api/v1/timelines/${id}`,
+    EVENTS: (id: string) => `/api/v1/timelines/${id}/events`,
   },
 
   // Search

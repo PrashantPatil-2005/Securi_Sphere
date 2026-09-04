@@ -11,6 +11,7 @@ import { Button } from "@/components/design-system/Button";
 import { Select } from "@/components/design-system/Select";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { QueryError } from "@/components/ui/QueryError";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 
@@ -94,19 +95,25 @@ function ReportsPageContent() {
         <div className="grid md:grid-cols-3 gap-4">
           <Card>
             <div className="p-4 text-center">
-              <p className="text-2xl font-semibold tabular-nums text-accent">{data.total_hosts}</p>
+              <p className="text-2xl font-semibold tabular-nums text-accent">
+                <AnimatedNumber value={data.total_hosts} />
+              </p>
               <p className="text-xs text-muted mt-1">Total hosts</p>
             </div>
           </Card>
           <Card>
             <div className="p-4 text-center">
-              <p className="text-2xl font-semibold tabular-nums text-warning">{data.open_alerts}</p>
+              <p className="text-2xl font-semibold tabular-nums text-warning">
+                <AnimatedNumber value={data.open_alerts} />
+              </p>
               <p className="text-xs text-muted mt-1">Open alerts</p>
             </div>
           </Card>
           <Card>
             <div className="p-4 text-center">
-              <p className="text-2xl font-semibold tabular-nums text-foreground">{data.threat_scores.length}</p>
+              <p className="text-2xl font-semibold tabular-nums text-foreground">
+                <AnimatedNumber value={data.threat_scores.length} />
+              </p>
               <p className="text-xs text-muted mt-1">Hosts scored</p>
             </div>
           </Card>

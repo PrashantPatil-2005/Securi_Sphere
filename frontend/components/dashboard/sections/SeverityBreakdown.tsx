@@ -6,6 +6,7 @@ import { useSiemQuery } from "@/lib/hooks/useApiQuery";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { ErrorState } from "@/components/design-system/ErrorState";
 import { EmptyState } from "@/components/design-system/EmptyState";
+import { AnimatedNumber } from "@/components/design-system/AnimatedNumber";
 
 const PieChart = dynamic(() => import("recharts").then((mod) => mod.PieChart), { ssr: false });
 const Pie = dynamic(() => import("recharts").then((mod) => mod.Pie), { ssr: false });
@@ -91,7 +92,9 @@ export const SeverityBreakdown = memo(function SeverityBreakdown() {
               style={{ backgroundColor: SEVERITY_COLORS[d.severity] || "var(--muted)" }}
             />
             <span className="text-[11px] text-muted capitalize">{d.severity}</span>
-            <span className="text-[11px] font-semibold tabular-nums text-foreground">{d.count}</span>
+            <span className="text-[11px] font-semibold tabular-nums text-foreground">
+              <AnimatedNumber value={d.count} />
+            </span>
           </div>
         ))}
       </div>

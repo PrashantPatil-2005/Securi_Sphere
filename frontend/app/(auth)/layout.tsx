@@ -49,15 +49,20 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <blockquote className="text-xl font-medium text-white/90 leading-relaxed">
                 Unified security operations for modern enterprises. Monitor, detect, and respond — in real time.
               </blockquote>
-              <div className="mt-8 grid grid-cols-3 gap-4">
+              <div className="mt-10 grid grid-cols-3 gap-3">
                 {[
                   { value: "99.9%", label: "Uptime SLA" },
                   { value: "<2s", label: "Detection Latency" },
                   { value: "24/7", label: "Monitoring" },
                 ].map((s) => (
-                  <div key={s.label} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                    <p className="text-lg font-semibold text-white tabular-nums">{s.value}</p>
-                    <p className="text-[11px] text-white/50 mt-0.5">{s.label}</p>
+                  <div
+                    key={s.label}
+                    className="flex flex-col items-center rounded-xl bg-white/5 border border-white/10 min-h-[112px] pt-5 pb-4"
+                  >
+                    <p className="text-2xl font-semibold text-white tabular-nums leading-none">{s.value}</p>
+                    <p className="mt-3 px-1 text-center text-[10px] font-medium uppercase tracking-[0.08em] text-white/50 leading-snug">
+                      {s.label}
+                    </p>
                   </div>
                 ))}
               </div>
