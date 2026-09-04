@@ -39,8 +39,8 @@ export const AlertTrendChart = memo(function AlertTrendChart() {
     [data],
   );
 
-  if (isLoading) return <ChartSkeleton height={200} />;
-  if (isError) return <ErrorState variant="card" title="Failed to load trend" onRetry={() => refetch()} />;
+  if (isLoading && !data) return <ChartSkeleton height={200} />;
+  if (isError && !data) return <ErrorState variant="card" title="Failed to load trend" onRetry={() => refetch()} />;
 
   if (!trendData.length) {
     return (

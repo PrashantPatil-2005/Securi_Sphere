@@ -178,7 +178,7 @@ async def query_alerts(
     *,
     host_id: UUID | None = None,
     severity: str | None = None,
-    status: str | None = None,
+    status: list[str] | None = None,
     rule_name: str | None = None,
     assigned_to: UUID | None = None,
     q: str | None = None,
@@ -197,7 +197,7 @@ async def query_alerts(
     if severity:
         clauses.append(Alert.severity == severity)
     if status:
-        clauses.append(Alert.status == status)
+        clauses.append(Alert.status.in_(status))
     if assigned_to:
         clauses.append(Alert.assigned_to == assigned_to)
     if rule_name:

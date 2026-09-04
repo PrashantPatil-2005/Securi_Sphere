@@ -3,13 +3,12 @@
 import { memo } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { SeverityBadge, StatusBadge } from "@/components/design-system";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import { useTimeRange } from "@/lib/timeRange";
-import { buildQuery } from "@/lib/buildQuery";
 
 interface Alert {
   id: string;
@@ -36,18 +35,23 @@ export const ActiveThreats = memo(function ActiveThreats() {
   const { queryParams } = useTimeRange();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["alerts", "active", queryParams],
-    queryFn: () =>
-      api<{ items: Alert[]; total: number }>(
-        `/api/v1/alerts?status=open&status=investigating&page_size=10&sort=-created_at&${buildQuery({}, queryParams)}`,
-      ),
+    queryFn: () => {
+      const params = new URLSearchParams(queryParams);
+      params.set("page_size", "10");
+      params.set("sort", "newest");
+      params.append("status", "open");
+      params.append("status", "investigating");
+      return api<{ items: Alert[]; total: number }>(`/api/v1/alerts?${params.toString()}`);
+    },
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return <LoadingState variant="table" rows={5} />;
   }
 
-  if (isError) {
+  if (isError && !data) {
     return (
       <div className="flex items-center gap-3 py-4 px-2 text-sm text-muted">
         <AlertTriangle className="w-4 h-4 text-danger shrink-0" />

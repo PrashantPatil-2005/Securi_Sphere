@@ -39,8 +39,13 @@ async def test_siem_failed_logins_empty_db(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_siem_executive_empty_db(admin_client: AsyncClient):
+    """Regression: conditional SUMs must not serialize as null on zero-row sets."""
     res = await admin_client.get("/api/v1/siem/executive")
     assert res.status_code == 200, res.text
     body = res.json()
-    assert "total_hosts" in body
     assert "security_trend" in body
+    for key in ("total_hosts", "online_hosts", "active_alerts", "critical_alerts", "period_alerts", "total_events"):
+        value = body.get(key)
+        assert isinstance(value, int) and not isinstance(value, bool), f"{key} should be an int, got {value!r}"
+        assert value >= 0
+    assert isinstance(body["average_risk_score"], (int, float))

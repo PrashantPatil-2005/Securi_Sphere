@@ -17,16 +17,17 @@ interface AttackTimeline {
 }
 
 export const AttackTimelines = memo(function AttackTimelines() {
-  const { data = [], isLoading, isError, refetch } = useSiemQuery<AttackTimeline[]>(
+  const { data: rawData, isLoading, isError, refetch } = useSiemQuery<AttackTimeline[]>(
     "attack-timelines",
     {},
   );
+  const data = rawData ?? [];
 
-  if (isLoading) {
+  if (isLoading && !rawData) {
     return <LoadingState variant="table" rows={4} />;
   }
 
-  if (isError) {
+  if (isError && !rawData) {
     return <ErrorState variant="card" title="Failed to load timelines" onRetry={() => refetch()} />;
   }
 

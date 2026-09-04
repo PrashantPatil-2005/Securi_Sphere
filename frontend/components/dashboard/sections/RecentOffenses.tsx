@@ -2,10 +2,9 @@
 
 import { memo } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useTimeRange } from "@/lib/timeRange";
-import { buildQuery } from "@/lib/buildQuery";
 import { SeverityBadge, StatusBadge } from "@/components/design-system";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { ErrorState } from "@/components/design-system/ErrorState";
@@ -38,15 +37,17 @@ export const RecentOffenses = memo(function RecentOffenses() {
   const { queryParams } = useTimeRange();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["offenses", "dashboard", queryParams],
-    queryFn: () =>
-      api<{ items: Offense[]; total: number }>(
-        `/api/v1/offenses?page_size=5&sort=-created_at&${buildQuery({}, queryParams)}`,
-      ),
+    queryFn: () => {
+      const params = new URLSearchParams(queryParams);
+      params.set("page_size", "5");
+      return api<{ items: Offense[]; total: number }>(`/api/v1/offenses?${params.toString()}`);
+    },
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
-  if (isLoading) return <LoadingState variant="table" rows={4} />;
-  if (isError) return <ErrorState variant="card" title="Failed to load offenses" onRetry={() => refetch()} />;
+  if (isLoading && !data) return <LoadingState variant="table" rows={4} />;
+  if (isError && !data) return <ErrorState variant="card" title="Failed to load offenses" onRetry={() => refetch()} />;
 
   const offenses = data?.items ?? [];
 

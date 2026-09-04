@@ -11,7 +11,7 @@ REFRESH_COOKIE = "refresh_token"
 
 
 def _cookie_secure() -> bool:
-    if settings.debug:
+    if settings.debug or settings.testing:
         return False
     return True
 

@@ -315,32 +315,43 @@ body {
 
   /* Buttons */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-[color,background-color,border-color,transform] duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
     background: var(--accent-muted);
   }
   .btn-primary:hover:not(:disabled) {
     background: var(--accent);
   }
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-foreground border border-border rounded-md transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 text-sm text-foreground border border-border rounded-md transition-[color,background-color,border-color,transform] duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
   }
   .btn-ghost:hover:not(:disabled) {
     background: var(--sidebar-hover);
   }
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-colors duration-150;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-md transition-[color,background-color,border-color,transform] duration-150;
     background: var(--danger);
   }
   .btn-danger:hover {
     filter: brightness(1.1);
   }
   .btn-outline {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-border rounded-md transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-border rounded-md transition-[color,background-color,border-color,transform] duration-150 disabled:opacity-40 disabled:cursor-not-allowed;
     color: var(--foreground);
   }
   .btn-outline:hover:not(:disabled) {
     background: var(--sidebar-hover);
     border-color: var(--border-strong);
+  }
+
+  /* Press feedback — tactile scale on active clicks */
+  .btn-primary:not(:disabled):active,
+  .btn-ghost:not(:disabled):active,
+  .btn-danger:not(:disabled):active,
+  .btn-outline:not(:disabled):active {
+    transform: scale(0.97);
+  }
+  .kpi-card:active {
+    transform: scale(0.98);
   }
 
   /* Filter bar */
@@ -545,6 +556,30 @@ body {
   background: linear-gradient(90deg, var(--card) 25%, var(--card-elevated) 50%, var(--card) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* ─── Motion helpers ─── */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.22s ease-out both;
+}
+
+/* Sweeping indicator shown while panels refresh (keeps old data visible) */
+@keyframes sync-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.sync-bar-track {
+  @apply h-0.5 w-full overflow-hidden rounded-full;
+}
+.sync-bar-sweep {
+  @apply h-full w-1/2 rounded-full;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 60%, transparent), transparent);
+  animation: sync-sweep 0.9s linear infinite;
 }
 
 /* ─── Emotion-aware UX tokens ─── */

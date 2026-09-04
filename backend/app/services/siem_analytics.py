@@ -105,17 +105,22 @@ async def events_trend(
     clauses = _event_clauses(tr, host_id)
 
     total_q = func.count()
-    security_q = func.sum(
-        case(
-            (or_(Event.event_type.in_(list(SECURITY_TYPES)), Event.severity.in_(["high", "critical"])), 1),
-            else_=0,
-        )
+    security_q = func.coalesce(
+        func.sum(
+            case(
+                (or_(Event.event_type.in_(list(SECURITY_TYPES)), Event.severity.in_(["high", "critical"])), 1),
+                else_=0,
+            )
+        ),
+        0,
     )
-    auth_q = func.sum(
-        case((Event.event_type.in_(list(AUTH_TYPES)), 1), else_=0)
+    auth_q = func.coalesce(
+        func.sum(case((Event.event_type.in_(list(AUTH_TYPES)), 1), else_=0)),
+        0,
     )
-    service_q = func.sum(
-        case((Event.event_type.in_(list(SERVICE_TYPES)), 1), else_=0)
+    service_q = func.coalesce(
+        func.sum(case((Event.event_type.in_(list(SERVICE_TYPES)), 1), else_=0)),
+        0,
     )
 
     rows = await db.execute(
@@ -395,7 +400,9 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     host_counts = await db.execute(
         select(
             func.count().label("total"),
-            func.sum(case((Host.status == "online", 1), else_=0)).label("online"),
+            func.coalesce(
+                func.sum(case((Host.status == "online", 1), else_=0)), 0
+            ).label("online"),
         )
     )
     hc = host_counts.one()
@@ -404,21 +411,27 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     alert_counts = await db.execute(
         select(
             func.count().label("period_alerts"),
-            func.sum(
-                case(
-                    (Alert.status.in_(["open", "investigating"]), 1),
-                    else_=0,
-                )
+            func.coalesce(
+                func.sum(
+                    case(
+                        (Alert.status.in_(["open", "investigating"]), 1),
+                        else_=0,
+                    )
+                ),
+                0,
             ).label("active_alerts"),
-            func.sum(
-                case(
-                    (
-                        Alert.status.in_(["open", "investigating"])
-                        & (Alert.severity == "critical"),
-                        1,
-                    ),
-                    else_=0,
-                )
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            Alert.status.in_(["open", "investigating"])
+                            & (Alert.severity == "critical"),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                0,
             ).label("critical_alerts"),
         ).where(*alert_clauses)
     )
@@ -447,17 +460,20 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     trend_rows = await db.execute(
         select(
             bucket.label("period"),
-            func.sum(
-                case(
-                    (
-                        or_(
-                            Event.event_type.in_(list(SECURITY_TYPES)),
-                            Event.severity.in_(["high", "critical"]),
+            func.coalesce(
+                func.sum(
+                    case(
+                        (
+                            or_(
+                                Event.event_type.in_(list(SECURITY_TYPES)),
+                                Event.severity.in_(["high", "critical"]),
+                            ),
+                            1,
                         ),
-                        1,
-                    ),
-                    else_=0,
-                )
+                        else_=0,
+                    )
+                ),
+                0,
             ).label("security_count"),
         )
         .where(*event_clauses)

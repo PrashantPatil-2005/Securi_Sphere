@@ -21,6 +21,7 @@ import {
   RecentOffenses,
 } from "@/components/dashboard/sections";
 import { useWsConnected } from "@/lib/websocket";
+import { useIsFetching } from "@tanstack/react-query";
 
 function SystemStatusDot() {
   const connected = useWsConnected();
@@ -45,6 +46,15 @@ function SystemStatusDot() {
   );
 }
 
+function SyncBar() {
+  const isFetching = useIsFetching();
+  return (
+    <div className="sync-bar-track" aria-hidden>
+      {isFetching > 0 ? <div className="sync-bar-sweep" /> : null}
+    </div>
+  );
+}
+
 function LastUpdated() {
   const [now] = useState(() => new Date());
   return (
@@ -61,21 +71,27 @@ export default function ExecutiveDashboard() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-            <Shield className="w-5 h-5 text-accent" />
-            Security Operations
-          </h1>
-          <div className="flex items-center gap-3 mt-1">
-            <SystemStatusDot />
-            <LastUpdated />
+      <div>
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight text-foreground flex items-center gap-2">
+              <Shield className="w-5 h-5 text-accent" />
+              Security Operations
+            </h1>
+            <div className="flex items-center gap-3 mt-1">
+              <SystemStatusDot />
+              <LastUpdated />
+            </div>
           </div>
+          <div className="flex items-center gap-2">
+            <TimeRangeBar />
+          </div>
+        </header>
+        {/* Sweeps while any dashboard panel refreshes, so data changes feel continuous */}
+        <div className="mt-2.5">
+          <SyncBar />
         </div>
-        <div className="flex items-center gap-2">
-          <TimeRangeBar />
-        </div>
-      </header>
+      </div>
 
       {/* KPI Row */}
       <ErrorBoundary>

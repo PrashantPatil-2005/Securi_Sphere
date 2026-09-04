@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { parsePaginatedList } from "@/lib/parseList";
@@ -47,5 +47,6 @@ export function useSiemQuery<T>(path: string, extra: Record<string, string> = {}
     },
     enabled,
     staleTime: 45_000,
+    placeholderData: keepPreviousData,
   });
 }

@@ -22,16 +22,17 @@ function riskColor(score: number): string {
 }
 
 export const HostRiskPanel = memo(function HostRiskPanel() {
-  const { data = [], isLoading, isError, refetch } = useSiemQuery<RiskyHost[]>(
+  const { data: rawData, isLoading, isError, refetch } = useSiemQuery<RiskyHost[]>(
     "top-risky-hosts",
     {},
   );
+  const data = rawData ?? [];
 
-  if (isLoading) {
+  if (isLoading && !rawData) {
     return <LoadingState variant="table" rows={5} />;
   }
 
-  if (isError) {
+  if (isError && !rawData) {
     return <ErrorState variant="card" title="Failed to load host risk" onRetry={() => refetch()} />;
   }
 

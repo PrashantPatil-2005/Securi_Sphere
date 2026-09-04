@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, type ReactNode } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils/cn";
 
 interface KpiCardProps {
@@ -24,6 +25,7 @@ export const KpiCard = memo(function KpiCard({
   className,
   loading,
 }: KpiCardProps) {
+  const reduceMotion = useReducedMotion();
   const content = (
     <div className={cn("kpi-card group", className)}>
       <div className="flex items-center justify-between">
@@ -37,7 +39,21 @@ export const KpiCard = memo(function KpiCard({
       {loading ? (
         <div className="skeleton h-8 w-20 mt-1 rounded" />
       ) : (
-        <span className="kpi-value">{value ?? "\u2014"}</span>
+        <span className="kpi-value">
+          {(typeof value === "string" || typeof value === "number") && !reduceMotion ? (
+            <motion.span
+              key={String(value)}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="inline-block"
+            >
+              {value ?? "\u2014"}
+            </motion.span>
+          ) : (
+            (value ?? "\u2014")
+          )}
+        </span>
       )}
       {delta != null && (
         <span

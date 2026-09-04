@@ -34,8 +34,8 @@ export const SeverityBreakdown = memo(function SeverityBreakdown() {
     "severity-distribution",
   );
 
-  if (isLoading) return <LoadingState variant="inline" />;
-  if (isError) return <ErrorState variant="inline" title="Failed to load" onRetry={() => refetch()} />;
+  if (isLoading && !data) return <LoadingState variant="inline" />;
+  if (isError && !data) return <ErrorState variant="inline" title="Failed to load" onRetry={() => refetch()} />;
 
   const dist = data?.distribution ?? [];
   const hasData = dist.some((d) => d.count > 0);
