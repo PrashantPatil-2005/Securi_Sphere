@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
+from app.models.metric import Metric
 from app.models.siem import Offense
 from app.models.simulation_run import SimulationRun
 from app.models.timeline import AttackTimeline
@@ -25,7 +26,7 @@ from app.services.offense_engine import link_event_to_offense
 from app.services.timeline import build_timelines
 from app.websocket.manager import ws_manager
 
-ALLOWED_EVENT_TYPES = frozenset(EVENT_CATEGORIES.keys()) | {"network_flow"}
+ALLOWED_EVENT_TYPES = frozenset(EVENT_CATEGORIES.keys()) | {"network_flow", "high_cpu", "high_memory", "high_disk"}
 
 
 @dataclass
@@ -103,6 +104,38 @@ async def _broadcast_simulated_event(event: Event, host: Host) -> None:
     })
 
 
+# Metric event types that generate Metric records instead of (or alongside) Events
+_METRIC_EVENT_TYPES = {"high_cpu", "high_memory", "high_disk"}
+
+
+async def _create_metric_for_event(
+    db: AsyncSession,
+    host: Host,
+    event_type: str,
+    severity: str,
+    timestamp: datetime,
+) -> Metric:
+    """Create a Metric record that will be picked up by the detection engine."""
+    # Generate realistic metric values based on event type
+    cpu = 95.0 if event_type == "high_cpu" else 45.0
+    memory = 92.0 if event_type == "high_memory" else 55.0
+    disk = 88.0 if event_type == "high_disk" else 42.0
+
+    metric = Metric(
+        host_id=host.id,
+        cpu_percent=cpu,
+        memory_percent=memory,
+        disk_percent=disk,
+        network_in=1024 * 1024,
+        network_out=512 * 1024,
+        load_average=[2.5, 1.8, 1.2],
+        uptime_seconds=86400,
+        recorded_at=timestamp,
+    )
+    db.add(metric)
+    return metric
+
+
 async def execute_simulation_run(
     db: AsyncSession,
     host: Host,
@@ -115,17 +148,28 @@ async def execute_simulation_run(
     run_id = str(uuid.uuid4())
     run_start = datetime.now(timezone.utc)
     ingested: list[Event] = []
+    metrics_created: list[Metric] = []
 
     for step in steps:
         metadata, default_description, source_ip = _build_event_metadata(step.event_type, run_id)
         description = step.description or default_description
+        timestamp = run_start + timedelta(seconds=step.offset_seconds)
+
+        # For metric event types, create a Metric record so detection checkers can find it
+        if step.event_type in _METRIC_EVENT_TYPES:
+            metric = await _create_metric_for_event(
+                db, host, step.event_type, step.severity or _default_severity(step.event_type), timestamp,
+            )
+            metrics_created.append(metric)
+
+        # Always create an Event record for tracking and WebSocket broadcast
         event = Event(
             host_id=host.id,
             event_type=step.event_type,
             severity=step.severity or _default_severity(step.event_type),
             description=description,
             source="simulation",
-            timestamp=run_start + timedelta(seconds=step.offset_seconds),
+            timestamp=timestamp,
             metadata_=metadata,
             source_ip=source_ip,
         )
@@ -139,6 +183,7 @@ async def execute_simulation_run(
         await link_event_to_offense(db, event)
         await _broadcast_simulated_event(event, host)
 
+    # Run detection — this will check Metric records for high_cpu/memory/disk
     await run_detection_for_host(db, host, source="simulation")
     await run_correlation_engine(db, host.id)
     await build_timelines(db, host.id)

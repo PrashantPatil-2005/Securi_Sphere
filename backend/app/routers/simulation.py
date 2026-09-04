@@ -216,7 +216,7 @@ async def run_simulation(
         raise HTTPException(status_code=404, detail="Host not found")
 
     steps = [
-        RunStep(event_type=s.event_type, offset_seconds=s.offset_seconds, description=s.description)
+        RunStep(event_type=s.event_type, offset_seconds=s.offset_seconds, severity=s.severity, description=s.description)
         for s in scenario_def.steps
     ]
     return await execute_simulation_run(
