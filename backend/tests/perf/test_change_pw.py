@@ -1,6 +1,5 @@
 """Reproduce the change-password 500 bug."""
 import asyncio
-import traceback
 from datetime import datetime, timezone
 
 from app.database import async_session

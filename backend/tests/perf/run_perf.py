@@ -16,7 +16,6 @@ import argparse
 import asyncio
 import json
 import statistics
-import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any

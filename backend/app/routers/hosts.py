@@ -21,7 +21,7 @@ from app.security import generate_enrollment_token, hash_token
 from app.services.audit import log_audit
 from app.services.export_service import respond_export
 from app.services.query_builders import query_hosts
-from app.utils.query import ListParams, SortOrder, resolve_time_range
+from app.utils.query import ListParams, SortOrder
 
 router = APIRouter(prefix="/hosts", tags=["hosts"])
 

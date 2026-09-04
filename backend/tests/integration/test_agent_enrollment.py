@@ -22,7 +22,6 @@ async def test_agent_bundle_served(client: AsyncClient):
     import io
     import tarfile
 
-    from app.utils.agent_bundle import validate_bundle
 
     tmp = io.BytesIO(res.content)
     with tarfile.open(fileobj=tmp, mode="r:gz") as tar:

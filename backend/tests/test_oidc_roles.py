@@ -2,7 +2,6 @@
 
 import os
 
-import pytest
 
 from app.services.oidc_roles import (
     email_domain_allowed,

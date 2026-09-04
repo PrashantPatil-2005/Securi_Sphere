@@ -1,4 +1,3 @@
-import pytest
 
 from app.services.detection import SUPPORTED_RULE_TYPES
 

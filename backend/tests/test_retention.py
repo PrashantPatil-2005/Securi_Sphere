@@ -1,14 +1,10 @@
 """Tests for retention service logic."""
 
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 
 
 def test_retention_cutoff_calculation():
-    from app.services.retention import run_retention
-    from datetime import datetime, timedelta, timezone
 
     retention_days = 90
     cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)

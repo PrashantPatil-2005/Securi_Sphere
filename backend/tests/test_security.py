@@ -1,4 +1,3 @@
-import pytest
 from app.security import hash_password, verify_password, hash_token, generate_api_key
 
 

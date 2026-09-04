@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -12,7 +11,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.host import Host
 from app.models.user import User
-from app.security import decode_token, hash_token
+from app.security import decode_token
 from app.services.agent_auth import validate_api_key_host
 
 

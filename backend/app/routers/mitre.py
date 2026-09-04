@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db, get_db_read
+from app.database import get_db_read
 from app.dependencies import get_current_user
 from app.models.event import Event
 from app.models.mitre import MitreTechnique

@@ -7,9 +7,7 @@ Verifies that:
 4. Unregistered rule types return None
 """
 
-from datetime import datetime, timezone
 
-import pytest
 
 from app.services.detection import (
     RuleChecker,

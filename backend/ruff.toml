@@ -1,0 +1,20 @@
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E402",  # module-level import not at top of file (intentional for circular imports)
+    "E501",  # line too long (not enforced in CI)
+    "E741",  # ambiguous variable name (style preference)
+]
+
+[lint.per-file-ignores]
+# SQLAlchemy forward references with `from __future__ import annotations`
+"app/models/*.py" = ["F821"]
+# Conditional imports that may be unused depending on environment
+"app/services/executive_report.py" = ["F401"]
+# Test files with intentional patterns
+"tests/test_middleware.py" = ["E402"]
+# Test files - allow unused variables in test setup
+"tests/*.py" = ["F841"]
+"tests/**/*.py" = ["F841"]

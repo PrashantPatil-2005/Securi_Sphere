@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from app.database import get_db, get_db_read
+from app.database import get_db_read
 from app.dependencies import get_current_user
 from app.models.alert import Alert
 from app.models.event import Event

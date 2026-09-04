@@ -5,7 +5,6 @@ Converts flow records (router/switch/agent summaries) into normalized security e
 
 from __future__ import annotations
 
-from datetime import datetime
 
 from app.schemas.agent import EventIngest, FlowIngest
 

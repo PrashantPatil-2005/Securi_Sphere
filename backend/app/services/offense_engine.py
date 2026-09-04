@@ -4,8 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.alert import Alert

@@ -5,7 +5,7 @@ These tests FAIL if Redis is not available (not skipped).
 import asyncio
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from app.websocket.manager import ConnectionManager
 
 pytestmark = [pytest.mark.integration]

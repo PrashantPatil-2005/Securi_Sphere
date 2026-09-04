@@ -1,6 +1,5 @@
 """Tests for the 3 new demo scenarios."""
 
-import pytest
 from app.services.simulation_scenarios import (
     SCENARIO_DEFS,
     get_scenario,

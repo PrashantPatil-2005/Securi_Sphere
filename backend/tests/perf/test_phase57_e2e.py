@@ -7,14 +7,11 @@ Usage: python tests/perf/test_phase57_e2e.py
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import sys
-import time
 import traceback as tb
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
 
 import httpx
 
@@ -570,7 +567,7 @@ async def run_all():
             suite.add(TestResult(
                 "14. User A creates notification rule",
                 ok,
-                detail=f"Got {r.status_code}: {r.text[:120]}" if not ok else f"Rule created",
+                detail=f"Got {r.status_code}: {r.text[:120]}" if not ok else "Rule created",
                 status_code=r.status_code,
             ))
         except Exception as e:

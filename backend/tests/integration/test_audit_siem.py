@@ -5,7 +5,6 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.audit import AuditLog
 from app.models.user import User
 from app.services.audit import log_audit
 

@@ -2,12 +2,7 @@
 
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-from fastapi import HTTPException
 
 from app.services.agent_auth import (
     MAX_CLOCK_SKEW_SECONDS,

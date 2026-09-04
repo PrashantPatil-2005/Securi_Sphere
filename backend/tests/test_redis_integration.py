@@ -4,7 +4,6 @@ These tests FAIL if Redis is not available (not skipped).
 """
 import asyncio
 import pytest
-from unittest.mock import patch
 from redis.asyncio import Redis
 
 pytestmark = [pytest.mark.integration, pytest.mark.redis]
@@ -72,7 +71,6 @@ async def test_redis_pubsub_publish_receive(require_redis):
 
 @pytest.mark.asyncio
 async def test_redis_failure_detection(require_redis):
-    from app.config import settings
     bad_conn = Redis.from_url("redis://localhost:19999", decode_responses=True, socket_timeout=2)
     try:
         with pytest.raises(Exception):
@@ -98,7 +96,7 @@ async def test_redis_recovery_after_restart(require_redis):
 
 @pytest.mark.asyncio
 async def test_redis_job_enqueue_dequeue(require_redis):
-    from app.jobs.redis_broker import enqueue_job, dequeue_job, get_redis, close_redis
+    from app.jobs.redis_broker import enqueue_job, dequeue_job
     from app.jobs.queue import Job
 
     job = Job(priority=5, name="test_handler", payload={"key": "value"})

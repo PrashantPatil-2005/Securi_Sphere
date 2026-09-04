@@ -9,6 +9,7 @@ from app.models.user import User
 from app.services.audit import log_audit
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_audit_integrity_valid(admin_client: AsyncClient):
     async with async_session() as db:

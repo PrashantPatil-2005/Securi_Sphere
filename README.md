@@ -317,30 +317,40 @@ For a full walkthrough: [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md)
 ## Project Structure
 
 ```
-backend/
-  app/
-    pipeline/          # Ingestion: validation, normalization, dedup
-    services/
-      detection.py     # Extensible rule engine (registry pattern)
-      correlation/     # Sequence, co-occurrence, cross-host matchers
-      offense_engine.py # Alert grouping into offenses
-      timeline.py      # Attack chain reconstruction
-      agent_auth.py    # HMAC verification + nonce/timestamp validation
-      audit.py         # Tamper-evident hash chain audit log
-    models/            # 34 SQLAlchemy models
-    routers/           # 37 API routers (183 endpoints)
-    middleware/         # Rate limiting, security headers, timeouts
-  tests/               # 541 unit + integration tests
-
-frontend/
-  app/(dashboard)/     # 24 pages (alerts, offenses, MITRE, timeline, ...)
-  components/          # 42+ React components
-  lib/                 # API client, hooks, WebSocket
-
-agent/
-  agent/               # Python agent (collector, sender, buffer)
-  tests/               # 67 agent tests
-  install.sh           # One-line installer
+Securi_Sphere/
+├── agent/                    # Member 3: Linux agent & telemetry
+│   ├── agent/                #   Collector, sender, buffer, integrity
+│   └── tests/                #   67 agent tests
+├── backend/                  # Member 1: Core SIEM / backend
+│   ├── app/
+│   │   ├── pipeline/         #   Ingestion: validation, normalization, dedup
+│   │   ├── services/         #   Detection, correlation, offense, UEBA, auth
+│   │   │   ├── detection.py  #     Extensible rule engine (registry pattern)
+│   │   │   ├── correlation/  #     Sequence, co-occurrence, cross-host
+│   │   │   ├── offense_engine.py #  Alert grouping into offenses
+│   │   │   ├── timeline.py   #     Attack chain reconstruction
+│   │   │   └── ueba.py       #     UEBA anomaly detection
+│   │   ├── models/           #   34 SQLAlchemy models
+│   │   ├── routers/          #   41 API routers
+│   │   └── middleware/        #   Rate limiting, security headers, timeouts
+│   └── tests/                #   541 unit + integration tests
+├── frontend/                 # Member 2: SOC dashboard
+│   ├── app/(dashboard)/      #   28+ pages (alerts, offenses, MITRE, ...)
+│   ├── components/           #   130+ React components
+│   └── lib/                  #   API client, hooks, WebSocket
+├── deploy/                   # Member 4: Deployment config
+├── helm/                     # Member 4: Helm chart
+├── k8s/                      # Member 4: Kubernetes manifests
+├── loadtests/                # Member 4: k6 load tests
+├── scripts/                  # Member 4: 26 deployment scripts
+├── docs/
+│   ├── architecture/         #   Cross-cutting architecture
+│   ├── member-1-core-siem/   #   Member 1's documentation index
+│   ├── member-2-frontend/    #   Member 2's documentation index
+│   ├── member-3-agent/       #   Member 3's documentation index
+│   └── member-4-deployment-testing/ # Member 4's documentation index
+├── CONTRIBUTIONS.md          # Team contribution table
+└── PROJECT_CONTEXT.md        # Full project context
 ```
 
 ---
@@ -402,6 +412,7 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and `scripts/deploy-linux.sh`.
 | [docs/HELM.md](docs/HELM.md) | Helm chart |
 | [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md) | Attack lab walkthrough |
 | [docs/GUIDE_DEMO.md](docs/GUIDE_DEMO.md) | 5-minute demo guide |
+| [CONTRIBUTIONS.md](CONTRIBUTIONS.md) | Team contributions and responsibility map |
 
 ---
 

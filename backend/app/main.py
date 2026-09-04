@@ -13,7 +13,7 @@ from app.config import settings
 from app.core.errors import http_exception_handler, validation_exception_handler, generic_exception_handler
 from app.core.lifecycle import shutdown_application
 from app.core.logging import configure_logging
-from app.database import async_session, engine
+from app.database import async_session
 from app.middleware.rate_limit import RateLimitMiddleware
 from app.middleware.request_timeout import RequestTimeoutMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware

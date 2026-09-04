@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-import pytest
 
 from app.services.detection import SUPPORTED_RULE_TYPES
 from app.services.timeline import _chain_confidence, _chain_title, _timeline_fingerprint

@@ -246,3 +246,59 @@ Notifications:
 5. **Event-driven realtime** — WebSocket + Redis pub/sub for live updates
 6. **Infrastructure-as-code** — Docker Compose, K8s manifests, Helm chart all in repo
 7. **Defense in depth** — Rate limiting, security headers, RBAC, audit logging, MFA
+
+---
+
+## Team Structure (4 Members)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     TEAM RESPONSIBILITY MAP                          │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  MEMBER 3: Linux Agent & Telemetry                                 │
+│  ┌──────────┐                                                      │
+│  │  agent/   │  Log collection, metrics, heartbeat,                │
+│  │          │  SQLite buffer, HMAC signing                          │
+│  └─────┬────┘                                                      │
+│        │                                                            │
+│        ▼  HMAC-signed HTTPS                                        │
+│  MEMBER 1: Core SIEM / Backend / Security Engine                   │
+│  ┌──────────────────────────────────────────┐                      │
+│  │  backend/                                 │                      │
+│  │  ┌─────────┐  ┌────────────┐  ┌────────┐ │  Detection,         │
+│  │  │pipeline/ │→│services/    │→│routers/│ │  Correlation,        │
+│  │  │(ingest)  │  │(detect,    │  │(41 API)│ │  Offenses, UEBA,    │
+│  │  └─────────┘  │correlate,  │  └────────┘ │  Auth, RBAC, MFA,   │
+│  │               │offense,    │              │  WebSocket, AI       │
+│  │               │ueba,auth)  │              │                      │
+│  │               └────────────┘              │                      │
+│  └──────────────────┬───────────────────────┘                      │
+│                     │                                               │
+│                     ▼  WebSocket + REST API                         │
+│  MEMBER 2: Frontend & Dashboard                                     │
+│  ┌──────────────────────────────────────────┐                      │
+│  │  frontend/                                │                      │
+│  │  ┌──────────┐  ┌────────────┐  ┌───────┐ │  SOC Dashboard,     │
+│  │  │app/      │→│components/  │→│lib/   │ │  Alerts, Offenses,   │
+│  │  │(28 pages)│  │(130+ UI)   │  │(hooks,│ │  MITRE, UEBA,       │
+│  │  └──────────┘  └────────────┘  │types) │ │  Timeline, Search    │
+│  │                                └───────┘ │                      │
+│  └──────────────────────────────────────────┘                      │
+│                                                                     │
+│  MEMBER 4: Deployment, Testing & Documentation                     │
+│  ┌──────────────────────────────────────────┐                      │
+│  │  deploy/ │ helm/ │ k8s/ │ loadtests/     │  Docker, K8s, Helm, │
+│  │  scripts/ │ .github/workflows/            │  CI/CD, Tests, Docs │
+│  └──────────────────────────────────────────┘                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+| Member | Area | Key Directory | Responsibility |
+|--------|------|---------------|----------------|
+| **Member 1** | Core SIEM / Backend | `backend/app/` | SIEM architecture, API, detection, correlation, offenses, UEBA, auth, RBAC, MFA, WebSocket, AI assistant |
+| **Member 2** | Frontend & Dashboard | `frontend/` | Next.js SOC dashboard, 28+ pages, 130+ components, real-time updates, dark mode |
+| **Member 3** | Linux Agent | `agent/` | Host telemetry, log collection, metrics, offline buffer, HMAC signing |
+| **Member 4** | Deployment & Testing | `deploy/`, `helm/`, `k8s/` | Docker, Kubernetes, Helm, CI/CD, load testing, documentation |
+
+See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for the detailed contribution table.

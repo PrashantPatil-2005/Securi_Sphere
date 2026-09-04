@@ -2,9 +2,7 @@
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
-from app.database import async_session
 from tests.integration.helpers import create_test_host
 
 

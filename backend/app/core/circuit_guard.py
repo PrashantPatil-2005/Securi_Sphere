@@ -7,7 +7,6 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from app.config import settings
 from app.core.circuit_breaker import CircuitOpenError, get_breaker
 
 logger = logging.getLogger(__name__)

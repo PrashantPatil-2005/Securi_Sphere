@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.utils.query import TimeRange, resolve_time_range
+from app.utils.query import resolve_time_range
 
 
 def test_choose_risk_bucket_short_range():

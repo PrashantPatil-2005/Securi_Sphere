@@ -311,14 +311,14 @@ export default function DesignSystemPage() {
           columns={columns}
           data={sampleData}
           rowKey={(r) => r.id}
-          onRowClick={(r) => console.log("clicked", r)}
+          onRowClick={() => {}}
         />
       </section>
 
       {/* ─── Pagination ─── */}
       <section className="space-y-4">
         <h2 className="text-h2 text-foreground">Pagination</h2>
-        <Pagination page={3} totalPages={10} onPageChange={(p) => console.log(p)} />
+        <Pagination page={3} totalPages={10} onPageChange={() => {}} />
       </section>
 
       {/* ─── Timeline ─── */}

@@ -4,8 +4,8 @@ Tests startup ordering and graceful shutdown behavior.
 """
 import asyncio
 import pytest
-from unittest.mock import patch, PropertyMock
-from app.core.shutdown import ShutdownState, shutdown_state
+from unittest.mock import patch
+from app.core.shutdown import ShutdownState
 from app.core.health import readiness
 from app.jobs.queue import JobQueue
 

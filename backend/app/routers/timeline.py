@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,6 @@ from app.models.event import Event
 from app.models.timeline import AttackTimeline
 from app.models.user import User
 from app.schemas.timeline import TimelineResponse, TimelineEventResponse
-from app.services.timeline import get_timelines
 from app.utils.query import ListParams, apply_time_range, resolve_time_range
 
 router = APIRouter(prefix="/timelines", tags=["timelines"])

@@ -4,7 +4,6 @@ Tests each built-in rule type: positive, negative, boundary, time window, orderi
 """
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from unittest.mock import MagicMock
 import pytest
 from app.services.detection import SUPPORTED_RULE_TYPES
 from app.services.correlation.framework import SequenceMatcher, CoOccurrenceMatcher, CrossHostMatcher

@@ -4,7 +4,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 
 from app.security import create_oidc_state_token, decode_oidc_state_token, _encode
-from app.services.oidc import build_authorization_url, oidc_configured, oidc_redirect_uri, safe_next_path
+from app.services.oidc import build_authorization_url, oidc_configured, safe_next_path
 
 
 def test_oidc_configured_false_by_default():

@@ -14,7 +14,6 @@ The detection engine handles the actual security analysis.
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field, field_validator
 
 ALLOWED_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 MAX_BATCH_SIZE = 100

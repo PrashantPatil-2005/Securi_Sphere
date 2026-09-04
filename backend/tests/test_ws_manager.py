@@ -11,7 +11,7 @@ Production API (see app/routers/ws.py):
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

@@ -42,7 +42,7 @@ def _local_chat_reply(message: str, ctx: dict | None, siem_query: str | None) ->
             and ("investig" in lower or "step" in lower)
         ):
             steps = [
-                f"1. Set alert status to **investigating** and assign an analyst.",
+                "1. Set alert status to **investigating** and assign an analyst.",
                 f"2. Review events ±30 min on **{host['name']}** in the investigation pane.",
                 "3. Check attack timelines and MITRE mapping for this host.",
                 "4. Run IOC lookup on IPs/domains from related events.",

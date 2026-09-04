@@ -9,7 +9,6 @@ from app.models.alert_rule import AlertRule
 from app.models.event import Event
 from app.models.host import Host
 from app.models.threat_score import HostThreatScore
-from app.models.user import User
 from app.utils.cursor import decode_event_cursor, encode_event_cursor
 from app.utils.query import SEVERITY_ORDER, SortOrder, TimeRange, apply_time_range
 from app.utils.simulation_filter import real_events_only, should_exclude_simulated

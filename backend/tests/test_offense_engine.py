@@ -1,11 +1,8 @@
 """Tests for offense engine — grouping, risk escalation, timeline, dedup."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
-import pytest
 
 from app.services.offense_engine import (
     AUTH_EVENT_TYPES,

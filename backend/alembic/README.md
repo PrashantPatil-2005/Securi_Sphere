@@ -8,11 +8,28 @@ Securi uses **Alembic** for schema versioning. Startup calls `migrate_schema()` 
 |----------|------|---------|
 | `001_baseline` | `001_baseline.py` | Create all tables from SQLAlchemy models |
 | `002_indexes` | `002_indexes.py` | Performance indexes (idempotent) |
-| `003_constraints` | `003_constraints.py` | CHECK constraints |
+| `003_constraints` | `003_constraints.py` | CHECK constraints for domain enums |
 | `004_event_partitions` | `004_event_partitions.py` | Monthly RANGE partitions on `events` (skipped unless `EVENT_PARTITIONING_ENABLED=true`) |
 | `005_agent_cert` | `005_agent_cert.py` | Agent mTLS fingerprint column |
-
-**Note:** Keep `EVENT_PARTITIONING_ENABLED=false` for pilot/demo until the Event model and offense FKs are reconciled with composite partition keys.
+| `006_simulation_runs` | `006_simulation_runs.py` | Simulation run history table |
+| `007_oidc_users` | `007_oidc_users.py` | OIDC identity fields on users |
+| `008_user_invites` | `008_user_invites.py` | User invites for admin provisioning |
+| `009_reference_sets` | `009_reference_sets.py` | Reference sets and building blocks |
+| `010_playbooks` | `010_playbooks.py` | SOAR playbooks and run audit |
+| `011_ueba` | `011_ueba.py` | UEBA anomaly detections |
+| `012_notification_rules` | `012_notification_rules.py` | Per-user notification rules |
+| `013_dashboard_layouts` | `013_dashboard_layouts.py` | Per-user dashboard widget layouts |
+| `014_user_mfa` | `014_user_mfa.py` | TOTP MFA on users |
+| `015_immutable_audit` | `015_immutable_audit.py` | Immutable audit log hash chain and mutation guards |
+| `016_analytics_mv` | `016_analytics_materialized_views.py` | Analytics materialized views |
+| `017_false_positive_feedback` | `017_false_positive_feedback_loop.py` | False-positive feedback loop fields |
+| `018_threat_intel_feeds` | `018_threat_intel_feeds.py` | Threat intel feeds for reference sets |
+| `019_report_type_length` | `019_generated_report_type_length.py` | Increase `generated_reports.report_type` length |
+| `020_telemetry_events` | `020_telemetry_events.py` | Product telemetry events |
+| `021_alert_source` | `021_alert_source.py` | Add `source` column to alerts for simulation filtering |
+| `022_alert_dedup` | `022_atomic_alert_dedup.py` | Atomic alert deduplication and offense number sequence |
+| `023_additional_indexes` | `023_additional_indexes.py` | Additional composite indexes for high-volume query patterns |
+| `024_refresh_token_revoked` | `024_refresh_token_revoked_at.py` | Add `revoked_at` column to `refresh_tokens` for session revocation |
 
 ## Commands (from `backend/`)
 

@@ -1,11 +1,8 @@
 """Tests for event ingest deduplication."""
 
 import hashlib
-from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime, timezone
 
-import pytest
 
 from app.services.ingest_dedup import event_fingerprint
 

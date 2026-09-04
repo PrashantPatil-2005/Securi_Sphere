@@ -1,5 +1,4 @@
 from datetime import datetime
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast, or_, select
@@ -8,7 +7,7 @@ from sqlalchemy.types import String
 
 from sqlalchemy.orm import selectinload
 
-from app.database import get_db, get_db_read
+from app.database import get_db_read
 from app.dependencies import get_current_user
 from app.models.alert import Alert
 from app.models.event import Event

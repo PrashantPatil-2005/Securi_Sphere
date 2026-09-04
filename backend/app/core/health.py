@@ -8,7 +8,6 @@ from app.core.circuit_breaker import get_breaker
 from app.core.shutdown import shutdown_state
 from app.jobs.queue import job_queue
 from app.jobs.redis_broker import redis_ping
-from app.websocket.manager import ws_manager
 from app.websocket.redis_pubsub import ws_pubsub_ping
 
 

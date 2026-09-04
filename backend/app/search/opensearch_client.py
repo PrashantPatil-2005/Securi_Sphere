@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -54,7 +53,7 @@ def _ensure_indices(client) -> None:
     global _indices_ready
     if _indices_ready:
         return
-    from app.search.index_names import EVENTS_INDEX_PREFIX, events_index_for
+    from app.search.index_names import events_index_for
     from app.search.mappings import EVENTS_INDEX_TEMPLATE, INDEX_MAPPINGS
 
     try:

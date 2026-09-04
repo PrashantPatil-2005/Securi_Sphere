@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
-from app.models.incident import Incident, IncidentAlert
+from app.models.incident import Incident
 from app.models.siem import Offense, OffenseEvent
 from app.models.threat_score import HostThreatScore
 from app.models.timeline import AttackTimeline

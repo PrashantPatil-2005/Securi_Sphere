@@ -1,8 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { buildContentSecurityPolicy, createNonce } from "@/lib/csp";
-
-const AUTH_COOKIE = "ss_auth";
+import { AUTH_COOKIE } from "@/lib/auth/session";
 const publicPaths = ["/login", "/register", "/forgot-password", "/reset-password", "/accept-invite"];
 
 /** Static assets served from /public — never protected or redirected. */
