@@ -21,6 +21,7 @@ async def get_technique_drilldown(
     db: AsyncSession,
     tr: TimeRange,
     technique_id: str,
+    include_simulated: bool | None = None,
 ) -> MitreDrilldownResponse:
     tech = (
         await db.execute(select(MitreTechnique).where(MitreTechnique.technique_id == technique_id))
@@ -43,7 +44,7 @@ async def get_technique_drilldown(
 
     event_clauses = list(apply_time_range(Event.timestamp, tr))
     event_clauses.append(event_technique_clause(technique_id))
-    if should_exclude_simulated():
+    if should_exclude_simulated(include_simulated):
         event_clauses.append(real_events_only())
 
     event_count = (
@@ -52,7 +53,7 @@ async def get_technique_drilldown(
 
     alert_clauses = list(apply_time_range(Alert.created_at, tr))
     alert_clauses.append(Alert.mitre_technique_id == technique_id)
-    if should_exclude_simulated():
+    if should_exclude_simulated(include_simulated):
         alert_clauses.append(real_alerts_only())
     alert_count = (
         await db.execute(select(func.count()).select_from(Alert).where(*alert_clauses))

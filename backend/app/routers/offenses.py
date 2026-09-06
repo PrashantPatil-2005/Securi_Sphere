@@ -16,6 +16,7 @@ from app.schemas.assistant import OffenseAIBriefResponse
 from app.schemas.offense import OffenseStatusUpdate, OffenseListResponse, OffenseDetail, OffenseSummary, OffenseEventRef, OffenseAlertRef
 from app.services.ai.summaries import generate_offense_brief
 from app.utils.query import ListParams, resolve_time_range
+from app.utils.simulation_filter import include_simulated_param, real_offenses_only, should_exclude_simulated
 from app.services.incident_promotion import promote_offense_to_incident
 
 router = APIRouter(prefix="/offenses", tags=["offenses"])
@@ -30,11 +31,14 @@ async def list_offenses(
     to_time: datetime | None = ListParams.to_time(),
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     filters = []
+    if should_exclude_simulated(include_simulated):
+        filters.append(real_offenses_only())
     if status:
         filters.append(Offense.status == status)
     if host_id:

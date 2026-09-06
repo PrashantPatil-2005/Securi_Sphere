@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { parsePaginatedList } from "@/lib/parseList";
 import { useTimeRange } from "@/lib/timeRange";
+import { useSimulationQueryParams } from "@/lib/simulation-session";
 import type {
   Alert,
   AlertListResponse,
@@ -19,13 +20,14 @@ export function useAlertList(params: {
   filters: Record<string, string | number | boolean | undefined | null>;
 }) {
   const { queryParams } = useTimeRange();
+  const simParams = useSimulationQueryParams();
   const { page, pageSize, sort, filters } = params;
 
   return useQuery({
-    queryKey: ["alerts", queryParams, page, pageSize, sort, filters],
+    queryKey: ["alerts", queryParams, simParams, page, pageSize, sort, filters],
     queryFn: async () => {
       const q = buildQuery(
-        { page, page_size: pageSize, sort, ...filters },
+        { page, page_size: pageSize, sort, ...simParams, ...filters },
         queryParams,
       );
       const r = await api<AlertListResponse | { items?: Alert[]; total?: number }>(

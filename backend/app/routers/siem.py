@@ -9,6 +9,7 @@ from app.dependencies import get_current_user
 from app.models.user import User
 from app.services import siem_analytics as analytics
 from app.utils.query import ListParams, resolve_time_range
+from app.utils.simulation_filter import include_simulated_param
 
 router = APIRouter(prefix="/siem", tags=["siem"])
 
@@ -28,11 +29,12 @@ async def events_trend(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.events_trend(db, tr, _host_id(host_id))
+    return await analytics.events_trend(db, tr, _host_id(host_id), include_simulated)
 
 
 @router.get("/failed-logins")
@@ -41,11 +43,12 @@ async def failed_logins(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.failed_login_analytics(db, tr, _host_id(host_id))
+    return await analytics.failed_login_analytics(db, tr, _host_id(host_id), include_simulated)
 
 
 @router.get("/severity-distribution")
@@ -55,11 +58,14 @@ async def severity_distribution(
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
     status: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.severity_distribution(db, tr, _host_id(host_id), status)
+    return await analytics.severity_distribution(
+        db, tr, _host_id(host_id), status, include_simulated
+    )
 
 
 @router.get("/event-types")
@@ -68,20 +74,22 @@ async def event_types(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.event_type_distribution(db, tr, _host_id(host_id))
+    return await analytics.event_type_distribution(db, tr, _host_id(host_id), include_simulated)
 
 
 @router.get("/top-risky-hosts")
 async def top_risky_hosts(
     limit: int = Query(20, ge=1, le=100),
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
-    return await analytics.top_risky_hosts(db, limit)
+    return await analytics.top_risky_hosts(db, limit, include_simulated)
 
 
 @router.get("/host-risk")
@@ -126,11 +134,12 @@ async def executive(
     preset: str | None = ListParams.preset(),
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.executive_summary(db, tr)
+    return await analytics.executive_summary(db, tr, include_simulated)
 
 
 @router.get("/mitre")
@@ -139,20 +148,22 @@ async def mitre_stats(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.mitre_stats(db, tr, _host_id(host_id))
+    return await analytics.mitre_stats(db, tr, _host_id(host_id), include_simulated)
 
 
 @router.get("/historical")
 async def historical(
     view: str = Query("daily", pattern="^(daily|weekly|monthly)$"),
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
-    return await analytics.historical_analytics(db, view)
+    return await analytics.historical_analytics(db, view, include_simulated)
 
 
 @router.get("/attack-timelines")
@@ -161,8 +172,9 @@ async def attack_timelines(
     from_time: datetime | None = ListParams.from_time(),
     to_time: datetime | None = ListParams.to_time(),
     host_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
     db: AsyncSession = Depends(get_db_read),
     user: User = Depends(get_current_user),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
-    return await analytics.attack_timeline_list(db, tr, _host_id(host_id))
+    return await analytics.attack_timeline_list(db, tr, _host_id(host_id), include_simulated)

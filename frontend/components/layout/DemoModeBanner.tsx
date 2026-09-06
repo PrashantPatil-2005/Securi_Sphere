@@ -3,22 +3,35 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FlaskConical, X } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import {
+  disableSimulationDashboardSession,
+  isSimulationDashboardSessionActive,
+} from "@/lib/simulation-session";
 
 const DISMISS_KEY = "securi_demo_banner_dismissed";
+const SESSION_EVENT = "securi-simulation-session";
 
 interface PublicSettings {
   demo_mode?: boolean;
-  simulation_enabled?: boolean;
-  exclude_simulated_from_dashboard?: boolean;
 }
 
 export function DemoModeBanner() {
+  const queryClient = useQueryClient();
   const [dismissed, setDismissed] = useState(true);
+  const [sessionActive, setSessionActive] = useState(false);
 
   useEffect(() => {
     setDismissed(localStorage.getItem(DISMISS_KEY) === "1");
+    const sync = () => setSessionActive(isSimulationDashboardSessionActive());
+    sync();
+    window.addEventListener(SESSION_EVENT, sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, sync);
+      window.removeEventListener("storage", sync);
+    };
   }, []);
 
   const { data } = useQuery({
@@ -30,10 +43,7 @@ export function DemoModeBanner() {
   if (!data || dismissed) return null;
 
   const showPilot = !!data.demo_mode;
-  const showSimCharts =
-    !showPilot &&
-    data.simulation_enabled &&
-    data.exclude_simulated_from_dashboard === false;
+  const showSimCharts = !showPilot && sessionActive;
 
   if (!showPilot && !showSimCharts) return null;
 
@@ -58,6 +68,14 @@ export function DemoModeBanner() {
       <button
         type="button"
         onClick={() => {
+          if (showSimCharts) {
+            disableSimulationDashboardSession();
+            setSessionActive(false);
+            queryClient.invalidateQueries({ queryKey: ["siem"] });
+            queryClient.invalidateQueries({ queryKey: ["alerts"] });
+            queryClient.invalidateQueries({ queryKey: ["offenses"] });
+            queryClient.invalidateQueries({ queryKey: ["overview"] });
+          }
           localStorage.setItem(DISMISS_KEY, "1");
           setDismissed(true);
         }}

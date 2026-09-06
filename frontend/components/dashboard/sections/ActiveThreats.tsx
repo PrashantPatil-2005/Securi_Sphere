@@ -9,6 +9,7 @@ import { SeverityBadge, StatusBadge } from "@/components/design-system";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { EmptyState } from "@/components/design-system/EmptyState";
 import { useTimeRange } from "@/lib/timeRange";
+import { useSimulationQueryParams } from "@/lib/simulation-session";
 
 interface Alert {
   id: string;
@@ -33,10 +34,11 @@ function timeAgo(dateStr: string): string {
 
 export const ActiveThreats = memo(function ActiveThreats() {
   const { queryParams } = useTimeRange();
+  const simParams = useSimulationQueryParams();
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["alerts", "active", queryParams],
+    queryKey: ["alerts", "active", queryParams, simParams],
     queryFn: () => {
-      const params = new URLSearchParams(queryParams);
+      const params = new URLSearchParams({ ...queryParams, ...simParams });
       params.set("page_size", "10");
       params.set("sort", "newest");
       params.append("status", "open");

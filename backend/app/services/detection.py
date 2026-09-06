@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -223,12 +223,23 @@ class ServiceFailureChecker(RuleChecker):
     description = "A systemd service reported failure"
 
     async def check(self, db, host, rule, now):
-        # This checker is triggered per-event, not by polling.
-        # The event_type "service_failure" triggers an immediate alert.
-        return {
-            "title": "Service Failure",
-            "description": "A service failure was detected",
-        }
+        window = timedelta(minutes=rule.window_minutes or 15)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "service_failure",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 1):
+            return {
+                "title": "Service Failure",
+                "description": f"{count} service failure event(s) in {rule.window_minutes} minutes on {host.name}",
+            }
+        return None
 
 
 @register_checker
@@ -458,6 +469,32 @@ class NetworkAnomalyChecker(RuleChecker):
 # Alert creation helper
 # ---------------------------------------------------------------------------
 
+async def _recently_closed_rule_alert(
+    db: AsyncSession,
+    host_id,
+    rule_id,
+    cooldown_minutes: int,
+) -> bool:
+    """Suppress re-opening the same rule alert shortly after triage."""
+    if cooldown_minutes <= 0:
+        return False
+    since = datetime.now(timezone.utc) - timedelta(minutes=cooldown_minutes)
+    recent = (
+        await db.execute(
+            select(Alert.id)
+            .where(
+                Alert.host_id == host_id,
+                Alert.rule_id == rule_id,
+                Alert.status.in_(["resolved", "closed"]),
+                Alert.resolved_at.is_not(None),
+                Alert.resolved_at >= since,
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return recent is not None
+
+
 async def create_alert(
     db: AsyncSession,
     host_id,
@@ -469,7 +506,12 @@ async def create_alert(
     mitre_technique_id: str | None = None,
     mitre_tactic: str | None = None,
     source: str | None = None,
+    cooldown_minutes: int | None = None,
 ) -> Alert | None:
+    if rule_id is not None and await _recently_closed_rule_alert(
+        db, host_id, rule_id, cooldown_minutes if cooldown_minutes is not None else 15
+    ):
+        return None
     if rule_id is not None:
         stmt = (
             pg_insert(Alert)
@@ -652,6 +694,7 @@ async def run_detection_for_host(db: AsyncSession, host: Host, source: str | Non
             mitre_technique_id=result.get("mitre_technique_id"),
             mitre_tactic=result.get("mitre_tactic"),
             source=source,
+            cooldown_minutes=rule.window_minutes or 15,
         )
 
 
@@ -664,7 +707,15 @@ async def check_service_failure_event(db: AsyncSession, host: Host, event_type: 
     )
     rule = rules_result.scalar_one_or_none()
     if rule:
-        await create_alert(db, host.id, "Service Failure", "A service failure was detected", rule.severity, rule.id)
+        await create_alert(
+            db,
+            host.id,
+            "Service Failure",
+            "A service failure was detected",
+            rule.severity,
+            rule.id,
+            cooldown_minutes=rule.window_minutes or 15,
+        )
 
 
 async def update_host_statuses(db: AsyncSession) -> None:

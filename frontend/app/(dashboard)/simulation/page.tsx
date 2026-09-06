@@ -31,6 +31,10 @@ import type {
   SimulationRunResult,
 } from "@/lib/types/simulation";
 import { track } from "@/lib/telemetry";
+import {
+  disableSimulationDashboardSession,
+  enableSimulationDashboardSession,
+} from "@/lib/simulation-session";
 
 function detailToResult(detail: Awaited<ReturnType<typeof fetchSimulationRunDetail>>): SimulationRunResult {
   return {
@@ -98,6 +102,7 @@ export default function SimulationPage() {
         { method: "POST" },
       ),
     onSuccess: (r) => {
+      enableSimulationDashboardSession();
       setLastResult(r);
       setSelectedRunId(r.run_id);
       invalidateAfterRun();
@@ -124,6 +129,7 @@ export default function SimulationPage() {
       });
     },
     onSuccess: (r) => {
+      enableSimulationDashboardSession();
       setLastResult(r);
       setSelectedRunId(r.run_id);
       invalidateAfterRun();
@@ -136,8 +142,10 @@ export default function SimulationPage() {
     mutationFn: () =>
       api<{ message: string; events_deleted: number }>("/api/v1/simulation/purge", { method: "DELETE" }),
     onSuccess: (r) => {
+      disableSimulationDashboardSession();
       setLastResult(null);
       setSelectedRunId(null);
+      invalidateAfterRun();
       queryClient.invalidateQueries({ queryKey: ["simulation"] });
       toast("success", r.message, `${r.events_deleted} simulated events removed`);
     },

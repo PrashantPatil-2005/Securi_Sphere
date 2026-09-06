@@ -93,6 +93,7 @@ async def events_trend(
     db: AsyncSession,
     tr: TimeRange,
     host_id: UUID | None = None,
+    include_simulated: bool | None = None,
 ) -> dict:
     """Event trend broken down by category using a single aggregate query.
 
@@ -102,7 +103,7 @@ async def events_trend(
     bucket in a single database round-trip.
     """
     bucket = _bucket_column(Event.timestamp, tr)
-    clauses = _event_clauses(tr, host_id)
+    clauses = _event_clauses(tr, host_id, include_simulated)
 
     total_q = func.count()
     security_q = func.coalesce(
@@ -153,8 +154,13 @@ async def events_trend(
     }
 
 
-async def failed_login_analytics(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = _event_clauses(tr, host_id) + [Event.event_type == "ssh_login_failure"]
+async def failed_login_analytics(
+    db: AsyncSession,
+    tr: TimeRange,
+    host_id: UUID | None = None,
+    include_simulated: bool | None = None,
+) -> dict:
+    clauses = _event_clauses(tr, host_id, include_simulated) + [Event.event_type == "ssh_login_failure"]
 
     bucket = _bucket_column(Event.timestamp, tr)
     over_time = await db.execute(
@@ -210,10 +216,9 @@ async def severity_distribution(
     tr: TimeRange,
     host_id: UUID | None = None,
     status: str | None = None,
+    include_simulated: bool | None = None,
 ) -> dict:
-    clauses = apply_time_range(Alert.created_at, tr)
-    if host_id:
-        clauses.append(Alert.host_id == host_id)
+    clauses = _alert_clauses(tr, host_id, include_simulated)
     if status:
         clauses.append(Alert.status == status)
 
@@ -229,8 +234,13 @@ async def severity_distribution(
     return {"total": sum(counts.values()), "distribution": distribution}
 
 
-async def event_type_distribution(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = _event_clauses(tr, host_id)
+async def event_type_distribution(
+    db: AsyncSession,
+    tr: TimeRange,
+    host_id: UUID | None = None,
+    include_simulated: bool | None = None,
+) -> dict:
+    clauses = _event_clauses(tr, host_id, include_simulated)
 
     events = list((await db.execute(select(Event.event_type).where(*clauses))).scalars().all())
     category_counts: dict[str, int] = {k: 0 for k in EVENT_CATEGORIES}
@@ -269,7 +279,11 @@ async def event_type_distribution(db: AsyncSession, tr: TimeRange, host_id: UUID
     }
 
 
-async def top_risky_hosts(db: AsyncSession, limit: int = 20) -> list[dict]:
+async def top_risky_hosts(
+    db: AsyncSession,
+    limit: int = 20,
+    include_simulated: bool | None = None,
+) -> list[dict]:
     """Top risky hosts using a JOIN instead of loading all hosts.
 
     Replaces the full-table ``select(Host)`` scan with a LEFT JOIN to
@@ -287,13 +301,13 @@ async def top_risky_hosts(db: AsyncSession, limit: int = 20) -> list[dict]:
     host_ids = [s[0].host_id for s in scores]
     alert_counts = {}
     if host_ids:
-        rows = (
-            await db.execute(
-                select(Alert.host_id, func.count().label("cnt"))
-                .where(Alert.host_id.in_(host_ids), Alert.status.in_(["open", "investigating"]))
-                .group_by(Alert.host_id)
-            )
-        ).all()
+        alert_q = (
+            select(Alert.host_id, func.count().label("cnt"))
+            .where(Alert.host_id.in_(host_ids), Alert.status.in_(["open", "investigating"]))
+        )
+        if should_exclude_simulated(include_simulated):
+            alert_q = alert_q.where(real_alerts_only())
+        rows = (await db.execute(alert_q.group_by(Alert.host_id))).all()
         alert_counts = {row.host_id: row.cnt for row in rows}
 
     result = []
@@ -384,7 +398,11 @@ async def host_health_monitoring(db: AsyncSession) -> dict:
     return {"hosts": result}
 
 
-async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
+async def executive_summary(
+    db: AsyncSession,
+    tr: TimeRange,
+    include_simulated: bool | None = None,
+) -> dict:
     """Executive dashboard summary.
 
     Optimized from 13 sequential queries to 5 by:
@@ -393,8 +411,8 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     - Merging 2 period count queries into 1
     - Inlining events_trend as a single aggregate query (instead of 4 nested)
     """
-    event_clauses = _event_clauses(tr)
-    alert_clauses = _alert_clauses(tr)
+    event_clauses = _event_clauses(tr, include_simulated=include_simulated)
+    alert_clauses = _alert_clauses(tr, include_simulated=include_simulated)
 
     # Combined host counts: total + online in one query
     host_counts = await db.execute(
@@ -500,8 +518,13 @@ async def executive_summary(db: AsyncSession, tr: TimeRange) -> dict:
     }
 
 
-async def mitre_stats(db: AsyncSession, tr: TimeRange, host_id: UUID | None = None) -> dict:
-    clauses = _event_clauses(tr, host_id)
+async def mitre_stats(
+    db: AsyncSession,
+    tr: TimeRange,
+    host_id: UUID | None = None,
+    include_simulated: bool | None = None,
+) -> dict:
+    clauses = _event_clauses(tr, host_id, include_simulated)
 
     rows = await db.execute(
         select(Event.mitre_tactic, Event.mitre_technique_id, func.count())
@@ -519,7 +542,11 @@ async def mitre_stats(db: AsyncSession, tr: TimeRange, host_id: UUID | None = No
     return {"tactics": tactics, "techniques": techniques}
 
 
-async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
+async def historical_analytics(
+    db: AsyncSession,
+    view: str = "daily",
+    include_simulated: bool | None = None,
+) -> dict:
     from app.services.analytics.materialized_views import (
         materialized_views_enabled,
         query_historical_from_materialized_views,
@@ -541,13 +568,16 @@ async def historical_analytics(db: AsyncSession, view: str = "daily") -> dict:
         eb, ab = func.date_trunc("month", Event.timestamp), func.date_trunc("month", Alert.created_at)
 
     hist_event_clauses = [Event.timestamp >= since]
-    if should_exclude_simulated():
+    if should_exclude_simulated(include_simulated):
         hist_event_clauses.append(real_events_only())
     events = await db.execute(
         select(eb.label("period"), func.count()).where(*hist_event_clauses).group_by(eb).order_by(eb)
     )
+    alert_clauses = [Alert.created_at >= since]
+    if should_exclude_simulated(include_simulated):
+        alert_clauses.append(real_alerts_only())
     alerts = await db.execute(
-        select(ab.label("period"), func.count()).where(Alert.created_at >= since).group_by(ab).order_by(ab)
+        select(ab.label("period"), func.count()).where(*alert_clauses).group_by(ab).order_by(ab)
     )
 
     host_trend = await db.execute(
@@ -579,6 +609,7 @@ async def attack_timeline_list(
     db: AsyncSession,
     tr: TimeRange,
     host_id: UUID | None = None,
+    include_simulated: bool | None = None,
 ) -> list[dict]:
     """Attack timelines with events fetched in a single batch query.
 
@@ -612,11 +643,10 @@ async def attack_timeline_list(
     # Single batch query for all events
     events_map: dict[UUID, Event] = {}
     if all_event_ids:
-        evs = (
-            await db.execute(
-                select(Event).where(Event.id.in_(all_event_ids)).order_by(Event.timestamp)
-            )
-        ).scalars().all()
+        ev_q = select(Event).where(Event.id.in_(all_event_ids))
+        if should_exclude_simulated(include_simulated):
+            ev_q = ev_q.where(real_events_only())
+        evs = (await db.execute(ev_q.order_by(Event.timestamp))).scalars().all()
         events_map = {e.id: e for e in evs}
 
     result = []
@@ -638,6 +668,8 @@ async def attack_timeline_list(
                         "timestamp": e.timestamp.isoformat(),
                         "severity": e.severity,
                     })
+        if not event_details and should_exclude_simulated(include_simulated):
+            continue
         result.append({
             "id": str(t.id),
             "host_id": str(t.host_id),

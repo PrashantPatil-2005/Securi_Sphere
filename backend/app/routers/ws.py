@@ -14,6 +14,7 @@ from app.models.alert import Alert
 from app.models.host import Host
 from app.models.user import User
 from app.security import create_ws_ticket, decode_token as jwt_decode
+from app.utils.simulation_filter import include_simulated_param, real_alerts_only, should_exclude_simulated
 from app.websocket.manager import ws_manager
 
 logger = logging.getLogger(__name__)
@@ -58,14 +59,23 @@ async def ws_token(user: User = Depends(get_current_user)):
 
 
 @router.get("/overview")
-async def overview(user: User = Depends(get_current_user)):
+async def overview(
+    include_simulated: bool | None = include_simulated_param(),
+    user: User = Depends(get_current_user),
+):
     async with read_session_factory()() as db:
+        alert_filters = [Alert.status == "open"]
+        critical_filters = [Alert.status == "open", Alert.severity == "critical"]
+        if should_exclude_simulated(include_simulated):
+            alert_filters.append(real_alerts_only())
+            critical_filters.append(real_alerts_only())
+
         total_q, online_q, offline_q, active_q, critical_q = await asyncio.gather(
             db.execute(select(func.count()).select_from(Host)),
             db.execute(select(func.count()).select_from(Host).where(Host.status == "online")),
             db.execute(select(func.count()).select_from(Host).where(Host.status.in_(["offline", "critical"]))),
-            db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open")),
-            db.execute(select(func.count()).select_from(Alert).where(Alert.status == "open", Alert.severity == "critical")),
+            db.execute(select(func.count()).select_from(Alert).where(*alert_filters)),
+            db.execute(select(func.count()).select_from(Alert).where(*critical_filters)),
         )
     return {
         "total_hosts": total_q.scalar_one(),

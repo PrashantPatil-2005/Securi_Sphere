@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { buildQuery } from "@/lib/buildQuery";
 import { parsePaginatedList } from "@/lib/parseList";
 import { useTimeRange } from "@/lib/timeRange";
+import { useSimulationQueryParams } from "@/lib/simulation-session";
 
 export interface MaintenanceWindow {
   id: string;
@@ -39,10 +40,11 @@ export function useHostsList() {
 
 export function useSiemQuery<T>(path: string, extra: Record<string, string> = {}, enabled = true) {
   const { queryParams } = useTimeRange();
+  const simParams = useSimulationQueryParams();
   return useQuery({
-    queryKey: ["siem", path, queryParams, extra],
+    queryKey: ["siem", path, queryParams, extra, simParams],
     queryFn: async () => {
-      const q = buildQuery(extra, queryParams);
+      const q = buildQuery({ ...simParams, ...extra }, queryParams);
       return api<T>(`/api/v1/siem/${path}${q}`);
     },
     enabled,

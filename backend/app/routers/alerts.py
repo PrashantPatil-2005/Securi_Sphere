@@ -42,6 +42,7 @@ from app.services.feedback_loop import (
 )
 from app.services.query_builders import query_alerts
 from app.utils.query import ListParams, SortOrder, resolve_time_range
+from app.utils.simulation_filter import include_simulated_param
 from app.websocket.manager import ws_manager
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
@@ -72,6 +73,7 @@ async def list_alerts(
     page: int = ListParams.page(),
     page_size: int = ListParams.page_size(),
     mitre_technique_id: str | None = None,
+    include_simulated: bool | None = include_simulated_param(),
 ):
     tr = resolve_time_range(preset, from_time, to_time)
     items, total = await query_alerts(
@@ -79,6 +81,7 @@ async def list_alerts(
         host_id=host_id, severity=severity, status=status, rule_name=rule_name,
         assigned_to=assigned_to, q=q, exact=exact, sort=sort, page=page, page_size=page_size,
         mitre_technique_id=mitre_technique_id,
+        include_simulated=include_simulated,
     )
     return AlertListResponse(items=[_to_response(a) for a in items], total=total, page=page, page_size=page_size)
 

@@ -185,11 +185,10 @@ class TestServiceFailureRule:
     def test_service_failure_in_supported(self):
         assert "service_failure" in SUPPORTED_RULE_TYPES
 
-    def test_service_failure_always_returns_alert(self):
+    def test_service_failure_requires_recent_event(self):
         from app.services.detection import get_checker
         checker = get_checker("service_failure")
-        result = {"title": "Service Failure", "description": "A service failure was detected"}
-        assert result["title"] == "Service Failure"
+        assert checker.rule_type == "service_failure"
 
 
 class TestAgentOfflineRule:

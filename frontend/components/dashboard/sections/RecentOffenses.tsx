@@ -5,6 +5,7 @@ import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useTimeRange } from "@/lib/timeRange";
+import { useSimulationQueryParams } from "@/lib/simulation-session";
 import { SeverityBadge, StatusBadge } from "@/components/design-system";
 import { LoadingState } from "@/components/design-system/LoadingState";
 import { ErrorState } from "@/components/design-system/ErrorState";
@@ -35,10 +36,11 @@ function timeAgo(dateStr: string): string {
 
 export const RecentOffenses = memo(function RecentOffenses() {
   const { queryParams } = useTimeRange();
+  const simParams = useSimulationQueryParams();
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["offenses", "dashboard", queryParams],
+    queryKey: ["offenses", "dashboard", queryParams, simParams],
     queryFn: () => {
-      const params = new URLSearchParams(queryParams);
+      const params = new URLSearchParams({ ...queryParams, ...simParams });
       params.set("page_size", "5");
       return api<{ items: Offense[]; total: number }>(`/api/v1/offenses?${params.toString()}`);
     },
