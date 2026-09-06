@@ -188,7 +188,7 @@ async def update_offense_status(
     from datetime import timezone
     from fastapi import HTTPException
 
-    if body.status not in ("open", "investigating", "resolved"):
+    if body.status not in ("open", "investigating", "closed"):
         raise HTTPException(400, "Invalid status")
 
     offense = (await db.execute(select(Offense).where(Offense.id == offense_id))).scalar_one_or_none()
@@ -197,7 +197,7 @@ async def update_offense_status(
 
     offense.status = body.status
     offense.updated_at = datetime.now(timezone.utc)
-    if body.status == "resolved":
+    if body.status == "closed":
         offense.closed_at = datetime.now(timezone.utc)
     from app.services.audit import log_audit
     await log_audit(db, "offense_status_change", user_id=user.id, resource_type="offense", resource_id=offense_id)

@@ -3,11 +3,11 @@
 from pydantic import BaseModel, Field
 
 
-VALID_OFFENSE_STATUSES = ("open", "investigating", "resolved")
+VALID_OFFENSE_STATUSES = ("open", "investigating", "closed")
 
 
 class OffenseStatusUpdate(BaseModel):
-    status: str = Field(..., pattern="^(open|investigating|resolved)$")
+    status: str = Field(..., pattern="^(open|investigating|closed)$")
 
 
 class OffenseEventRef(BaseModel):
