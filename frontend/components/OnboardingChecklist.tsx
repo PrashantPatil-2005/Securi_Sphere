@@ -24,7 +24,7 @@ export function OnboardingChecklist() {
   return (
     <Panel
       title="Getting started"
-      subtitle={`${completedCount}/${totalSteps} complete — SOC lab walkthrough (no agent required for simulation)`}
+      subtitle={`${completedCount}/${totalSteps} complete — live SOC setup`}
       action={
         <div className="flex items-center gap-2">
           <OnboardingWizardTrigger />
@@ -67,7 +67,7 @@ export function OnboardingChecklist() {
       </ul>
       <p className="text-caption normal-case text-muted mt-3 flex items-center gap-1.5">
         <ListChecks className="w-3.5 h-3.5" />
-        Tip: press Ctrl+K for quick navigation · simulation-only demo needs no Ubuntu VM
+        Tip: press Ctrl+K for quick navigation · dashboards use live agent data only
       </p>
     </Panel>
   );

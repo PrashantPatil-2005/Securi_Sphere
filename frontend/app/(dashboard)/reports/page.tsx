@@ -83,10 +83,10 @@ function ReportsPageContent() {
       {!isLoading && !isError && data && data.total_hosts === 0 && data.open_alerts === 0 && (
         <EmptyState
           title="No data for reports yet"
-          description="Add hosts or run an Attack Lab simulation to populate report summaries."
+          description="Enroll agents so report summaries use live host and alert data."
           icon={<FileText className="w-10 h-10 opacity-40" />}
-          action="/simulation"
-          actionLabel="Open Attack Lab"
+          action="/hosts"
+          actionLabel="Open hosts"
         />
       )}
 

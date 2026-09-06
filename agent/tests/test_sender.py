@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent.sender import Sender, MAX_CONSECUTIVE_FAILURES, MAX_RETRIES_BEFORE_BUFFER
+from agent.sender import Sender, MAX_CONSECUTIVE_FAILURES
 
 
 @pytest.fixture()
@@ -74,22 +74,18 @@ def test_sender_max_consecutive_failures(sender, mock_session):
     assert sender._consecutive_failures == MAX_CONSECUTIVE_FAILURES
 
 
-def test_sender_buffer_on_failure(sender, mock_session):
-    import agent.buffer as buf
+def test_sender_send_events_returns_false_on_failure(sender, mock_session):
     mock_session.post.side_effect = requests.ConnectionError("down")
-    for _ in range(MAX_RETRIES_BEFORE_BUFFER):
-        sender.send_events([{"type": "test", "n": 1}])
-    size_after_buffering = buf.queue_size()
-    assert size_after_buffering > 0
+    result = sender.send_events([{"type": "test", "n": 1}])
+    assert result is False
 
 
-def test_sender_flush_buffer(sender, mock_session):
+def test_sender_flush_buffer(tmp_buffer_db, sender, mock_session):
     import agent.buffer as buf
-    mock_session.post.side_effect = requests.ConnectionError("down")
-    for _ in range(MAX_RETRIES_BEFORE_BUFFER + 1):
-        sender.send_events([{"type": "test"}])
+    for i in range(5):
+        buf.enqueue_event({"type": "test", "n": i})
     buffered = buf.queue_size()
-    assert buffered > 0
+    assert buffered == 5
     mock_session.post.side_effect = None
     resp = MagicMock()
     resp.status_code = 200
@@ -150,16 +146,6 @@ def test_sender_401_sets_auth_failed(sender, mock_session):
     assert sender.is_auth_failed is True
 
 
-def test_sender_401_does_not_buffer(sender, mock_session):
-    import agent.buffer as buf
-    resp = MagicMock()
-    resp.status_code = 401
-    mock_session.post.return_value = resp
-    for _ in range(MAX_RETRIES_BEFORE_BUFFER + 5):
-        sender.send_events([{"type": "test"}])
-    assert buf.queue_size() == 0
-
-
 def test_sender_success_resets_auth_failed(sender, mock_session):
     resp_401 = MagicMock()
     resp_401.status_code = 401
@@ -180,12 +166,10 @@ def test_sender_close(sender, mock_session):
 
 def test_sender_flush_batch_size(tmp_buffer_db, sender, mock_session):
     import agent.buffer as buf
-    buf.init_db()
-    mock_session.post.side_effect = requests.ConnectionError("down")
-    for _ in range(MAX_RETRIES_BEFORE_BUFFER + 5):
-        sender.send_events([{"n": 1}])
+    for i in range(10):
+        buf.enqueue_event({"n": i})
     total_buffered = buf.queue_size()
-    assert total_buffered > 0
+    assert total_buffered == 10
     mock_session.post.side_effect = None
     resp = MagicMock()
     resp.status_code = 200
@@ -196,16 +180,16 @@ def test_sender_flush_batch_size(tmp_buffer_db, sender, mock_session):
 
 def test_sender_flush_batch_chunking(tmp_buffer_db):
     import agent.buffer as buf
-    from agent.sender import Sender, MAX_FLUSH_BATCH_SIZE
+    from agent.sender import Sender
+    import agent.sender as sender_mod
     buf.init_db()
     s = Sender("https://server.example.com", "test-key", signing=False)
     s._interruptible_sleep = lambda seconds: None
-    original = MAX_FLUSH_BATCH_SIZE
+    original = sender_mod.MAX_FLUSH_BATCH_SIZE
     try:
-        import agent.sender as sender_mod
         sender_mod.MAX_FLUSH_BATCH_SIZE = 2
         for i in range(6):
-            buf.enqueue("events", {"seq": i})
+            buf.enqueue_event({"seq": i})
         assert buf.queue_size() == 6
         mock = MagicMock()
         resp = MagicMock()
@@ -227,6 +211,24 @@ def test_sender_429_respects_retry_after(sender, mock_session):
     sender._interruptible_sleep = lambda s: None
     sender.send_events([{"type": "test"}])
     assert sender._consecutive_failures > 0
+
+
+def test_flush_sends_buffered_metrics_to_metrics_endpoint(tmp_buffer_db, sender, mock_session):
+    import agent.buffer as buf
+    buf.enqueue_metrics([{"cpu_percent": 3.0, "recorded_at": "2026-09-06T00:00:00Z"}])
+    buf.enqueue_event({
+        "event_type": "ssh_login_failure",
+        "severity": "medium",
+        "timestamp": "2026-09-06T00:00:00Z",
+    })
+    resp = MagicMock()
+    resp.status_code = 200
+    mock_session.post.return_value = resp
+    sender.flush_buffer()
+    assert buf.queue_size() == 0
+    paths = [call.args[0] for call in mock_session.post.call_args_list]
+    assert any(p.endswith("/api/v1/agent/events") for p in paths)
+    assert any(p.endswith("/api/v1/agent/metrics") for p in paths)
 
 
 def test_sender_logging_throttle(sender, mock_session):

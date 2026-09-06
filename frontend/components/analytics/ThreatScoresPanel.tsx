@@ -59,10 +59,10 @@ export function ThreatScoresPanel({
       {scores.length === 0 ? (
         <EmptyState
           title="No threat scores yet"
-          description="Run Attack Lab or enroll agents to populate host risk scoring."
+          description="Enroll agents so live telemetry can populate host risk scoring."
           icon={<Shield className="w-8 h-8" />}
-          action="/simulation"
-          actionLabel="Open Attack Lab"
+          action="/hosts"
+          actionLabel="Open hosts"
         />
       ) : (
         <div className="space-y-2">

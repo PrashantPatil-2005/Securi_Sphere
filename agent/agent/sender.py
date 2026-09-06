@@ -1,8 +1,8 @@
 """Agent HTTP sender with HMAC signing, exponential backoff, and offline buffer.
 
 The agent sends events/metrics/heartbeats to the backend over HTTPS.
-If the server is unreachable, data is buffered in SQLite and retried
-with exponential backoff.
+If the server is unreachable, individual events are buffered in SQLite
+and retried with exponential backoff.
 
 Signing (optional): Each request includes a timestamp, nonce, and HMAC-SHA256
 signature computed over the request body. This prevents replay attacks —
@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import json
 import logging
+import os
 import secrets
 import threading
 import time
@@ -20,45 +21,37 @@ from datetime import datetime, timezone
 
 import requests
 
-from agent.buffer import dequeue_all, enqueue, queue_size, remove_by_ids
+from agent.buffer import (
+    dequeue_all,
+    queue_size,
+    remove_by_ids,
+    purge_stale,
+    STALE_ITEM_MAX_AGE_HOURS,
+    _agent_rss_mb,
+    _buffer_size_mb,
+)
 
 logger = logging.getLogger(__name__)
 
-AGENT_VERSION = "2.0.0"
+AGENT_VERSION = "3.0.0"
 SIGNING_ENABLED = False
 
-# Retry configuration
 INITIAL_BACKOFF_SECONDS = 1.0
-MAX_BACKOFF_SECONDS = 60.0
+MAX_BACKOFF_SECONDS = 30.0
 BACKOFF_MULTIPLIER = 2.0
-MAX_RETRIES_BEFORE_BUFFER = 3
-MAX_CONSECUTIVE_FAILURES = 100
+MAX_RETRIES_BEFORE_BUFFER = 2
+MAX_CONSECUTIVE_FAILURES = 50
 
-# Buffer flush limits
-MAX_FLUSH_BATCH_SIZE = 500
+MAX_SEND_BATCH_SIZE = 50
+MAX_FLUSH_BATCH_SIZE = 200
 
 
 def _sign(api_key: str, timestamp: str, nonce: str, body: bytes) -> str:
-    """HMAC-SHA256 signature: sign(timestamp.nonce.body).
-
-    Server validates by recomputing and checking nonce hasn't been seen.
-    This prevents replay attacks — even if an attacker captures a valid
-    request, they can't resend it (nonce is single-use, timestamp expires).
-    """
     message = f"{timestamp}.{nonce}.".encode() + body
     return hmac.new(api_key.encode(), message, hashlib.sha256).hexdigest()
 
 
 class Sender:
-    """HTTP sender with automatic retry and offline buffering.
-
-    Flow:
-    1. Try to POST to server
-    2. On success: reset backoff, return True
-    3. On failure: increment backoff, buffer to SQLite, return False
-    4. On next loop iteration: flush buffer first, then send new data
-    """
-
     def __init__(self, server_url: str, api_key: str, *, signing: bool = False) -> None:
         self.base = server_url.rstrip("/")
         self.api_key = api_key
@@ -69,38 +62,32 @@ class Sender:
             "Content-Type": "application/json",
             "X-Agent-Version": AGENT_VERSION,
         })
-        # Exponential backoff state
         self._consecutive_failures = 0
         self._current_backoff = INITIAL_BACKOFF_SECONDS
         self._last_attempt = 0.0
         self._backoff_event = threading.Event()
-        # Permanent auth failure flag (401)
         self._auth_failed = False
-        # Log throttle: suppress repeated identical messages
         self._last_failure_log_time: float = 0.0
         self._failure_log_suppressed = False
 
     def _get_backoff(self) -> float:
-        """Calculate current backoff with exponential increase + jitter."""
         base = min(
             INITIAL_BACKOFF_SECONDS * (BACKOFF_MULTIPLIER ** self._consecutive_failures),
             MAX_BACKOFF_SECONDS,
         )
-        # Add small jitter (0-20%) to prevent thundering herd
         jitter = base * 0.2 * secrets.randbelow(100) / 100
         return base + jitter
 
     def _interruptible_sleep(self, seconds: float) -> None:
-        """Sleep that can be interrupted by calling _backoff_event.set()."""
         self._backoff_event.clear()
         self._backoff_event.wait(timeout=seconds)
 
     def abort_backoff(self) -> None:
-        """Interrupt any current backoff sleep (e.g., on shutdown)."""
         self._backoff_event.set()
 
-    def _post(self, path: str, data: dict, buffer_kind: str | None = None) -> bool:
+    def _post(self, path: str, data: dict) -> bool:
         body = json.dumps(data, separators=(",", ":"), default=str).encode()
+        body_bytes = len(body)
         headers = {}
         if self.signing:
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -111,7 +98,6 @@ class Sender:
                 "X-Agent-Signature": _sign(self.api_key, ts, nonce, body),
             }
 
-        # Respect backoff — don't hammer a down server
         now = time.time()
         wait = self._get_backoff() - (now - self._last_attempt)
         if wait > 0 and self._consecutive_failures > 0:
@@ -129,16 +115,12 @@ class Sender:
                 self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
                 return False
             if r.status_code == 429:
-                # Rate limited — back off aggressively
                 retry_after = int(r.headers.get("Retry-After", 30))
                 logger.warning("Rate limited, backing off %ds", retry_after)
                 self._interruptible_sleep(retry_after)
                 self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
-                if buffer_kind:
-                    enqueue(buffer_kind, data)
                 return False
             r.raise_for_status()
-            # Success — reset backoff
             self._consecutive_failures = 0
             self._current_backoff = INITIAL_BACKOFF_SECONDS
             self._auth_failed = False
@@ -160,28 +142,17 @@ class Sender:
                     self._consecutive_failures,
                 )
                 self._failure_log_suppressed = True
-            if (
-                buffer_kind
-                and self._consecutive_failures >= MAX_RETRIES_BEFORE_BUFFER
-                and not self._auth_failed
-            ):
-                if self._consecutive_failures == MAX_RETRIES_BEFORE_BUFFER:
-                    logger.info("Buffering to SQLite after %d failures", self._consecutive_failures)
-                enqueue(buffer_kind, data)
             return False
 
     def close(self) -> None:
-        """Close the underlying HTTP session."""
         self.session.close()
 
     @property
     def is_online(self) -> bool:
-        """Whether the agent considers itself connected to the server."""
         return self._consecutive_failures == 0
 
     @property
     def is_auth_failed(self) -> bool:
-        """Whether the agent's credentials are permanently rejected."""
         return self._auth_failed
 
     def heartbeat(self, payload: dict | None = None) -> bool:
@@ -190,24 +161,32 @@ class Sender:
     def send_events(self, events: list[dict]) -> bool:
         if not events:
             return True
-        return self._post("/api/v1/agent/events", {"events": events}, "events")
+        for start in range(0, len(events), MAX_SEND_BATCH_SIZE):
+            chunk = events[start : start + MAX_SEND_BATCH_SIZE]
+            if not self._post("/api/v1/agent/events", {"events": chunk}):
+                return False
+        return True
 
     def send_metrics(self, metrics: list[dict]) -> bool:
         if not metrics:
             return True
-        return self._post("/api/v1/agent/metrics", {"metrics": metrics}, "metrics")
+        for start in range(0, len(metrics), MAX_SEND_BATCH_SIZE):
+            chunk = metrics[start : start + MAX_SEND_BATCH_SIZE]
+            if not self._post("/api/v1/agent/metrics", {"metrics": chunk}):
+                return False
+        return True
 
     def flush_buffer(self) -> None:
-        """Drain the offline SQLite buffer and replay to server.
+        purge_stale(STALE_ITEM_MAX_AGE_HOURS)
 
-        Processes in bounded batches to avoid backend overload after
-        prolonged offline periods. Only removes items that were
-        successfully sent. Failed items stay in SQLite for the next
-        retry cycle.
-        """
         buffered = queue_size()
         if buffered > 0:
-            logger.info("Flushing %d buffered items", buffered)
+            rss = _agent_rss_mb()
+            db_mb = _buffer_size_mb()
+            logger.info(
+                "Buffer flush: %d items, db=%.1fMB, rss=%.0fMB",
+                buffered, db_mb, rss,
+            )
 
         items = dequeue_all()
         if not items:
@@ -215,45 +194,60 @@ class Sender:
 
         sent_ids: list[int] = []
         total_events = 0
-        total_metrics = 0
 
         for batch_start in range(0, len(items), MAX_FLUSH_BATCH_SIZE):
             batch = items[batch_start:batch_start + MAX_FLUSH_BATCH_SIZE]
             events_batch: list[dict] = []
-            metrics_batch: list[dict] = []
             event_ids: list[int] = []
+            metrics_batch: list[dict] = []
             metric_ids: list[int] = []
 
             for item_id, kind, payload in batch:
-                if kind == "events":
-                    events_batch.extend(payload.get("events", [payload]))
-                    event_ids.append(item_id)
-                elif kind == "metrics":
-                    metrics_batch.extend(payload.get("metrics", [payload]))
+                if not isinstance(payload, dict):
+                    continue
+                if kind == "metric" or (
+                    kind == "event"
+                    and "event_type" not in payload
+                    and ("cpu_percent" in payload or "recorded_at" in payload)
+                ):
+                    metrics_batch.append(payload)
                     metric_ids.append(item_id)
+                elif kind == "event":
+                    events_batch.append(payload)
+                    event_ids.append(item_id)
 
             if events_batch:
+                largest_event = max(len(json.dumps(e, default=str).encode()) for e in events_batch)
                 if self.send_events(events_batch):
                     sent_ids.extend(event_ids)
                     total_events += len(events_batch)
+                    logger.info(
+                        "Flush chunk sent: %d events, largest=%d bytes",
+                        len(events_batch), largest_event,
+                    )
                 else:
-                    logger.warning("Failed to send %d buffered events — will retry", len(events_batch))
+                    rss = _agent_rss_mb()
+                    logger.warning(
+                        "Flush chunk failed: %d events, largest=%d bytes, rss=%.0fMB — will retry",
+                        len(events_batch), largest_event, rss,
+                    )
+
             if metrics_batch:
                 if self.send_metrics(metrics_batch):
                     sent_ids.extend(metric_ids)
-                    total_metrics += len(metrics_batch)
+                    logger.info("Flush chunk sent: %d metrics", len(metrics_batch))
                 else:
-                    logger.warning("Failed to send %d buffered metrics — will retry", len(metrics_batch))
+                    logger.warning("Flush chunk failed: %d metrics — will retry", len(metrics_batch))
 
         if sent_ids:
             remove_by_ids(sent_ids)
             logger.info(
-                "Buffer flushed: %d/%d items sent (%d events, %d metrics)",
-                len(sent_ids), len(items), total_events, total_metrics,
+                "Buffer flushed: %d/%d items sent (%d events)",
+                len(sent_ids), len(items), total_events,
             )
         if len(sent_ids) < len(items):
             remaining = len(items) - len(sent_ids)
-            logger.warning("Buffer flush partial — %d items remain in SQLite", remaining)
+            logger.warning("Buffer flush partial — %d items remain", remaining)
 
     @staticmethod
     def register(
@@ -263,7 +257,6 @@ class Sender:
         ip_address: str,
         os_info: str,
     ) -> str:
-        """One-time enrollment: exchange token for API key."""
         r = requests.post(
             f"{server_url.rstrip('/')}/api/v1/agent/register",
             json={

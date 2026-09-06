@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError as PydanticValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import request_id_var
@@ -46,6 +47,19 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content=error_body(
+            code="validation_error",
+            message="Request validation failed",
+            status_code=422,
+            details=exc.errors(),
+        ),
+    )
+
+
+async def pydantic_validation_exception_handler(request: Request, exc: PydanticValidationError) -> JSONResponse:
+    logger.warning("Pydantic validation error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=422,
         content=error_body(

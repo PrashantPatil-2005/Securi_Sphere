@@ -1,10 +1,16 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useCallback, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { StatusBadge } from "@/components/design-system/Badge";
 import { hostStatusColor, hostRiskColor, hostRiskLevel } from "@/lib/types/host";
+import { useHostDeleteMutation } from "@/lib/hooks/useHosts";
+import { useToast } from "@/components/ui/Toast";
+import { useUser } from "@/lib/hooks/useUser";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import type { HostSummary } from "@/lib/types/host";
 
 interface HostDetailHeaderProps {
@@ -27,6 +33,30 @@ function formatRelativeTime(ts: string | null): string {
 }
 
 function HostDetailHeaderInner({ host }: HostDetailHeaderProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const { data: user } = useUser();
+  const isAdmin = user?.role?.name === "admin";
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const deleteMutation = useHostDeleteMutation({
+    onSuccess: () => {
+      toast("success", "Host deleted", `${host.name} has been removed.`);
+      router.push("/hosts");
+    },
+    onError: (e) => {
+      toast("error", "Failed to delete host", e.message);
+    },
+  });
+
+  const handleDelete = useCallback(() => {
+    setShowDeleteConfirm(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    deleteMutation.mutate(host.id);
+  }, [deleteMutation, host.id]);
+
   const riskLevel = hostRiskLevel(host.risk_score);
 
   return (
@@ -56,6 +86,16 @@ function HostDetailHeaderInner({ host }: HostDetailHeaderProps) {
             <StatusBadge status={host.status} />
             {host.enrolled && (
               <span className="text-[10px] text-success font-medium">Agent Enrolled</span>
+            )}
+            {isAdmin && (
+              <button
+                onClick={handleDelete}
+                className="ml-auto inline-flex items-center gap-1.5 text-xs text-danger hover:text-danger/80 transition-colors px-2 py-1 rounded hover:bg-danger/10"
+                title="Delete host"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
             )}
           </div>
           {host.hostname && host.hostname !== host.name && (
@@ -100,6 +140,27 @@ function HostDetailHeaderInner({ host }: HostDetailHeaderProps) {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Host"
+        description={`Are you sure you want to delete "${host.name}"? This will also remove all associated alerts, events, metrics, and threat scores. This action cannot be undone.`}
+      >
+        <div className="flex justify-end gap-2 mt-4">
+          <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={confirmDelete}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete Host"}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }

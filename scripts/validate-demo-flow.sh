@@ -26,7 +26,7 @@ if ! check "$API/health" "Backend health" || ! check "$FRONTEND/login" "Frontend
   echo ""
   echo "Start the stack first:"
   echo "  docker compose -f docker-compose.dev.yml up -d"
-  echo "  cd backend && uvicorn app.main:app --reload --port 8000"
+  echo "  cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
   echo "  cd frontend && npx next dev --turbo -p 3000"
   exit 1
 fi

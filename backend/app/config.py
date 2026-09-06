@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     agent_mtls_ca_cert_path: str = ""
     trusted_proxy: bool = False
     testing: bool = False
+    skip_server_url_interface_check: bool = False
     opensearch_url: str = ""
     search_backend: str = "postgres"
     opensearch_bulk_size: int = 500

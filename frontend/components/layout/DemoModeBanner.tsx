@@ -38,7 +38,7 @@ export function DemoModeBanner() {
   if (!showPilot && !showSimCharts) return null;
 
   const message = showPilot
-    ? "Pilot demo mode — run Multi-Stage Attack in Attack Lab, then follow the guided investigation bar. Demo login: demo@securi.local / Demo1234!"
+    ? "Pilot demo mode is on. Charts may include Attack Lab simulation unless exclusion is enabled."
     : "Dashboard charts include simulated Attack Lab data for this session.";
 
   return (

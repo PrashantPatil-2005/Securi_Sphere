@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import { useHostList, useHostCreateMutation } from "@/lib/hooks/useHosts";
+import { useHostList, useHostCreateMutation, useEnrollmentTokenMutation } from "@/lib/hooks/useHosts";
 import { useDebounce } from "@/lib/hooks/useDebounce";
 import { buildQuery } from "@/lib/buildQuery";
 import ExportMenu from "@/components/export/ExportMenu";
@@ -43,8 +43,13 @@ function HostsPageContent() {
   const [selectedHost, setSelectedHost] = useState<HostSummary | null>(null);
   const [showAddHost, setShowAddHost] = useState(false);
   const [newHostName, setNewHostName] = useState("");
+  const [enrollmentResult, setEnrollmentResult] = useState<{
+    token: string;
+    install_command: string;
+    host_name: string;
+  } | null>(null);
+  const createdHostIdRef = useRef<string | null>(null);
 
-  // Read URL params on mount
   useEffect(() => {
     const status = searchParams.get("status");
     if (status) {
@@ -52,7 +57,6 @@ function HostsPageContent() {
     }
   }, [searchParams]);
 
-  // Debounce search
   const debouncedHostname = useDebounce(filters.hostname, 400);
   const debouncedFilters = useMemo(
     () => ({ ...filters, hostname: debouncedHostname }),
@@ -75,12 +79,37 @@ function HostsPageContent() {
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
-  const createMutation = useHostCreateMutation({
-    onSuccess: () => {
-      toast("success", "Host added", "Generate an enrollment token to install the agent.");
+  const enrollmentMutation = useEnrollmentTokenMutation({
+    onSuccess: (data) => {
+      setEnrollmentResult({
+        token: data.token,
+        install_command: data.install_command,
+        host_name: data.host_name,
+      });
       setShowAddHost(false);
       setNewHostName("");
       refetch();
+    },
+    onError: (e) => {
+      toast("error", "Failed to generate enrollment token", e.message);
+      setShowAddHost(false);
+      setNewHostName("");
+      refetch();
+    },
+  });
+
+  const createMutation = useHostCreateMutation({
+    onSuccess: (data: any) => {
+      const hostId = data?.id;
+      if (hostId) {
+        createdHostIdRef.current = hostId;
+        enrollmentMutation.mutate(hostId);
+      } else {
+        toast("success", "Host added", "Navigate to the host to generate an enrollment token.");
+        setShowAddHost(false);
+        setNewHostName("");
+        refetch();
+      }
     },
     onError: (e) => {
       toast("error", "Failed to add host", e.message);
@@ -143,7 +172,6 @@ function HostsPageContent() {
         ) : (
           <>
             <div className={`transition-opacity ${isFetching ? "opacity-70" : ""}`}>
-              {/* Desktop table header */}
               <div className="hidden md:flex items-center gap-3 px-3 py-2 border-b border-border-subtle text-[11px] font-medium text-muted uppercase tracking-wide">
                 <span className="w-2 shrink-0" />
                 <span className="flex-1">Host</span>
@@ -154,7 +182,6 @@ function HostsPageContent() {
                 <span className="w-20 text-right hidden md:block">Last Seen</span>
               </div>
 
-              {/* Host rows */}
               <div>
                 {items.map((host) => (
                   <HostRow
@@ -167,7 +194,6 @@ function HostsPageContent() {
               </div>
             </div>
 
-            {/* Pagination */}
             <div className="mt-4">
               <PaginationBar
                 page={page}
@@ -203,12 +229,71 @@ function HostsPageContent() {
             <Button
               variant="primary"
               onClick={handleAddHost}
-              disabled={!newHostName.trim() || createMutation.isPending}
+              disabled={!newHostName.trim() || createMutation.isPending || enrollmentMutation.isPending}
             >
-              {createMutation.isPending ? "Adding..." : "Add Host"}
+              {createMutation.isPending || enrollmentMutation.isPending ? "Creating..." : "Add Host"}
             </Button>
           </div>
         </div>
+      </Dialog>
+
+      {/* Enrollment Token Dialog */}
+      <Dialog
+        open={!!enrollmentResult}
+        onClose={() => setEnrollmentResult(null)}
+        title="Host Created — Enrollment Token"
+        description="Copy this token and run the install command on the target host."
+      >
+        {enrollmentResult && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted block mb-1">Host</label>
+              <p className="text-sm font-medium text-foreground">{enrollmentResult.host_name}</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted block mb-1">Enrollment Token</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-card-elevated px-3 py-2 rounded border border-border-subtle break-all">
+                  {enrollmentResult.token}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(enrollmentResult.token);
+                    toast("success", "Copied", "Token copied to clipboard.");
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted block mb-1">Install Command (Linux)</label>
+              <div className="flex items-start gap-2">
+                <pre className="flex-1 text-xs font-mono bg-card-elevated px-3 py-2 rounded border border-border-subtle overflow-x-auto whitespace-pre-wrap break-all">
+                  {enrollmentResult.install_command}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(enrollmentResult.install_command);
+                    toast("success", "Copied", "Install command copied to clipboard.");
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted mt-1">Run this on the target Linux host with sudo privileges.</p>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => setEnrollmentResult(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
       </Dialog>
     </div>
   );

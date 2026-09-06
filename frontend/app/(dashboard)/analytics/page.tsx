@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
           {riskyError ? (
             <QueryError onRetry={() => refetchRisky()} />
           ) : riskyHosts.length === 0 ? (
-            <EmptyState title="No risky hosts yet" description="Run Attack Lab or enroll agents to generate risk scores." />
+            <EmptyState title="No risky hosts yet" description="Enroll agents so live telemetry can populate risk scores." />
           ) : (
           <div className="space-y-2">
             {riskyHosts.map((h) => (

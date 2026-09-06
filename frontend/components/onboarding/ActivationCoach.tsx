@@ -39,20 +39,11 @@ export function ActivationCoach() {
       host: {
         id: "coach-host",
         tone: "calm",
-        title: "Start with a host or jump to Attack Lab",
-        message: "Add a Linux agent for live telemetry, or skip straight to simulation for a fast demo.",
+        title: "Enroll a Linux agent",
+        message: "Add a host so dashboards, alerts, and reports use live telemetry.",
         href: "/hosts",
         cta: "Set up hosts",
         paths: ["/", "/hosts"],
-      },
-      simulation: {
-        id: "coach-simulation",
-        tone: "progress",
-        title: "Your next win: run Attack Lab",
-        message: "A guided simulation creates realistic alerts and offenses in under a minute.",
-        href: "/simulation",
-        cta: "Open Attack Lab",
-        paths: ["/", "/simulation", "/hosts"],
       },
       triage: {
         id: "coach-triage",

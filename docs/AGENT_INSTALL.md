@@ -27,17 +27,29 @@ FRONTEND_URL=https://securi.yourdomain.com
 
 ### Windows LAN pilot
 
-If the dashboard runs on a Windows PC at `192.168.0.105`:
+Bind the API to all interfaces (`0.0.0.0:8000`) so other machines on the LAN can reach it.
+Set `SERVER_URL` / `FRONTEND_URL` from the **current** Windows LAN IPv4 (DHCP changes). Do not hardcode an IP in application code.
 
 ```powershell
-.\scripts\deploy-windows-lan.ps1 -LanIp 192.168.0.105
+.\scripts\sync-lan-urls.ps1
+.\scripts\validate-server-url.ps1
+.\scripts\dev-windows.ps1
+# or: .\scripts\deploy-windows-lan.ps1
+# or: .\scripts\deploy-windows-lan.ps1 -LanIp <current-ipv4>
 ```
 
-On the Ubuntu VM:
+On the Linux target, use the same host as `SERVER_URL` (copy the dashboard enroll command):
 
 ```bash
-curl -fsSL http://192.168.0.105:8000/install.sh | sudo bash -s -- \
-  --token ENROLL_TOKEN --server http://192.168.0.105:8000
+curl -fsSL "$SERVER_URL/health/live"
+curl -fsSL "$SERVER_URL/install.sh" | sudo bash -s -- \
+  --token ENROLL_TOKEN --server "$SERVER_URL"
+```
+
+Allow inbound TCP 8000 on Windows (once) if the host firewall blocks it:
+
+```powershell
+New-NetFirewallRule -DisplayName "Securi API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
 ```
 
 ### Windows event forwarder (preview)
@@ -195,7 +207,10 @@ A new enrollment token invalidates the previous API key when registration comple
 |---------|----------|
 | `Failed to download agent bundle` | Ensure `SERVER_URL` is correct and `/agent-bundle.tar.gz` is reachable: `curl -I $SERVER_URL/agent-bundle.tar.gz` |
 | `Registration failed: Invalid token` | Token expired (24h), already used, or revoked — generate a new one |
-| `401` on agent requests | Re-enroll; old API key was rotated |
+| `401` on agent requests | Re-enroll; old API key was rotated or revoked |
+| `422` on `/agent/events` | Payload schema mismatch — check agent version / bundle |
+| `500` on `/agent/events` | Server-side ingest bug — check backend logs; agent should keep a bounded SQLite buffer and retry |
+| Host stays **Pending** | Install did not complete — check `journalctl -u securi-agent` |
 | Host stays **Pending** | Install did not complete — check `journalctl -u securi-agent` |
 | Host **offline** after install | Firewall blocking outbound to API; wrong `--server` URL |
 | No events | Ensure SSH/auth logging goes to `/var/log/auth.log`; agent needs root for log access |

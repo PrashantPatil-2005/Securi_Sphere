@@ -1,6 +1,8 @@
 import sqlite3
 import json
 import logging
+import os
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -8,13 +10,23 @@ logger = logging.getLogger(__name__)
 DB_PATH = Path("/var/lib/securi/buffer.db")
 
 MAX_BUFFER_ITEMS = 50000
-MAX_BUFFER_SIZE_MB = 500
+MAX_BUFFER_SIZE_MB = 200
 SQLITE_BUSY_TIMEOUT_MS = 5000
-MAX_EVENT_SIZE_BYTES = 100_000  # 100KB per event payload
+MAX_EVENT_SIZE_BYTES = 4096
+MAX_DEQUEUE_ITEMS = 200
+STALE_ITEM_MAX_AGE_HOURS = 24
+
+
+def _agent_rss_mb() -> float:
+    try:
+        with open("/proc/self/statm") as f:
+            pages = int(f.read().split()[0])
+        return pages * os.sysconf("SC_PAGE_SIZE") / (1024 * 1024)
+    except Exception:
+        return 0.0
 
 
 def _connect() -> sqlite3.Connection:
-    """Open a connection with WAL mode and busy timeout configured."""
     conn = sqlite3.connect(DB_PATH, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(f"PRAGMA busy_timeout={SQLITE_BUSY_TIMEOUT_MS}")
@@ -61,14 +73,48 @@ def _purge_oldest(conn: sqlite3.Connection, count: int) -> int:
     return deleted
 
 
-def enqueue(kind: str, payload: dict) -> bool:
-    import time
+def _purge_batch_wrappers(conn: sqlite3.Connection) -> int:
+    """Remove legacy batch-wrapper rows left over from old agent versions.
 
-    payload_json = json.dumps(payload)
-    if len(payload_json.encode()) > MAX_EVENT_SIZE_BYTES:
+    Old versions stored {"events": [...]} dicts. New version stores
+    individual event dicts. Detect batch wrappers by the presence of
+    an "events" key at the top level of the JSON payload.
+    """
+    cursor = conn.execute("SELECT id, payload FROM queue")
+    ids_to_delete: list[int] = []
+    for row_id, payload_json in cursor:
+        try:
+            payload = json.loads(payload_json)
+            if isinstance(payload, dict) and "events" in payload and isinstance(payload["events"], list):
+                ids_to_delete.append(row_id)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    cursor.close()
+    if not ids_to_delete:
+        return 0
+    placeholders = ",".join("?" * len(ids_to_delete))
+    conn.execute(f"DELETE FROM queue WHERE id IN ({placeholders})", ids_to_delete)
+    conn.commit()
+    logger.warning(
+        "Purged %d legacy batch-wrapper rows from buffer (old agent format)",
+        len(ids_to_delete),
+    )
+    return len(ids_to_delete)
+
+
+def enqueue_event(event: dict, kind: str = "event") -> bool:
+    """Buffer a single dict as one SQLite row.
+
+    Each row is small (~300-2000 bytes). No nesting, no batch wrappers.
+    kind is "event" or "metric".
+    """
+    payload_json = json.dumps(event, default=str)
+    payload_bytes = len(payload_json.encode("utf-8"))
+    if payload_bytes > MAX_EVENT_SIZE_BYTES:
         logger.warning(
-            "Event payload too large (%d bytes) — dropping",
-            len(payload_json.encode()),
+            "Oversized event dropped: kind=event bytes=%d limit=%d type=%s",
+            payload_bytes, MAX_EVENT_SIZE_BYTES,
+            event.get("event_type", kind),
         )
         return False
 
@@ -76,42 +122,86 @@ def enqueue(kind: str, payload: dict) -> bool:
     current_mb = _buffer_size_mb()
 
     if current_size >= MAX_BUFFER_ITEMS:
-        logger.warning(
-            "Buffer full (%d items) — dropping newest event",
-            current_size,
-        )
+        logger.warning("Buffer full (%d items) — dropping event", current_size)
         return False
 
     if current_mb >= MAX_BUFFER_SIZE_MB:
         logger.warning(
-            "Buffer size exceeded (%.1f MB / %d MB limit) — purging oldest",
-            current_mb,
-            MAX_BUFFER_SIZE_MB,
+            "Buffer size exceeded (%.1f MB / %d MB) — purging oldest",
+            current_mb, MAX_BUFFER_SIZE_MB,
         )
         conn = _connect()
         _purge_oldest(conn, MAX_BUFFER_ITEMS // 10)
         conn.close()
 
-    conn = _connect()
-    conn.execute(
-        "INSERT INTO queue (kind, payload, created_at) VALUES (?, ?, ?)",
-        (kind, payload_json, time.time()),
-    )
-    conn.commit()
-    conn.close()
-    return True
+    try:
+        conn = _connect()
+        conn.execute(
+            "INSERT INTO queue (kind, payload, created_at) VALUES (?, ?, ?)",
+            (kind, payload_json, time.time()),
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.DataError as exc:
+        logger.error(
+            "SQLite rejected event write (%d bytes): %s — dropping",
+            payload_bytes, exc,
+        )
+        return False
 
 
-def dequeue_all() -> list[tuple[int, str, dict]]:
-    """Return all items with their IDs so callers can remove only successful ones."""
+def enqueue_events(events: list[dict], kind: str = "event") -> int:
+    """Buffer a list of individual items. Returns count successfully stored."""
+    stored = 0
+    for event in events:
+        if enqueue_event(event, kind=kind):
+            stored += 1
+    return stored
+
+
+def enqueue_metrics(metrics: list[dict]) -> int:
+    return enqueue_events(metrics, kind="metric")
+
+
+def dequeue_all(max_items: int = MAX_DEQUEUE_ITEMS) -> list[tuple[int, str, dict]]:
+    """Return up to *max_items* individual event dicts.
+
+    Each returned item is (id, "event", event_dict) — one event per row.
+    Legacy batch-wrapper rows ({"events":[...]}) are transparently unwrapped
+    into individual events and the old row is deleted.
+    """
     conn = _connect()
-    rows = conn.execute("SELECT id, kind, payload FROM queue ORDER BY id").fetchall()
+    rows = conn.execute(
+        "SELECT id, kind, payload FROM queue ORDER BY created_at ASC LIMIT ?",
+        (max_items,),
+    ).fetchall()
     conn.close()
-    return [(r[0], r[1], json.loads(r[2])) for r in rows]
+    items: list[tuple[int, str, dict]] = []
+    legacy_ids: list[int] = []
+    for r in rows:
+        try:
+            parsed = json.loads(r[2])
+            if isinstance(parsed, dict) and "events" in parsed and isinstance(parsed["events"], list):
+                for evt in parsed["events"]:
+                    if isinstance(evt, dict):
+                        items.append((r[0], "event", evt))
+                legacy_ids.append(r[0])
+            else:
+                items.append((r[0], r[1], parsed))
+        except (json.JSONDecodeError, sqlite3.DataError) as exc:
+            logger.warning("Dropping corrupt buffer item %d: %s", r[0], exc)
+            remove_by_ids([r[0]])
+    if legacy_ids:
+        remove_by_ids(legacy_ids)
+        logger.warning(
+            "Purged %d legacy batch-wrapper rows (unwrapped to individual events)",
+            len(legacy_ids),
+        )
+    return items
 
 
 def remove_by_ids(ids: list[int]) -> None:
-    """Remove only the items that were successfully sent."""
     if not ids:
         return
     conn = _connect()
@@ -128,9 +218,7 @@ def clear_queue() -> None:
     conn.close()
 
 
-def purge_stale(max_age_hours: int = 48) -> int:
-    """Remove items older than max_age_hours to prevent unbounded growth."""
-    import time
+def purge_stale(max_age_hours: int = 24) -> int:
     cutoff = time.time() - (max_age_hours * 3600)
     conn = _connect()
     cursor = conn.execute("DELETE FROM queue WHERE created_at < ?", (cutoff,))

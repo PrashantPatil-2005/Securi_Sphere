@@ -11,7 +11,7 @@ from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.utils.cursor import decode_event_cursor, encode_event_cursor
 from app.utils.query import SEVERITY_ORDER, SortOrder, TimeRange, apply_time_range
-from app.utils.simulation_filter import real_events_only, should_exclude_simulated
+from app.utils.simulation_filter import real_alerts_only, real_events_only, should_exclude_simulated
 
 
 def _escape_like(value: str) -> str:
@@ -186,10 +186,13 @@ async def query_alerts(
     page: int = 1,
     page_size: int = 50,
     mitre_technique_id: str | None = None,
+    include_simulated: bool | None = None,
 ):
     query = select(Alert).outerjoin(AlertRule, Alert.rule_id == AlertRule.id)
     count_q = select(func.count()).select_from(Alert).outerjoin(AlertRule, Alert.rule_id == AlertRule.id)
-    clauses = apply_time_range(Alert.created_at, tr)
+    clauses = list(apply_time_range(Alert.created_at, tr))
+    if should_exclude_simulated(include_simulated):
+        clauses.append(real_alerts_only())
 
     if host_id:
         clauses.append(Alert.host_id == host_id)

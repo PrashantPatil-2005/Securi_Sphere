@@ -113,7 +113,7 @@ function MitrePageContent() {
           {totalHits === 0 && (
             <EmptyState
               title="No technique matches in range"
-              description="Run Attack Lab or ingest events with MITRE mappings to populate the heatmap."
+              description="Ingest live events with MITRE mappings to populate the heatmap."
               icon={<Target className="w-10 h-10 opacity-40" />}
             />
           )}

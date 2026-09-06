@@ -10,6 +10,7 @@ from app.models.event import Event
 from app.models.host import Host
 from app.models.threat_score import HostThreatScore
 from app.models.user import User
+from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
 router = APIRouter(prefix="/network", tags=["network"])
 
@@ -33,15 +34,11 @@ async def topology(db: AsyncSession = Depends(get_db), user: User = Depends(get_
     edges: list[dict[str, str]] = []
     seen_edges: set[tuple[str, str]] = set()
 
+    flow_q = select(Event).where(Event.event_type == "network_flow")
+    if should_exclude_simulated():
+        flow_q = flow_q.where(real_events_only())
     flow_events = list(
-        (
-            await db.execute(
-                select(Event)
-                .where(Event.event_type == "network_flow")
-                .order_by(Event.timestamp.desc())
-                .limit(500)
-            )
-        ).scalars().all()
+        (await db.execute(flow_q.order_by(Event.timestamp.desc()).limit(500))).scalars().all()
     )
     for ev in flow_events:
         meta = ev.metadata_ or {}

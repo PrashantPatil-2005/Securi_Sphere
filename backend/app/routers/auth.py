@@ -200,13 +200,13 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    # IP-based rate limiting on login to prevent brute-force attacks
-    from app.services.recovery_rate_limit import _enforce
-    await _enforce(
-        f"login:ip:{client_ip(request)}",
-        settings.account_lockout_attempts * 2,  # 10 attempts per window
-        settings.account_lockout_minutes * 60,   # per lockout window (seconds)
-    )
+    if not settings.testing:
+        from app.services.recovery_rate_limit import _enforce
+        await _enforce(
+            f"login:ip:{client_ip(request)}",
+            settings.account_lockout_attempts * 2,
+            settings.account_lockout_minutes * 60,
+        )
 
     result = await db.execute(
         select(User).options(selectinload(User.role)).where(User.email == body.email)

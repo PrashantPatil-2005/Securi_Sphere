@@ -12,7 +12,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "$TOKEN" || -z "$SERVER" ]]; then
+if [[ -z "$SERVER" ]]; then
   echo "Usage: install.sh --token TOKEN --server SERVER_URL"
   echo "  Local:  sudo ./install.sh --token TOKEN --server http://HOST:8000"
   echo "  Remote: curl -fsSL http://HOST:8000/install.sh | sudo bash -s -- --token TOKEN --server http://HOST:8000"
@@ -186,6 +186,31 @@ sys.exit(0 if cfg.get("api_key") else 1)
 PY
 }
 
+validate_existing_credentials() {
+  # Returns 0 if existing credentials are accepted by the server, 1 otherwise.
+  # Uses the heartbeat endpoint — lightweight, no state mutation.
+  "${INSTALL_DIR}/venv/bin/python3" - <<PY 2>/dev/null
+import json, sys
+from pathlib import Path
+import requests
+
+cfg = json.loads(Path("${CONFIG_FILE}").read_text())
+server = cfg.get("server_url", "")
+api_key = cfg.get("api_key", "")
+if not server or not api_key:
+    sys.exit(1)
+try:
+    r = requests.post(
+        f"{server.rstrip('/')}/api/v1/agent/heartbeat",
+        headers={"X-API-Key": api_key},
+        timeout=10,
+    )
+    sys.exit(0 if r.status_code == 200 else 1)
+except requests.RequestException:
+    sys.exit(1)
+PY
+}
+
 echo "[*] Installing Securi Agent..."
 echo "[*] Server: ${SERVER}"
 
@@ -219,19 +244,91 @@ if [[ ! -f "${INSTALL_DIR}/requirements.txt" ]]; then
 fi
 
 echo "[*] Setting up Python virtual environment..."
-if [[ ! -d "${INSTALL_DIR}/venv" ]]; then
-  python3 -m venv "${INSTALL_DIR}/venv"
+
+# Detect system Python version (e.g. "3.14")
+SYS_PY_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+echo "[*] System Python: ${SYS_PY_VERSION}"
+
+VENV_CREATED_VERSION=""
+if [[ -f "${INSTALL_DIR}/venv/pyvenv.cfg" ]]; then
+  VENV_CREATED_VERSION="$(grep -oP 'version\s*=\s*\K[0-9]+\.[0-9]+' "${INSTALL_DIR}/venv/pyvenv.cfg" 2>/dev/null || true)"
 fi
-"${INSTALL_DIR}/venv/bin/pip" install -q --upgrade pip
-if ! "${INSTALL_DIR}/venv/bin/pip" install -q -r "${INSTALL_DIR}/requirements.txt"; then
+
+# Recreate venv if missing or if it was created with a different Python version
+if [[ ! -d "${INSTALL_DIR}/venv" || -z "$VENV_CREATED_VERSION" || "$VENV_CREATED_VERSION" != "$SYS_PY_VERSION" ]]; then
+  if [[ -d "${INSTALL_DIR}/venv" ]]; then
+    echo "[*] Existing venv was created with Python ${VENV_CREATED_VERSION:-unknown}, system has ${SYS_PY_VERSION}. Recreating..."
+  else
+    echo "[*] No existing venv found."
+  fi
+  rm -rf "${INSTALL_DIR}/venv"
+  python3 -m venv "${INSTALL_DIR}/venv"
+  echo "[*] Created venv with Python ${SYS_PY_VERSION}"
+fi
+
+VENV_PY="${INSTALL_DIR}/venv/bin/python"
+
+# Ensure pip is available in the venv
+if ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then
+  echo "[*] pip not available in venv, bootstrapping..."
+
+  # Method 1: ensurepip (works when python3-venv includes the pip wheel)
+  "$VENV_PY" -m ensurepip --upgrade 2>/dev/null && echo "[*] Bootstrapped pip via ensurepip." || true
+
+  # Method 2: install python3-pip via apt, then ensurepip picks it up
+  if ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then
+    echo "[*] ensurepip did not provide pip, trying apt..."
+    apt-get install -y -qq python3-pip >/dev/null 2>&1 || true
+    "$VENV_PY" -m ensurepip --upgrade 2>/dev/null && echo "[*] Bootstrapped pip via apt + ensurepip." || true
+  fi
+
+  # Method 3: get-pip.py (last resort when system packages lack pip for this Python)
+  if ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then
+    echo "[*] Falling back to get-pip.py..."
+    GET_PIP_TMP="$(mktemp /tmp/get-pip.XXXXXX.py)"
+    if curl -fsSL "https://bootstrap.pypa.io/get-pip.py" -o "$GET_PIP_TMP" 2>/dev/null; then
+      "$VENV_PY" "$GET_PIP_TMP" 2>/dev/null && echo "[*] Bootstrapped pip via get-pip.py." || echo "[!] get-pip.py failed."
+    else
+      echo "[!] Could not download get-pip.py."
+    fi
+    rm -f "$GET_PIP_TMP"
+  fi
+fi
+
+# Final pip check — fail hard if pip is not available
+if ! "$VENV_PY" -m pip --version >/dev/null 2>&1; then
+  echo "[!] FATAL: Cannot obtain a working pip for Python ${SYS_PY_VERSION}."
+  echo "[!] Install python3-pip manually and retry."
+  exit 1
+fi
+echo "[*] pip: $($VENV_PY -m pip --version 2>&1)"
+
+# Install dependencies (never upgrade pip itself — the bundled version is tested with this Python)
+if ! "$VENV_PY" -m pip install -q -r "${INSTALL_DIR}/requirements.txt"; then
   echo "[!] Failed to install Python dependencies from requirements.txt"
   exit 1
 fi
 
+# Verify that every third-party import the agent needs actually resolved
+echo "[*] Verifying agent dependencies..."
+if ! "$VENV_PY" -c "import psutil, requests" 2>/dev/null; then
+  echo "[!] Dependency check failed — retrying with --force-reinstall..."
+  "$VENV_PY" -m pip install --force-reinstall -q -r "${INSTALL_DIR}/requirements.txt"
+  if ! "$VENV_PY" -c "import psutil, requests" 2>/dev/null; then
+    echo "[!] FATAL: Agent dependencies (psutil, requests) could not be installed."
+    echo "[!] Check network connectivity and that Python ${SYS_PY_VERSION} has compatible wheels."
+    exit 1
+  fi
+fi
+echo "[*] Agent dependencies verified."
+
 if config_has_api_key; then
-  echo "[*] Existing configuration found — skipping registration (idempotent reinstall)."
-  # Update server URL in case it changed, keep api_key
-  "${INSTALL_DIR}/venv/bin/python3" - <<PY
+  if [[ -n "$TOKEN" ]]; then
+    # Token explicitly provided — validate existing credentials first.
+    if validate_existing_credentials; then
+      echo "[*] Existing credentials are valid — preserving them."
+      # Update server URL in case it changed, keep api_key
+      "${INSTALL_DIR}/venv/bin/python3" - <<PY
 import json
 from pathlib import Path
 p = Path("${CONFIG_FILE}")
@@ -240,7 +337,29 @@ cfg["server_url"] = "${SERVER}"
 p.write_text(json.dumps(cfg, indent=2) + "\n")
 p.chmod(0o600)
 PY
+    else
+      echo "[*] Existing credentials are invalid — re-registering with provided token."
+      register_agent
+    fi
+  else
+    echo "[*] Existing configuration found — skipping registration (idempotent reinstall)."
+    # Update server URL in case it changed, keep api_key
+    "${INSTALL_DIR}/venv/bin/python3" - <<PY
+import json
+from pathlib import Path
+p = Path("${CONFIG_FILE}")
+cfg = json.loads(p.read_text())
+cfg["server_url"] = "${SERVER}"
+p.write_text(json.dumps(cfg, indent=2) + "\n")
+p.chmod(0o600)
+PY
+  fi
 else
+  if [[ -z "$TOKEN" ]]; then
+    echo "[!] No existing configuration and no enrollment token provided."
+    echo "[!] Usage: install.sh --token TOKEN --server SERVER_URL"
+    exit 1
+  fi
   register_agent
 fi
 

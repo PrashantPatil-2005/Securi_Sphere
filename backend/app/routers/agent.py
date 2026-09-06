@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+import json
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,10 +13,11 @@ from app.dependencies_agent import AuthenticatedAgent, get_authenticated_agent
 from app.models.enrollment import EnrollmentToken
 from app.models.host import Host
 from app.models.metric import Metric
-from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, EventsBatch, FlowsBatch, MetricsBatch, WindowsEventsBatch
+from app.schemas.agent import AgentRegisterRequest, AgentRegisterResponse, FlowsBatch, MetricsBatch, WindowsEventsBatch
 from app.security import generate_api_key, hash_token
 from app.services.agent_integrity import check_agent_integrity
 from app.services.audit import log_audit
+from app.pipeline.event_payload import coerce_event_ingests, parse_events_body
 from app.pipeline.ingestion import ingest_event_batch
 from app.pipeline.flow_collector import flows_to_events
 from app.pipeline.windows_collector import windows_events_to_ingest
@@ -93,7 +96,10 @@ async def heartbeat(
     host_id_var.set(str(host.id))
     host.last_seen = datetime.now(timezone.utc)
 
-    payload = HeartbeatPayload.model_validate(auth.parse_json()) if auth.raw_body else HeartbeatPayload()
+    try:
+        payload = HeartbeatPayload.model_validate(auth.parse_json()) if auth.raw_body else HeartbeatPayload()
+    except (PydanticValidationError, ValueError, TypeError, json.JSONDecodeError):
+        payload = HeartbeatPayload()
     status_changed = False
     if host.status in ("offline", "critical", "warning"):
         host.status = "online"
@@ -114,9 +120,18 @@ async def ingest_events(
 ):
     host = auth.host
     host_id_var.set(str(host.id))
-    body = EventsBatch.model_validate_json(auth.raw_body)
-    ingested, errors, deduplicated = await ingest_event_batch(db, host, body.events)
-    return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
+    items, body_error = parse_events_body(auth.raw_body)
+    if body_error:
+        raise HTTPException(status_code=422, detail=body_error)
+    events, parse_errors = coerce_event_ingests(items or [])
+    if not events:
+        return EventsIngestResponse(ingested=0, deduplicated=0, errors=parse_errors or ["no valid events"])
+    ingested, errors, deduplicated = await ingest_event_batch(db, host, events)
+    return EventsIngestResponse(
+        ingested=len(ingested),
+        deduplicated=deduplicated,
+        errors=parse_errors + errors,
+    )
 
 
 @router.post("/flows", response_model=EventsIngestResponse)
@@ -127,7 +142,10 @@ async def ingest_flows(
     """Layer 1 flow collector — network flows normalized into searchable events."""
     host = auth.host
     host_id_var.set(str(host.id))
-    body = FlowsBatch.model_validate_json(auth.raw_body)
+    try:
+        body = FlowsBatch.model_validate_json(auth.raw_body)
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail="Invalid flows payload") from exc
     events = flows_to_events(body.flows)
     ingested, errors, deduplicated = await ingest_event_batch(db, host, events)
     return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
@@ -141,7 +159,10 @@ async def ingest_windows_events(
     """Windows Event Log / Sysmon forwarder (spike)."""
     host = auth.host
     host_id_var.set(str(host.id))
-    body = WindowsEventsBatch.model_validate_json(auth.raw_body)
+    try:
+        body = WindowsEventsBatch.model_validate_json(auth.raw_body)
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail="Invalid windows-events payload") from exc
     events = windows_events_to_ingest(body.events)
     ingested, errors, deduplicated = await ingest_event_batch(db, host, events)
     return EventsIngestResponse(ingested=len(ingested), deduplicated=deduplicated, errors=errors)
@@ -154,7 +175,10 @@ async def ingest_metrics(
 ):
     host = auth.host
     host_id_var.set(str(host.id))
-    body = MetricsBatch.model_validate_json(auth.raw_body)
+    try:
+        body = MetricsBatch.model_validate_json(auth.raw_body)
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=422, detail="Invalid metrics payload") from exc
     for item in body.metrics:
         db.add(Metric(
             host_id=host.id,

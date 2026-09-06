@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from app.pipeline.event_payload import ip_from_raw_log, safe_inet
+
 EVENT_CATEGORIES: dict[str, str] = {
     "ssh_login_failure": "authentication",
     "ssh_login_success": "authentication",
@@ -59,7 +61,9 @@ def build_normalized_event(
 ) -> dict[str, Any]:
     normalized_type = normalize_event_type(event_type)
     username = extract_field(metadata, "username", "user", "account")
-    source_ip = extract_field(metadata, "source_ip", "src_ip", "ip", "remote_addr")
+    source_ip = safe_inet(extract_field(metadata, "source_ip", "src_ip", "ip", "remote_addr"))
+    if not source_ip:
+        source_ip = ip_from_raw_log(raw_log)
     category = categorize_event(normalized_type)
 
     normalized = {

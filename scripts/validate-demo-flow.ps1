@@ -32,7 +32,7 @@ if (-not $backendOk -or -not $frontendOk) {
     Write-Host ""
     Write-Host "Start the stack first:" -ForegroundColor Yellow
     Write-Host "  docker compose -f docker-compose.dev.yml up -d"
-    Write-Host "  cd backend; uvicorn app.main:app --reload --port 8000"
+    Write-Host "  cd backend; uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"
     Write-Host "  cd frontend; npx next dev --turbo -p 3000"
     exit 1
 }

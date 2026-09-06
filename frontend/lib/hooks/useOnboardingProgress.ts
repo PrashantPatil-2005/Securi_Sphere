@@ -26,15 +26,9 @@ export interface OnboardingStepDef {
 export const ONBOARDING_STEPS: OnboardingStepDef[] = [
   {
     id: "host",
-    label: "Add a host (or skip with Attack Lab only)",
+    label: "Enroll a Linux agent",
     href: "/hosts",
     isComplete: (p) => p.hosts >= 1,
-  },
-  {
-    id: "simulation",
-    label: "Run an attack in the Attack Lab",
-    href: "/simulation",
-    isComplete: (p) => p.simulationRuns >= 1,
   },
   {
     id: "triage",

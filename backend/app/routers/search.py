@@ -17,6 +17,7 @@ from app.config import settings
 from app.schemas.assistant import NLSearchRequest, NLSearchResponse
 from app.services.ai.nl_search import nl_to_siem_query
 from app.utils.query import resolve_time_range
+from app.utils.simulation_filter import real_alerts_only, real_events_only, should_exclude_simulated
 
 router = APIRouter(prefix="/search", tags=["search"])
 
@@ -78,6 +79,8 @@ async def global_search(
     hosts = list((await db.execute(host_q)).scalars().all())
 
     alert_q = select(Alert)
+    if should_exclude_simulated():
+        alert_q = alert_q.where(real_alerts_only())
     if tr.from_time:
         alert_q = alert_q.where(Alert.created_at >= tr.from_time)
     if tr.to_time:
@@ -89,6 +92,8 @@ async def global_search(
     alerts = list((await db.execute(alert_q.limit(20))).scalars().all())
 
     event_q = select(Event)
+    if should_exclude_simulated():
+        event_q = event_q.where(real_events_only())
     if tr.from_time:
         event_q = event_q.where(Event.timestamp >= tr.from_time)
     if tr.to_time:

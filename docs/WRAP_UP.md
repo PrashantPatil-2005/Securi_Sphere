@@ -85,7 +85,7 @@ copy ..\.env.example .env
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 3. Frontend
 cd ..\frontend

@@ -14,8 +14,7 @@ import {
 import { useOnboardingProgress } from "@/lib/hooks/useOnboardingProgress";
 
 const STEP_HINTS: Record<string, string> = {
-  host: "Register a Linux agent, or skip this step and use Attack Lab simulation only.",
-  simulation: "Run the multi-stage attack scenario to generate realistic alerts and offenses.",
+  host: "Register a Linux agent so dashboards show live telemetry, not sample data.",
   triage: "Open an alert, start investigation, or resolve it from the investigation pane.",
   offense: "Open an offense and promote it to an incident from the offense detail panel.",
   search: "Run any SIEM query or saved search — completion is tracked automatically.",
@@ -107,7 +106,7 @@ export function OnboardingWizard() {
               What you will set up
             </p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Generate demo security events (Attack Lab)</li>
+              <li>Enroll a Linux agent for live events</li>
               <li>Triage alerts and review offenses</li>
               <li>Promote an offense to an incident</li>
               <li>Run SIEM search and configure notifications</li>

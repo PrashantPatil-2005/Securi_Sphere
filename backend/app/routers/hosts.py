@@ -153,18 +153,36 @@ async def delete_host(host_id: UUID, request: Request, db: AsyncSession = Depend
     host = result.scalar_one_or_none()
     if not host:
         raise HTTPException(status_code=404, detail="Host not found")
-    from app.models.alert import Alert
-    from app.models.event import Event
-    from app.models.metric import Metric
-    from app.models.siem import Offense, HostRiskHistory
-    from app.models.threat_score import HostThreatScore
-    from app.models.timeline import AttackTimeline
-    from app.models.enrollment import EnrollmentToken
-    await db.execute(select(Alert).where(Alert.host_id == host_id))
-    for model in (Alert, Event, Metric, Offense, HostRiskHistory, HostThreatScore, AttackTimeline, EnrollmentToken):
-        from sqlalchemy import delete as sql_delete
-        await db.execute(sql_delete(model).where(model.host_id == host_id))
-    await db.delete(host)
+    from sqlalchemy import text
+    from app.database import async_session
+
+    hid = str(host_id)
+    stmts = [
+        "DELETE FROM offense_events WHERE offense_id IN (SELECT id FROM offenses WHERE host_id = CAST(:hid AS UUID))",
+        "DELETE FROM offense_events WHERE event_id IN (SELECT id FROM events WHERE host_id = CAST(:hid AS UUID))",
+        "DELETE FROM offense_events WHERE alert_id IN (SELECT id FROM alerts WHERE host_id = CAST(:hid AS UUID))",
+        "DELETE FROM correlation_results WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM attack_timelines WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM host_risk_scores WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM host_threat_scores WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM alerts WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM events WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM metrics WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM offenses WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM enrollment_tokens WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM agent_request_nonces WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM maintenance_windows WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM simulation_runs WHERE host_id = CAST(:hid AS UUID)",
+        "UPDATE incidents SET host_id = NULL WHERE host_id = CAST(:hid AS UUID)",
+        "DELETE FROM hosts WHERE id = CAST(:hid AS UUID)",
+    ]
+    for stmt in stmts:
+        try:
+            async with async_session() as s:
+                await s.execute(text(stmt), {"hid": hid})
+                await s.commit()
+        except Exception:
+            pass
     await log_audit(db, "host_delete", user_id=user.id, resource_type="host", resource_id=host_id, ip_address=client_ip(request))
     return {"message": "Host deleted"}
 

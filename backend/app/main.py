@@ -10,7 +10,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.brand import PRODUCT_NAME
 from app.config import settings
-from app.core.errors import http_exception_handler, validation_exception_handler, generic_exception_handler
+from app.core.errors import (
+    generic_exception_handler,
+    http_exception_handler,
+    pydantic_validation_exception_handler,
+    validation_exception_handler,
+)
 from app.core.lifecycle import shutdown_application
 from app.core.logging import configure_logging
 from app.database import async_session
@@ -52,6 +57,12 @@ async def init_db() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.testing:
+        from app.utils.lan_bind import validate_server_url_interface
+
+        validate_server_url_interface(
+            settings.server_url,
+            skip=settings.skip_server_url_interface_check,
+        )
         await init_db()
         from app.jobs.handlers import register_job_handlers
         register_job_handlers()
@@ -84,6 +95,8 @@ def create_app() -> FastAPI:
 
     application.add_exception_handler(StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(RequestValidationError, validation_exception_handler)
+    from pydantic import ValidationError as PydanticValidationError
+    application.add_exception_handler(PydanticValidationError, pydantic_validation_exception_handler)
     application.add_exception_handler(Exception, generic_exception_handler)
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(RequestContextMiddleware)

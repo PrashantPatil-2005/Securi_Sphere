@@ -13,7 +13,7 @@ async def check_agent_integrity(
     agent_version: str | None,
 ) -> None:
     if agent_version:
-        host.agent_version = agent_version
+        host.agent_version = agent_version[:20]
 
     if not agent_hash:
         return

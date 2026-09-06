@@ -36,7 +36,9 @@ if [[ ! -f .env ]]; then
     echo "DEBUG=false"
     echo "ALLOW_REGISTRATION=true"
     echo "ENABLE_SIMULATION=true"
-    echo "EXCLUDE_SIMULATED_FROM_DASHBOARD=true"
+    echo "BACKEND_HOST_BIND=0.0.0.0"
+    echo "FRONTEND_HOST_BIND=0.0.0.0"
+    echo "SKIP_SERVER_URL_INTERFACE_CHECK=true"
   } >> .env
   echo "Created .env with generated secrets."
 else

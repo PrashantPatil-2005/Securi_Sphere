@@ -26,6 +26,7 @@ export const API = {
     LIST: "/api/v1/hosts",
     CREATE: "/api/v1/hosts",
     DETAIL: (id: string) => `/api/v1/hosts/${id}`,
+    DELETE: (id: string) => `/api/v1/hosts/${id}`,
     RISK: (id: string) => `/api/v1/hosts/${id}/risk`,
     RISK_HISTORY: (id: string) => `/api/v1/hosts/${id}/risk/history`,
     ENROLLMENT_TOKEN: (id: string) => `/api/v1/hosts/${id}/enrollment-token`,

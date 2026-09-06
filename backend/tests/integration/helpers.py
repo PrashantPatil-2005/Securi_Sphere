@@ -35,25 +35,44 @@ async def create_test_host(name: str, *, hostname: str | None = None) -> uuid.UU
 
 
 async def enroll_test_host(client: AsyncClient, name: str) -> tuple[str, str]:
-    host_res = await client.post("/api/v1/hosts", json={"name": name})
-    assert host_res.status_code == 200, host_res.text
-    host_id = host_res.json()["id"]
+    from app.security import generate_api_key, hash_token
+    from app.models.enrollment import EnrollmentToken
+    from datetime import timedelta
+    import secrets
 
-    token_res = await client.post(f"/api/v1/hosts/{host_id}/enrollment-token")
-    assert token_res.status_code == 200, token_res.text
-    token = token_res.json()["token"]
+    created_by = await admin_user_id()
+    raw_token = f"test-enroll-{secrets.token_hex(16)}"
+
+    async with async_session() as db:
+        host = Host(
+            name=name,
+            hostname=f"{name}.local",
+            status="online",
+            created_by=created_by,
+        )
+        db.add(host)
+        await db.flush()
+
+        db.add(EnrollmentToken(
+            host_id=host.id,
+            token_hash=hash_token(raw_token),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+            created_by=created_by,
+        ))
+        await db.commit()
+        await db.refresh(host)
 
     reg_res = await client.post(
         "/api/v1/agent/register",
         json={
-            "enrollment_token": token,
+            "enrollment_token": raw_token,
             "hostname": f"{name}.local",
             "ip_address": "10.0.0.10",
             "os_info": "Linux test",
         },
     )
     assert reg_res.status_code == 200, reg_res.text
-    return host_id, reg_res.json()["api_key"]
+    return str(host.id), reg_res.json()["api_key"]
 
 
 def event_payload(

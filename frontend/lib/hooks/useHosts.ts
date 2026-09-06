@@ -54,20 +54,58 @@ export function useHostRisk(id: string | null) {
 }
 
 export function useHostCreateMutation(options?: {
-  onSuccess?: () => void;
+  onSuccess?: (data: any) => void;
   onError?: (e: Error) => void;
 }) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string }) =>
-      api(API.HOSTS.CREATE, {
+      api<{ id: string }>(API.HOSTS.CREATE, {
         method: "POST",
         body: JSON.stringify(body),
       }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["hosts"] });
+      options?.onSuccess?.(data);
+    },
+    onError: options?.onError,
+  });
+}
+
+export function useHostDeleteMutation(options?: {
+  onSuccess?: () => void;
+  onError?: (e: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (hostId: string) =>
+      api(API.HOSTS.DELETE(hostId), { method: "DELETE" }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["hosts"] });
       options?.onSuccess?.();
     },
+    onError: options?.onError,
+  });
+}
+
+export interface EnrollmentTokenResponse {
+  token: string;
+  expires_at: string;
+  install_command: string;
+  host_id: string;
+  host_name: string;
+}
+
+export function useEnrollmentTokenMutation(options?: {
+  onSuccess?: (data: EnrollmentTokenResponse) => void;
+  onError?: (e: Error) => void;
+}) {
+  return useMutation({
+    mutationFn: (hostId: string) =>
+      api<EnrollmentTokenResponse>(API.HOSTS.ENROLLMENT_TOKEN(hostId), {
+        method: "POST",
+      }),
+    onSuccess: options?.onSuccess,
     onError: options?.onError,
   });
 }

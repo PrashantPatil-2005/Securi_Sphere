@@ -46,7 +46,7 @@ const GUIDE_STEPS = [
     id: "mitre",
     label: "MITRE ATT&CK — coverage heatmap",
     href: "/mitre",
-    hint: "Map techniques from simulated events",
+    hint: "Map techniques from live events",
     isComplete: (p: { offenses: number }) => p.offenses >= 1,
   },
   {

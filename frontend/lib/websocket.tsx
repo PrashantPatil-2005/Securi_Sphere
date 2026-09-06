@@ -26,6 +26,7 @@ class WebSocketStore {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 50;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private tokenFetchInFlight = false;
 
   subscribeStatus = (cb: () => void) => {
     this.statusListeners.add(cb);
@@ -51,38 +52,58 @@ class WebSocketStore {
     this.listeners.forEach((l) => l(msg));
   }
 
+  private scheduleReconnect() {
+    if (this.reconnectTimer) return;
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, this.maxReconnectAttempts);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect();
+    }, delay);
+  }
+
   connect() {
     if (typeof window === "undefined") return;
+    if (this.tokenFetchInFlight) return;
     if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) return;
 
-    void fetchWsToken().then((token) => {
-      if (!token) return;
-      const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws`;
-      const ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: "auth", token }));
-        this.connected = true;
-        this.reconnectAttempts = 0;
-        this.notifyStatus();
-        this.startPing();
-      };
-      this.ws = ws;
-      ws.onclose = () => {
-        this.connected = false;
-        this.stopPing();
-        this.notifyStatus();
-        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-        this.reconnectAttempts = Math.min(this.reconnectAttempts + 1, this.maxReconnectAttempts);
-        this.reconnectTimer = setTimeout(() => this.connect(), delay);
-      };
-      ws.onmessage = (ev) => {
-        try {
-          this.emit(JSON.parse(ev.data) as WSMessage);
-        } catch {
-          /* ignore */
+    this.tokenFetchInFlight = true;
+    void fetchWsToken()
+      .then((token) => {
+        this.tokenFetchInFlight = false;
+        if (!token) {
+          this.scheduleReconnect();
+          return;
         }
-      };
-    });
+        const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws`;
+        const ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: "auth", token }));
+          this.connected = true;
+          this.reconnectAttempts = 0;
+          this.notifyStatus();
+          this.startPing();
+        };
+        this.ws = ws;
+        ws.onclose = () => {
+          this.connected = false;
+          this.stopPing();
+          this.notifyStatus();
+          this.scheduleReconnect();
+        };
+        ws.onmessage = (ev) => {
+          try {
+            this.emit(JSON.parse(ev.data) as WSMessage);
+          } catch {
+            /* ignore */
+          }
+        };
+      })
+      .catch(() => {
+        this.tokenFetchInFlight = false;
+        this.scheduleReconnect();
+      });
   }
 
   disconnect() {

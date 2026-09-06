@@ -144,7 +144,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Migrations run automatically on first startup.
@@ -185,7 +185,7 @@ Copy `.env.example` to `.env` and configure:
 | `JWT_SECRET` | Yes | — | JWT signing secret |
 | `DATABASE_URL` | Yes | — | PostgreSQL connection string |
 | `REDIS_URL` | No | — | Redis connection (optional, defaults to in-memory) |
-| `SERVER_URL` | No | `http://localhost:8000` | Backend public URL |
+| `SERVER_URL` | No | `http://localhost:8000` | URL **agents** use. On LAN, current host IPv4 (`.\scripts\sync-lan-urls.ps1`), not a hardcoded DHCP address |
 | `FRONTEND_URL` | No | `http://localhost:3000` | Frontend public URL |
 | `ENVIRONMENT` | No | `development` | `development` or `production` |
 | `DEBUG` | No | `false` | Enable debug logging |

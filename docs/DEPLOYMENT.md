@@ -110,6 +110,8 @@ cp ../.env.example .env
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+On Windows LAN, keep `--host 0.0.0.0` so remote agents can connect. Set `SERVER_URL` to `http://<current-lan-ip>:8000` via `.\scripts\sync-lan-urls.ps1` or `.\scripts\deploy-windows-lan.ps1` (optional `-LanIp`). Do not hardcode a DHCP address. `.\scripts\validate-server-url.ps1` fails if `SERVER_URL` is a stale IP. Allow inbound TCP 8000 on the Windows firewall if needed.
+
 ### 3. Frontend
 
 ```bash

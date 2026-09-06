@@ -40,6 +40,7 @@ from app.config import settings
 from app.jobs.queue import JobPriority, job_queue
 from app.models.event import Event
 from app.models.host import Host
+from app.pipeline.event_payload import ip_from_raw_log, safe_inet
 from app.pipeline.normalizer import build_normalized_event, normalize_event_type
 from app.pipeline.validator import ValidationError, validate_batch_size, validate_event_payload
 from app.schemas.agent import EventIngest
@@ -89,7 +90,10 @@ async def _ingest_event_batch_inner(
     *,
     async_pipeline: bool = True,
 ) -> tuple[list[Event], list[str], int]:
-    validate_batch_size(len(events))
+    try:
+        validate_batch_size(len(events))
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
     ingested: list[Event] = []
     errors: list[str] = []
     deduplicated = 0
@@ -113,7 +117,9 @@ async def _ingest_event_batch_inner(
 
         from app.services.ingest_dedup import event_fingerprint, is_duplicate
         fp = event_fingerprint(host.id, item.timestamp, normalized_type, item.raw_log)
-        if await is_duplicate(db, fp):
+        with db.no_autoflush:
+            duplicate = await is_duplicate(db, fp)
+        if duplicate:
             deduplicated += 1
             continue
 
@@ -139,8 +145,8 @@ async def _ingest_event_batch_inner(
             raw_event=item.raw_log,
             metadata_=item.metadata,
             normalized_event=normalized,
-            source_ip=normalized.get("source_ip"),
-            username=normalized.get("username"),
+            source_ip=safe_inet(normalized.get("source_ip")) or ip_from_raw_log(item.raw_log),
+            username=(str(normalized["username"])[:255] if normalized.get("username") else None),
             category=normalized.get("category"),
             timestamp=item.timestamp,
         )
@@ -149,7 +155,13 @@ async def _ingest_event_batch_inner(
         ingested.append(event)
 
         from app.services.detection import check_service_failure_event
-        await check_service_failure_event(db, host, normalized_type)
+        try:
+            await check_service_failure_event(db, host, normalized_type)
+        except Exception:
+            logger.exception(
+                "service-failure detection failed",
+                extra={"host_id": str(host.id), "event_type": normalized_type},
+            )
 
     if not ingested:
         return ingested, errors, deduplicated
@@ -169,22 +181,37 @@ async def _ingest_event_batch_inner(
             metadata=event.metadata_,
         )
         from app.services.reference_intel_detection import check_reference_intel_on_event
-        await check_reference_intel_on_event(db, host, event)
+        try:
+            await check_reference_intel_on_event(db, host, event)
+        except Exception:
+            logger.exception("reference intel check failed", extra={"event_id": str(event.id)})
 
     host.last_seen = datetime.now(timezone.utc)
 
     if async_pipeline and settings.async_event_pipeline:
-        await job_queue.enqueue(
-            "correlation_pipeline",
-            {"host_id": str(host.id)},
-            priority=JobPriority.HIGH,
-        )
+        try:
+            await job_queue.enqueue(
+                "correlation_pipeline",
+                {"host_id": str(host.id)},
+                priority=JobPriority.HIGH,
+            )
+        except Exception:
+            logger.exception(
+                "failed to enqueue correlation pipeline — events are persisted",
+                extra={"host_id": str(host.id)},
+            )
     else:
         from app.pipeline.processor import run_post_ingestion_pipeline
         await run_post_ingestion_pipeline(db, host.id)
 
     for event in ingested:
-        await link_event_to_offense(db, event)
+        try:
+            await link_event_to_offense(db, event)
+        except Exception:
+            logger.exception(
+                "offense linking failed — event remains stored",
+                extra={"event_id": str(event.id), "event_type": event.event_type},
+            )
 
     # Record post-commit side effects (outbox pattern)
     if "post_commit_hooks" not in db.info:

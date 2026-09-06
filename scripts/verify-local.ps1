@@ -10,6 +10,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 . "$PSScriptRoot\ensure-docker-env.ps1"
+. "$PSScriptRoot\lan-url.ps1"
 Ensure-DockerEnv | Out-Null
 
 function Read-EnvValue {
@@ -25,6 +26,14 @@ if (-not $ApiBase) {
     if (-not $ApiBase) { $ApiBase = "http://localhost:8000" }
 }
 $configuredApi = $ApiBase
+try {
+    Assert-ServerUrlOnLocalInterface -ServerUrl $configuredApi
+} catch {
+    $failures = @("SERVER_URL is not on a local interface: $_")
+    Write-Host "==> Securi local verification"
+    Write-Host "FAIL  $failures"
+    exit 1
+}
 $ApiBase = Resolve-ApiBase -Preferred $configuredApi -ProjectRoot $Root
 if (-not $FrontendBase) {
     $FrontendBase = Read-EnvValue "$Root\backend\.env" "FRONTEND_URL"

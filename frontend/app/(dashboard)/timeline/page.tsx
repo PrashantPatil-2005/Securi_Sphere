@@ -156,10 +156,10 @@ function TimelinePageContent() {
       {!isLoading && !isError && timelines.length === 0 && (
         <EmptyState
           title="No attack timelines"
-          description="Run a scenario in the Attack Lab or wait for correlated activity to build attack chains."
+          description="Attack chains appear after correlated live activity is ingested from enrolled agents."
           icon={<Clock className="w-10 h-10 opacity-40" />}
-          action="/simulation"
-          actionLabel="Open Attack Lab"
+          action="/hosts"
+          actionLabel="Open hosts"
         />
       )}
     </div>

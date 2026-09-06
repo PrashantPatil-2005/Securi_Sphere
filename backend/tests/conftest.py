@@ -25,6 +25,13 @@ os.environ.setdefault("WS_PUBSUB_BACKEND", "memory")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-minimum-length-required")
 os.environ.setdefault("ASYNC_EVENT_PIPELINE", "false")
 
+_db_url = os.environ.get("DATABASE_URL", "")
+if "securi_test" not in _db_url:
+    os.environ["DATABASE_URL"] = os.environ.get(
+        "TEST_DATABASE_URL",
+        "postgresql+asyncpg://securi_test:testpass@127.0.0.1:5433/securi_test",
+    )
+
 from app.config import settings  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -135,6 +142,32 @@ async def prepare_database():
         _db_failed = True
         pytest.fail(f"Database setup failed: {exc}")
     yield
+
+    # Only reset dedicated test databases — never truncate the developer LAN DB.
+    if "securi_test" not in settings.database_url:
+        return
+
+    from app.database import async_session as _cleanup_session
+    from sqlalchemy import text as _text
+
+    _cleanup_tables = [
+        "offense_events",
+        "offenses",
+        "attack_timelines",
+        "alerts",
+        "events",
+        "enrollment_tokens",
+        "in_app_notifications",
+        "metrics",
+        "hosts",
+    ]
+    async with _cleanup_session() as _db:
+        for _tbl in _cleanup_tables:
+            try:
+                await _db.execute(_text(f"TRUNCATE TABLE {_tbl} CASCADE"))
+            except Exception:
+                pass
+        await _db.commit()
 
 
 @pytest_asyncio.fixture

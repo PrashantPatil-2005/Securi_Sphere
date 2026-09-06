@@ -14,6 +14,7 @@ from app.schemas.mitre import (
 )
 from app.services.mitre import EVENT_MITRE_MAP, event_technique_clause
 from app.utils.query import TimeRange, apply_time_range
+from app.utils.simulation_filter import real_alerts_only, real_events_only, should_exclude_simulated
 
 
 async def get_technique_drilldown(
@@ -42,6 +43,8 @@ async def get_technique_drilldown(
 
     event_clauses = list(apply_time_range(Event.timestamp, tr))
     event_clauses.append(event_technique_clause(technique_id))
+    if should_exclude_simulated():
+        event_clauses.append(real_events_only())
 
     event_count = (
         await db.execute(select(func.count()).select_from(Event).where(*event_clauses))
@@ -49,6 +52,8 @@ async def get_technique_drilldown(
 
     alert_clauses = list(apply_time_range(Alert.created_at, tr))
     alert_clauses.append(Alert.mitre_technique_id == technique_id)
+    if should_exclude_simulated():
+        alert_clauses.append(real_alerts_only())
     alert_count = (
         await db.execute(select(func.count()).select_from(Alert).where(*alert_clauses))
     ).scalar_one()

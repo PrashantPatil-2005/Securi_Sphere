@@ -87,10 +87,11 @@ services:
       WS_PUBSUB_BACKEND: ${WS_PUBSUB_BACKEND:-redis}
       SERVER_URL: ${SERVER_URL:-http://localhost:8000}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      SKIP_SERVER_URL_INTERFACE_CHECK: ${SKIP_SERVER_URL_INTERFACE_CHECK:-true}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-http://opensearch:9200}
       SEARCH_BACKEND: ${SEARCH_BACKEND:-postgres}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "${BACKEND_HOST_BIND:-127.0.0.1}:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -141,7 +142,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: ${SERVER_URL:-http://localhost:8000}
     ports:
-      - "127.0.0.1:3000:3000"
+      - "${FRONTEND_HOST_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       backend:
         condition: service_healthy

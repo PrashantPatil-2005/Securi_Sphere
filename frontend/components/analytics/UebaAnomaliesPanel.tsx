@@ -90,10 +90,10 @@ export function UebaAnomaliesPanel() {
       ) : anomalies.length === 0 ? (
         <EmptyState
           title="No open anomalies"
-          description="Run an Attack Lab simulation to generate behavioral baselines, then scan for z-score spikes."
+          description="UEBA baselines build from live host activity. Scan after agents have been reporting."
           icon={<FlaskConical className="w-8 h-8" />}
-          action="/simulation"
-          actionLabel="Open Attack Lab"
+          action="/hosts"
+          actionLabel="Open hosts"
         />
       ) : (
         <div className="space-y-2">

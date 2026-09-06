@@ -1,9 +1,11 @@
 import logging
+import os
 import signal
+import sys
 import threading
 import time
 
-from agent.buffer import init_db
+from agent.buffer import init_db, _agent_rss_mb
 from agent.collector.logs import collect_events
 from agent.collector.events import LogTailer
 from agent.collector.metrics import collect_metrics
@@ -30,6 +32,30 @@ def _handle_shutdown(signum, frame):
     _shutdown_event.set()
 
 
+def _send_events_with_individual_buffer(sender: Sender, events: list[dict]) -> bool:
+    """Send events, buffering individual events on failure instead of batch dicts.
+
+    When the server is unreachable, each event is stored as its own SQLite row
+    (~300-2000 bytes per row). This eliminates the batch-wrapper nesting that
+    caused the original 'string or blob too big' crash and memory explosion.
+    """
+    if not events:
+        return True
+    for start in range(0, len(events), 50):
+        chunk = events[start : start + 50]
+        success = sender.send_events(chunk)
+        if not success:
+            from agent.buffer import enqueue_events
+            stored = enqueue_events(chunk)
+            rss = _agent_rss_mb()
+            logger.warning(
+                "Server unreachable — buffered %d/%d events individually (rss=%.0fMB)",
+                stored, len(chunk), rss,
+            )
+            return False
+    return True
+
+
 def main() -> None:
     signal.signal(signal.SIGTERM, _handle_shutdown)
     signal.signal(signal.SIGINT, _handle_shutdown)
@@ -48,7 +74,8 @@ def main() -> None:
     last_metrics = 0.0
     last_logs = 0.0
 
-    logger.info("Securi agent started for %s", server_url)
+    rss = _agent_rss_mb()
+    logger.info("Securi agent v%s started for %s (rss=%.0fMB)", AGENT_VERSION, server_url, rss)
 
     try:
         while not _shutdown_requested:
@@ -67,7 +94,12 @@ def main() -> None:
 
             if now - last_metrics >= METRICS_INTERVAL:
                 try:
-                    sender.send_metrics([collect_metrics()])
+                    metrics = [collect_metrics()]
+                    success = sender.send_metrics(metrics)
+                    if not success:
+                        from agent.buffer import enqueue_metrics
+                        stored = enqueue_metrics(metrics)
+                        logger.warning("Server unreachable — buffered %d metrics", stored)
                 except Exception:
                     logger.exception("Metrics collection failed")
                 last_metrics = now
@@ -76,7 +108,17 @@ def main() -> None:
                 try:
                     events = collect_events(tailer)
                     if events:
-                        sender.send_events(events)
+                        rss = _agent_rss_mb()
+                        event_types = {}
+                        for e in events:
+                            t = e.get("event_type", "unknown")
+                            event_types[t] = event_types.get(t, 0) + 1
+                        largest = max((len(e.get("raw_log", "")) for e in events), default=0)
+                        logger.info(
+                            "Collected %d events (types=%s, largest_raw=%d, rss=%.0fMB)",
+                            len(events), event_types, largest, rss,
+                        )
+                        _send_events_with_individual_buffer(sender, events)
                 except Exception:
                     logger.exception("Log collection failed")
                 last_logs = now

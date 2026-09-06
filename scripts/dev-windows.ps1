@@ -9,6 +9,7 @@ $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
 
 . "$PSScriptRoot\ensure-docker-env.ps1"
+. "$PSScriptRoot\lan-url.ps1"
 Ensure-DockerEnv | Out-Null
 
 function Wait-Postgres {
@@ -42,16 +43,14 @@ SQL_ECHO=false
     }
 }
 
-# Ensure frontend .env.local — prefer reachable API (LAN IP may not work on same host)
+$resolvedLan = Get-PreferredLanIPv4 -LanIp $LanIp
+Set-SecuriLanUrls -ProjectRoot $Root -LanIp $resolvedLan | Out-Null
+Write-Host "SERVER_URL=http://${resolvedLan}:8000 (agents). If DHCP changes: .\scripts\sync-lan-urls.ps1"
+
 . "$PSScriptRoot\ensure-docker-env.ps1"
 Ensure-DockerEnv | Out-Null
-$preferredApi = "http://localhost:8000"
-if ($LanIp) {
-    $preferredApi = "http://${LanIp}:8000"
-} elseif (Test-Path "$Root\backend\.env") {
-    $match = Select-String -Path "$Root\backend\.env" -Pattern '^SERVER_URL=(.+)$' | Select-Object -First 1
-    if ($match) { $preferredApi = $match.Matches[0].Groups[1].Value.Trim() }
-}
+# Same-machine browser uses loopback; Kali agents use SERVER_URL.
+$preferredApi = "http://127.0.0.1:8000"
 $apiUrl = Resolve-ApiBase -Preferred $preferredApi -ProjectRoot $Root
 Set-Content -Encoding utf8 "$Root\frontend\.env.local" "NEXT_PUBLIC_API_URL=$apiUrl"
 
@@ -92,13 +91,12 @@ if ($Demo) {
 
 Write-Host ""
 Write-Host "Securi is starting."
-$frontendUrl = if ($LanIp) { "http://${LanIp}:3000" } else { $apiUrl -replace ':8000', ':3000' }
-Write-Host "  Dashboard: $frontendUrl"
-Write-Host "  API docs:  $apiUrl/docs"
-Write-Host "  Dev login: admin@test.local / testpass123"
-if ($LanIp) {
-    Write-Host "  LAN:       open firewall for ports 3000 and 8000"
-}
+Write-Host "  Dashboard (this PC): http://127.0.0.1:3000"
+Write-Host "  Dashboard (LAN):     http://${resolvedLan}:3000"
+Write-Host "  API docs (this PC):  $apiUrl/docs"
+Write-Host "  API (LAN / agents):  http://${resolvedLan}:8000"
+Write-Host "  Bind:                0.0.0.0:8000"
+Write-Host "  LAN:                 .\scripts\open-firewall.ps1"
 Write-Host ""
 Write-Host "Verify: .\scripts\verify-local.ps1"
 Write-Host "Stop with: .\scripts\dev-stop.ps1"

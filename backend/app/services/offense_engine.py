@@ -112,9 +112,15 @@ async def find_or_create_offense(
     )
     if risk_level in ("critical", "high"):
         from app.jobs.queue import job_queue
-        await job_queue.enqueue("notify_offense", {"offense_id": str(offense.id)})
+        try:
+            await job_queue.enqueue("notify_offense", {"offense_id": str(offense.id)})
+        except Exception:
+            logger.exception("failed to enqueue notify_offense", extra={"offense_id": str(offense.id)})
     from app.services.playbooks import schedule_playbook_dispatch
-    await schedule_playbook_dispatch("offense_created", "offense", offense.id)
+    try:
+        await schedule_playbook_dispatch("offense_created", "offense", offense.id)
+    except Exception:
+        logger.exception("failed to schedule offense playbook", extra={"offense_id": str(offense.id)})
     return offense, True
 
 

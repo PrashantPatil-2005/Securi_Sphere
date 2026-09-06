@@ -14,6 +14,7 @@ from app.schemas.mitre import MitreDrilldownResponse
 from app.services.mitre import get_matrix_summary
 from app.services.mitre_drilldown import get_technique_drilldown
 from app.utils.query import ListParams, resolve_time_range, apply_time_range
+from app.utils.simulation_filter import real_events_only, should_exclude_simulated
 
 router = APIRouter(prefix="/mitre", tags=["mitre"])
 
@@ -56,6 +57,8 @@ async def get_matrix(
     q = select(Event)
     for clause in apply_time_range(Event.timestamp, tr):
         q = q.where(clause)
+    if should_exclude_simulated():
+        q = q.where(real_events_only())
     events = list((await db.execute(q.limit(10000))).scalars().all())
     techniques = get_matrix_summary(events)
     all_techniques = list((await db.execute(select(MitreTechnique))).scalars().all())

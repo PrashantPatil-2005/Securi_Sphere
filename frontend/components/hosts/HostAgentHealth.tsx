@@ -1,7 +1,11 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Card, CardHeader } from "@/components/design-system/Card";
+import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
+import { useToast } from "@/components/ui/Toast";
+import { useEnrollmentTokenMutation } from "@/lib/hooks/useHosts";
 import type { HostSummary } from "@/lib/types/host";
 
 interface HostAgentHealthProps {
@@ -26,6 +30,21 @@ function formatUptime(seconds: number | null): string {
 }
 
 function HostAgentHealthInner({ host, metrics }: HostAgentHealthProps) {
+  const { toast } = useToast();
+  const [tokenResult, setTokenResult] = useState<{
+    token: string;
+    install_command: string;
+  } | null>(null);
+
+  const tokenMutation = useEnrollmentTokenMutation({
+    onSuccess: (data) => {
+      setTokenResult({ token: data.token, install_command: data.install_command });
+    },
+    onError: (e) => {
+      toast("error", "Failed to generate token", e.message);
+    },
+  });
+
   return (
     <Card>
       <CardHeader title="Agent Health" subtitle="System metrics and agent status" />
@@ -66,6 +85,19 @@ function HostAgentHealthInner({ host, metrics }: HostAgentHealthProps) {
             </p>
           </div>
         </div>
+
+        {!host.enrolled && (
+          <div className="border-t border-border-subtle pt-3">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => tokenMutation.mutate(host.id)}
+              loading={tokenMutation.isPending}
+            >
+              Generate Enrollment Token
+            </Button>
+          </div>
+        )}
 
         {metrics && (
           <>
@@ -143,6 +175,61 @@ function HostAgentHealthInner({ host, metrics }: HostAgentHealthProps) {
           </div>
         )}
       </div>
+
+      {/* Enrollment Token Dialog */}
+      <Dialog
+        open={!!tokenResult}
+        onClose={() => { setTokenResult(null); }}
+        title="Enrollment Token"
+        description="Copy this token and run the install command on the target host."
+      >
+        {tokenResult && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted block mb-1">Enrollment Token</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs font-mono bg-card-elevated px-3 py-2 rounded border border-border-subtle break-all">
+                  {tokenResult.token}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(tokenResult.token);
+                    toast("success", "Copied", "Token copied to clipboard.");
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted block mb-1">Install Command (Linux)</label>
+              <div className="flex items-start gap-2">
+                <pre className="flex-1 text-xs font-mono bg-card-elevated px-3 py-2 rounded border border-border-subtle overflow-x-auto whitespace-pre-wrap break-all">
+                  {tokenResult.install_command}
+                </pre>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(tokenResult.install_command);
+                    toast("success", "Copied", "Install command copied to clipboard.");
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted mt-1">Run this on the target Linux host with sudo privileges.</p>
+            </div>
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => setTokenResult(null)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        )}
+      </Dialog>
     </Card>
   );
 }

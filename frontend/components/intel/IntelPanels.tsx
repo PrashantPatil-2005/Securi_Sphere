@@ -200,10 +200,8 @@ export function ReferenceSetsPanel() {
           {isLoading ? <TableSkeleton rows={4} /> : sets.length === 0 ? (
             <EmptyState
               title="No reference sets"
-              description="Demo data seeds on first startup. Create a set or run Attack Lab to generate detection matches."
+              description="Create a reference set to match indicators from live detections."
               icon={<Shield className="w-8 h-8" />}
-              action="/simulation"
-              actionLabel="Open Attack Lab"
             />
           ) : (
             <div className="space-y-2">

@@ -3,6 +3,7 @@ services:
     name: securi-backend
     runtime: docker
     dockerfilePath: backend/Dockerfile
+    dockerContext: .
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -32,6 +33,7 @@ services:
     name: securi-frontend
     runtime: docker
     dockerfilePath: frontend/Dockerfile
+    dockerContext: .
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://securi-backend.onrender.com

@@ -242,6 +242,218 @@ class AgentOfflineChecker(RuleChecker):
         return None
 
 
+@register_checker
+class PrivilegeEscalationChecker(RuleChecker):
+    rule_type = "privilege_escalation"
+    description = "Sudo or privilege escalation activity detected"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 5)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "sudo_usage",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 3):
+            return {
+                "title": "Privilege Escalation Detected",
+                "description": f"{count} sudo invocations in {rule.window_minutes} minutes on {host.name}",
+                "mitre_technique_id": "T1548.003",
+                "mitre_tactic": "privilege-escalation",
+                "confidence": 0.9,
+            }
+        return None
+
+
+@register_checker
+class RootLoginChecker(RuleChecker):
+    rule_type = "root_login"
+    description = "Direct root login detected"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 15)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "root_login",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 1):
+            return {
+                "title": "Direct Root Login Detected",
+                "description": f"Root login detected on {host.name} — investigate immediately",
+                "mitre_technique_id": "T1078.003",
+                "mitre_tactic": "initial-access",
+                "confidence": 0.95,
+            }
+        return None
+
+
+@register_checker
+class SuccessfulSSHAfterFailuresChecker(RuleChecker):
+    rule_type = "ssh_success_after_failures"
+    description = "Successful SSH login after multiple failures — likely compromised account"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 10)
+        since = now - window
+
+        fail_count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "ssh_login_failure",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+
+        if fail_count < (rule.threshold or 5):
+            return None
+
+        # Check if there was a successful login AFTER the failures
+        success = (
+            await db.execute(
+                select(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "ssh_login_success",
+                    Event.timestamp >= since,
+                ).order_by(Event.timestamp.desc()).limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if success:
+            return {
+                "title": "Compromised Account — SSH Success After Failures",
+                "description": f"{fail_count} failed attempts followed by successful login on {host.name}",
+                "mitre_technique_id": "T1110",
+                "mitre_tactic": "credential-access",
+                "confidence": 0.85,
+            }
+        return None
+
+
+@register_checker
+class ServiceStopChecker(RuleChecker):
+    rule_type = "service_stop"
+    description = "Critical service was stopped — possible attack or tampering"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 5)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "service_stop",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 1):
+            return {
+                "title": "Service Stopped Unexpectedly",
+                "description": f"A service was stopped on {host.name} — possible tampering",
+                "mitre_technique_id": "T1489",
+                "mitre_tactic": "impact",
+                "confidence": 0.7,
+            }
+        return None
+
+
+@register_checker
+class FileIntegrityChecker(RuleChecker):
+    rule_type = "file_integrity"
+    description = "Critical system file was modified"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 15)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "file_change",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 1):
+            return {
+                "title": "File Integrity Alert",
+                "description": f"{count} critical file changes detected on {host.name}",
+                "mitre_technique_id": "T1070.004",
+                "mitre_tactic": "defense-evasion",
+                "confidence": 0.8,
+            }
+        return None
+
+
+@register_checker
+class FirewallBlockChecker(RuleChecker):
+    rule_type = "firewall_block"
+    description = "Firewall blocked connection — possible scanning or attack"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 5)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "firewall_block",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 10):
+            return {
+                "title": "Firewall Block Surge",
+                "description": f"{count} connections blocked by firewall on {host.name} in {rule.window_minutes} minutes",
+                "mitre_technique_id": "T1046",
+                "mitre_tactic": "discovery",
+                "confidence": 0.75,
+            }
+        return None
+
+
+@register_checker
+class NetworkAnomalyChecker(RuleChecker):
+    rule_type = "network_anomaly"
+    description = "Abnormal network connection volume — possible C2 or exfiltration"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 5)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "network_connection",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= (rule.threshold or 50):
+            return {
+                "title": "Abnormal Network Activity",
+                "description": f"{count} network connections in {rule.window_minutes} minutes on {host.name} — possible C2 or exfiltration",
+                "mitre_technique_id": "T1040",
+                "mitre_tactic": "credential-access",
+                "confidence": 0.7,
+            }
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Alert creation helper
 # ---------------------------------------------------------------------------
@@ -377,13 +589,24 @@ async def seed_alert_rules(db: AsyncSession) -> None:
         return
 
     defaults = [
+        # ── Authentication & Access ──────────────────────────────────────
         {"name": "Failed Logins", "rule_type": "failed_logins", "threshold": 5, "window_minutes": 5, "severity": "high"},
         {"name": "Brute Force", "rule_type": "brute_force", "threshold": 10, "window_minutes": 5, "severity": "critical"},
+        {"name": "SSH Success After Failures", "rule_type": "ssh_success_after_failures", "threshold": 5, "window_minutes": 10, "severity": "critical"},
+        {"name": "Root Login Detected", "rule_type": "root_login", "threshold": 1, "window_minutes": 15, "severity": "critical"},
+        {"name": "Privilege Escalation", "rule_type": "privilege_escalation", "threshold": 3, "window_minutes": 5, "severity": "critical"},
+        # ── Host Health ──────────────────────────────────────────────────
         {"name": "High CPU", "rule_type": "high_cpu", "threshold": 90, "window_minutes": 2, "severity": "medium"},
         {"name": "High Memory", "rule_type": "high_memory", "threshold": 90, "window_minutes": 1, "severity": "medium"},
         {"name": "High Disk", "rule_type": "high_disk", "threshold": 85, "window_minutes": 1, "severity": "high"},
+        # ── System Integrity ─────────────────────────────────────────────
         {"name": "Service Failure", "rule_type": "service_failure", "threshold": 1, "window_minutes": 1, "severity": "high"},
+        {"name": "Service Stopped", "rule_type": "service_stop", "threshold": 1, "window_minutes": 5, "severity": "high"},
+        {"name": "File Integrity Alert", "rule_type": "file_integrity", "threshold": 1, "window_minutes": 15, "severity": "high"},
         {"name": "Agent Offline", "rule_type": "agent_offline", "threshold": 90, "window_minutes": 1, "severity": "critical"},
+        # ── Network & Perimeter ──────────────────────────────────────────
+        {"name": "Firewall Block Surge", "rule_type": "firewall_block", "threshold": 10, "window_minutes": 5, "severity": "medium"},
+        {"name": "Network Anomaly", "rule_type": "network_anomaly", "threshold": 50, "window_minutes": 5, "severity": "high"},
     ]
     for rule in defaults:
         db.add(AlertRule(**rule))
@@ -505,10 +728,13 @@ async def update_host_statuses(db: AsyncSession) -> None:
         critical_alerts = [a for a in alerts if a.severity == "critical"]
         high_alerts = [a for a in alerts if a.severity in ("high", "medium")]
 
-        stale = not host.last_seen or (now - host.last_seen).total_seconds() > 90
+        never_seen = host.last_seen is None
+        stale = not never_seen and (now - host.last_seen).total_seconds() > 90
 
         if critical_alerts:
             host.status = "critical"
+        elif never_seen:
+            host.status = "inactive"
         elif stale:
             host.status = "offline"
             open_rule_ids = {a.rule_id for a in alerts if a.rule_id}
