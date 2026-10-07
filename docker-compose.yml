@@ -138,9 +138,13 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${SERVER_URL:-http://localhost:8000}
+        BACKEND_INTERNAL_URL: http://backend:8000
     container_name: securi-frontend
     environment:
       NEXT_PUBLIC_API_URL: ${SERVER_URL:-http://localhost:8000}
+      BACKEND_INTERNAL_URL: http://backend:8000
     ports:
       - "${FRONTEND_HOST_BIND:-127.0.0.1}:3000:3000"
     depends_on:

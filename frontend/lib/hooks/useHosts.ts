@@ -54,7 +54,7 @@ export function useHostRisk(id: string | null) {
 }
 
 export function useHostCreateMutation(options?: {
-  onSuccess?: (data: any) => void;
+  onSuccess?: (data: { id: string }) => void;
   onError?: (e: Error) => void;
 }) {
   const queryClient = useQueryClient();

@@ -8,7 +8,16 @@ const API_URL =
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-/** WebSocket always connects directly to the backend (not via Next rewrite). */
+/** WebSocket connects directly to the backend (not via Next rewrite). */
+export function getWsApiUrl(): string {
+  if (typeof window !== "undefined") {
+    const scheme = window.location.protocol === "https:" ? "https" : "http";
+    return `${scheme}://${window.location.hostname}:8000`;
+  }
+  return BACKEND_URL;
+}
+
+/** @deprecated Use getWsApiUrl() so browser hostname matches the page origin. */
 export const WS_API_URL = BACKEND_URL;
 
 export interface TokenPair {

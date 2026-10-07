@@ -112,8 +112,12 @@ class FailedLoginsChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 5):
             return {
-                "title": "Multiple Failed Logins",
-                "description": f"{count} failed SSH logins in {rule.window_minutes} minutes",
+                "title": "Brute Force Attempt",
+                "description": f"{count} failed SSH logins in {rule.window_minutes} minutes from {get_source_ip_summary(db, host.id, since)}",
+                "mitre_technique_id": "T1110",
+                "mitre_tactic": "credential-access",
+                "confidence": 0.85,
+                "stage": "BRUTE_FORCE",
             }
         return None
 

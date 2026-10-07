@@ -13,8 +13,8 @@ function requestWithNonce(request: NextRequest, nonce: string): Headers {
   return headers;
 }
 
-function applySecurityHeaders(response: NextResponse, nonce: string) {
-  response.headers.set("Content-Security-Policy", buildContentSecurityPolicy(nonce));
+function applySecurityHeaders(response: NextResponse, nonce: string, hostname: string) {
+  response.headers.set("Content-Security-Policy", buildContentSecurityPolicy(nonce, false, hostname));
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -28,13 +28,13 @@ export function middleware(request: NextRequest) {
 
   if (STATIC_FILE_EXT.test(pathname)) {
     const response = NextResponse.next({ request: { headers: requestWithNonce(request, nonce) } });
-    applySecurityHeaders(response, nonce);
+    applySecurityHeaders(response, nonce, request.nextUrl.hostname);
     return response;
   }
 
   if (isPublic) {
     const response = NextResponse.next({ request: { headers: requestWithNonce(request, nonce) } });
-    applySecurityHeaders(response, nonce);
+    applySecurityHeaders(response, nonce, request.nextUrl.hostname);
     return response;
   }
 
@@ -42,12 +42,12 @@ export function middleware(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     if (pathname !== "/") loginUrl.searchParams.set("next", pathname);
     const response = NextResponse.redirect(loginUrl);
-    applySecurityHeaders(response, nonce);
+    applySecurityHeaders(response, nonce, request.nextUrl.hostname);
     return response;
   }
 
   const response = NextResponse.next({ request: { headers: requestWithNonce(request, nonce) } });
-  applySecurityHeaders(response, nonce);
+  applySecurityHeaders(response, nonce, request.nextUrl.hostname);
   return response;
 }
 

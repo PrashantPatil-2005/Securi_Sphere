@@ -1,16 +1,28 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function connectSrc(): string {
-  const parts = ["'self'"];
+function addBackendOrigins(target: Set<string>, httpOrigin: string) {
+  target.add(httpOrigin);
   try {
-    const url = new URL(API_URL);
-    parts.push(url.origin);
+    const url = new URL(httpOrigin);
     const wsProto = url.protocol === "https:" ? "wss:" : "ws:";
-    parts.push(`${wsProto}//${url.host}`);
+    target.add(`${wsProto}//${url.host}`);
   } catch {
-    parts.push("ws://localhost:8000", "http://localhost:8000");
+    /* ignore invalid URL */
   }
-  return parts.join(" ");
+}
+
+function connectSrc(pageHostname?: string): string {
+  const origins = new Set<string>(["'self'"]);
+
+  addBackendOrigins(origins, API_URL);
+  addBackendOrigins(origins, "http://localhost:8000");
+  addBackendOrigins(origins, "http://127.0.0.1:8000");
+
+  if (pageHostname && pageHostname !== "localhost" && pageHostname !== "127.0.0.1") {
+    addBackendOrigins(origins, `http://${pageHostname}:8000`);
+  }
+
+  return Array.from(origins).join(" ");
 }
 
 export function createNonce(): string {
@@ -23,7 +35,11 @@ export function createNonce(): string {
   return btoa(binary);
 }
 
-export function buildContentSecurityPolicy(nonce: string, dev = process.env.NODE_ENV === "development"): string {
+export function buildContentSecurityPolicy(
+  nonce: string,
+  dev = process.env.NODE_ENV === "development",
+  pageHostname?: string,
+): string {
   const scriptSrc = dev
     ? "'self' 'unsafe-eval' 'unsafe-inline'"
     : `'self' 'nonce-${nonce}' 'strict-dynamic'`;
@@ -35,7 +51,7 @@ export function buildContentSecurityPolicy(nonce: string, dev = process.env.NODE
     `style-src ${styleSrc}`,
     "img-src 'self' data: blob:",
     "font-src 'self'",
-    `connect-src ${connectSrc()}`,
+    `connect-src ${connectSrc(pageHostname)}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

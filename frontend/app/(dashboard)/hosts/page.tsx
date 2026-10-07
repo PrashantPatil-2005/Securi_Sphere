@@ -99,7 +99,7 @@ function HostsPageContent() {
   });
 
   const createMutation = useHostCreateMutation({
-    onSuccess: (data: any) => {
+    onSuccess: (data: { id: string }) => {
       const hostId = data?.id;
       if (hostId) {
         createdHostIdRef.current = hostId;

@@ -5,7 +5,11 @@ const nextConfig = {
     optimizePackageImports: ["lucide-react", "recharts", "framer-motion"],
   },
   async rewrites() {
-    const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    // In Docker, the frontend container must reach the backend by service name, not localhost.
+    const api =
+      process.env.BACKEND_INTERNAL_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      "http://localhost:8000";
     return [{ source: "/api/:path*", destination: `${api}/api/:path*` }];
   },
   async headers() {

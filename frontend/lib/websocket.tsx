@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { WS_API_URL, fetchWsToken } from "./api";
+import { getWsApiUrl, fetchWsToken } from "./api";
 
 export type WSMessage = {
   type: string;
@@ -76,7 +76,7 @@ class WebSocketStore {
           this.scheduleReconnect();
           return;
         }
-        const wsUrl = WS_API_URL.replace("http", "ws") + `/api/v1/ws`;
+        const wsUrl = getWsApiUrl().replace("http", "ws") + `/api/v1/ws`;
         const ws = new WebSocket(wsUrl);
         ws.onopen = () => {
           ws.send(JSON.stringify({ type: "auth", token }));
