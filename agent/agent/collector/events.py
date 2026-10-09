@@ -125,16 +125,30 @@ def parse_line(line: str, source: str) -> dict | None:
                 "username": user,
             }
 
-    if ROOT_LOGIN_RE.search(line):
-        return {"event_type": "root_login", "severity": "high", "description": "Root login attempt", "source": source, "raw_log": raw, "timestamp": _now_iso()}
+    if m := ROOT_LOGIN_RE.search(line):
+        user_m = re.search(r"user (\S+)", line, re.I)
+        ip_m = re.search(r"from (\S+)", line, re.I)
+        username = user_m.group(1) if user_m else None
+        ip = ip_m.group(1) if ip_m else None
+        return {"event_type": "root_login", "severity": "high", "description": f"Root login attempt by {username}" if username else "Root login attempt", "source": source, "raw_log": raw, "timestamp": _now_iso(), "source_ip": ip, "username": username}
 
     m = SUDO_SESSION_RE.search(line)
     if m:
-        return {"event_type": "sudo_usage", "severity": "low", "description": f"Sudo used by {m.group(1)}", "source": source, "raw_log": raw, "timestamp": _now_iso()}
+        user = m.group(1)
+        ip = None
+        ip_m = re.search(r"from (\S+)", line, re.I)
+        if ip_m:
+            ip = ip_m.group(1)
+        return {"event_type": "sudo_usage", "severity": "low", "description": f"Sudo used by {user}", "source": source, "raw_log": raw, "timestamp": _now_iso(), "source_ip": ip, "username": user}
 
     m = SUDO_COLON_RE.search(line)
     if m:
-        return {"event_type": "sudo_usage", "severity": "low", "description": f"Sudo used by {m.group(1)}", "source": source, "raw_log": raw, "timestamp": _now_iso()}
+        user = m.group(1)
+        ip = None
+        ip_m = re.search(r"from (\S+)", line, re.I)
+        if ip_m:
+            ip = ip_m.group(1)
+        return {"event_type": "sudo_usage", "severity": "low", "description": f"Sudo used by {user}", "source": source, "raw_log": raw, "timestamp": _now_iso(), "source_ip": ip, "username": user}
 
     m = SERVICE_FAIL_RE.search(line)
     if m:

@@ -112,8 +112,8 @@ class FailedLoginsChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 5):
             return {
-                "title": "Brute Force Attempt",
-                "description": f"{count} failed SSH logins in {rule.window_minutes} minutes from {get_source_ip_summary(db, host.id, since)}",
+                "title": "SSH brute force in progress on " + host.name + " from " + (get_source_ip_summary(db, host.id, since) or "unknown IP"),
+                "description": f"{count} failed logins in {rule.window_minutes} minutes, same source IP, then success",
                 "mitre_technique_id": "T1110",
                 "mitre_tactic": "credential-access",
                 "confidence": 0.85,
@@ -276,11 +276,12 @@ class PrivilegeEscalationChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 3):
             return {
-                "title": "Privilege Escalation Detected",
-                "description": f"{count} sudo invocations in {rule.window_minutes} minutes on {host.name}",
+                "title": "Privilege escalation on " + host.name,
+                "description": f"{count} sudo invocation{'s' if count > 1 else ''} in {rule.window_minutes} minutes, privilege escalation detected",
                 "mitre_technique_id": "T1548.003",
                 "mitre_tactic": "privilege-escalation",
                 "confidence": 0.9,
+                "stage": "PRIVILEGE_ESCALATION",
             }
         return None
 
@@ -304,11 +305,12 @@ class RootLoginChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 1):
             return {
-                "title": "Direct Root Login Detected",
-                "description": f"Root login detected on {host.name} — investigate immediately",
+                "title": "Direct root login on " + host.name,
+                "description": "Root login detected — possible initial access",
                 "mitre_technique_id": "T1078.003",
                 "mitre_tactic": "initial-access",
                 "confidence": 0.95,
+                "stage": "INITIAL_ACCESS",
             }
         return None
 
@@ -348,11 +350,12 @@ class SuccessfulSSHAfterFailuresChecker(RuleChecker):
 
         if success:
             return {
-                "title": "Compromised Account — SSH Success After Failures",
-                "description": f"{fail_count} failed attempts followed by successful login on {host.name}",
+                "title": "Compromised account on " + host.name,
+                "description": f"{fail_count} failed attempts then successful login — account likely compromised",
                 "mitre_technique_id": "T1110",
                 "mitre_tactic": "credential-access",
                 "confidence": 0.85,
+                "stage": "ACCOUNT_COMPROMISED",
             }
         return None
 
@@ -376,11 +379,12 @@ class ServiceStopChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 1):
             return {
-                "title": "Service Stopped Unexpectedly",
-                "description": f"A service was stopped on {host.name} — possible tampering",
+                "title": "Service stopped on " + host.name,
+                "description": "Service stopped — possible impact or tampering",
                 "mitre_technique_id": "T1489",
                 "mitre_tactic": "impact",
                 "confidence": 0.7,
+                "stage": "IMPACT",
             }
         return None
 

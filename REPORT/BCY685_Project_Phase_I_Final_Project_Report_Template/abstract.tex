@@ -1,0 +1,23 @@
+%==================================abstract.tex================================
+\chapter*{\centering Abstract}%
+\addcontentsline{toc}{chapter}{Abstract}%
+\justifying
+%-\newenvironment{abstract}
+The SecuriSphere platform presents a lightweight, full-stack Security Information 
+and Event Management (SIEM) solution designed for educational institutions and 
+resource-constrained environments. The system comprises a Linux-based agent 
+deployed across host endpoints, a FastAPI-powered backend processing pipeline, 
+and a Next.js frontend dashboard for security operations visualization. The agent 
+collects system call events and kernel audit data, buffering up to 50,000 events 
+offline and transmitting them asynchronously via HTTPS when connectivity is restored. 
+The backend detection engine implements 13 rule types leveraging OpenSigma 
+pattern matching, while the correlation engine applies three matcher strategies 
+(event_id-based, script-based, and interval-based) to reduce raw events into 
+offenses through 30-minute temporal clustering. Offenses are enriched with MITRE 
+ATT\&CK techniques and risk scores, supporting investigation workflows through 
+integrated incident promotion, containment, and executive reporting. The dashboard 
+provides 28 distinct analytical views covering threat intelligence correlation, 
+offense tracking, risk trends, and timeline visualization. All components are 
+designed for horizontal scalability and compliance with audit logging, data retention 
+policies, and role-based access control.
+\end{parameter>

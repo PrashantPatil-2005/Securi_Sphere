@@ -1,0 +1,1 @@
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process cmd -ArgumentList '/C cd C:\Users\Prash\Desktop\Securi\frontend && npm run dev' -WindowStyle Hidden"

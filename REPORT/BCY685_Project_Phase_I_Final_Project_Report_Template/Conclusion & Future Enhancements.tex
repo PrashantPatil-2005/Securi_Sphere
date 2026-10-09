@@ -1,0 +1,58 @@
+\chapter{CONCLUSION AND FUTURE ENHANCEMENTS}
+
+\section{Conclusion}
+
+The Securi Sphere project delivers a complete, full-stack SIEM platform suitable for small Linux fleets, educational environments, and resource-constrained organizations requiring real-time security monitoring and threat detection. The platform implements a 3-layer pipeline architecture (collection, processing, search) consistent with enterprise QRadar-style systems, providing immediate value through 13 built-in detection rules, three correlation matcher algorithms, a QRadar-style offense engine, attack timeline reconstruction, UEBA anomaly detection, and MITRE ATT\&CK visualization.
+
+The project demonstrates four distinct team contributions across backend development, frontend engineering, Linux agent implementation, and deployment infrastructure. With 857 automated tests (541 backend, 67 agent, 249 frontend), the platform achieves high code coverage across the detection pipeline, correlation engine, offense grouping, and UI components. The modular registry-pattern architecture for detection checkers and correlation matchers ensures extensibility, enabling future integration of model-based detectors without core engine modifications.
+
+The frontend dashboard provides 24+ pages of SOC operations functionality, including real-time WebSocket updates, alert triage workflows, offense and incident management, MITRE ATT\&CK heatmapping, UEBA baseline viewing, and an AI-assisted investigation copilot. The Linux agent supports offline telemetry buffering with HMAC-SHA256-signed transmission, ensuring data integrity and continuity during network outages. Docker Compose and Kubernetes deployment configurations provide infrastructure-agnostic orchestration for development, testing, and production environments.
+
+\section{Summary of Delivered Features}
+
+The following features have been implemented and tested:
+
+\begin{description}
+    \item[Detection Engine] 13 rule types with ABC-based checker registry, dynamic rule registration, and threshold-based DB querying.
+    \item[Correlation Engine] Three matcher algorithms (sequence, co-occurrence, cross-host) with heuristic confidence scoring and PostgreSQL advisory lock serialization.
+    \item[Offense Engine] 30-minute clustering window, sequential offense numbering, related entity tracking, timeline persistence, and offense-to-incident promotion.
+    \item[Attack Timeline] Event-chain reconstruction with fingerprinting, confidence scoring (0-100), and severity classification.
+    \item[UEBA Anomaly Detection] Rolling 7-day daily baselines, z-score thresholding (default: 2.5), severity classification (critical/high/medium/low), and daily aggregation cron job.
+    \item[MITRE ATT\&CK Heatmap] Tactic-level coverage visualization, technique drill-down API, and animated summary cards (overall coverage, techniques seeded, total event matches).
+    \item[SOC Dashboard] 28+ pages with real-time WebSocket updates, dark mode, virtualized lists, and 130+ React components.
+    \item[Linux Agent] Log collection, metric extraction, HMAC-SHA256 signing, SQLite offline buffer, 30-second heartbeat, and staleness-based offline detection.
+    \lbrack Authentication and Authorization\rbrack JWT (HS256/RS256) in HttpOnly cookies, refresh token rotation, TOTP-based MFA, RBAC (admin/analyst/viewer), security headers, rate limiting.
+    \lbrack Audit Logging\rbrack SHA-256 hash chain integrity, advisory lock protection, tamper-evident entry verification.
+\end{description}
+
+\section{Future Enhancements}
+
+The following improvements are identified for future project iterations:
+
+\begin{itemize}
+    \item \textbf{Machine Learning Integration:} Extend the detection engine with model-based checkers (isolation forest, LSTM for time-series anomaly detection) via the existing registry pattern, enabling behavioral detection beyond threshold-based rules.
+    \item \textbf{Windows Agent Enhancement:} Expand Windows event forwarder support with full Sysmon event ID mapping, including advanced alert types such as T1059 (command shell) and T1087 (account discovery).
+    \item \textbf{Flow Processor Appliances:} Deploy dedicated flow processing hardware for high-volume network telemetry ingestion, complementing the existing host-based metric collection.
+    \item \textbf{Vulnerability Scanner Ingestion:} Integrate Nessus/Rapid7 vulnerability scan results as event types, enabling correlation between known CVEs and detected attack patterns.
+    \item \textbf{Building Blocks \& Reference Sets UI}: Develop a UI for managing reusable SIEM query building blocks and curated IOC reference sets, currently available only via API.
+    \item \textbf{Multi-tenant Collector Scale:} Optimize the ingestion pipeline for multi-tenant deployments at scale, including connection pooling, read replica routing, and query partitioning.
+    \item \textbf{Advanced UEBA Models:} Replace z-score baseline modeling with Gaussian mixture models or exponential weighted moving average (EWMA) for improved anomaly detection precision.
+    \item \textbf{Playbook Execution Engine:} Implement a SOAR playbook execution engine with conditional branching, webhook triggers, and automated response actions beyond the current scheduling framework.
+    \item \textbf{Kubernetes-native Deployment:} Deploy Helm charts and K8s manifests for full cluster-wide orchestration, including multi-instance Redis pub/sub relay and horizontal pod autoscaling for the backend.
+    \item \textbf{OpenSearch Scaling:} Configure OpenSearch with index lifecycle management, shard allocation, and cross-cluster replication for large-scale event storage and search.
+\end{itemize}
+
+\section{Limitations}
+
+The following limitations are acknowledged for the current project release:
+
+\begin{itemize}
+    \item Detection rules are exclusively threshold-based and pattern-matching; they cannot identify novel attack patterns absent from the rule set.
+    \item The UEBA baseline model requires a minimum of 3 days of aggregated stats before anomalies can fire; very new deployments will experience delayed anomaly detection.
+    \item Cross-host correlation is limited to source IP and username matching; lateral movement via encrypted channels or proxy chains may not be detected.
+    \item The platform is optimized for Linux host telemetry; Windows event categories beyond the limited forwarder support are not fully supported.
+    \item Real-time WebSocket updates function within a single backend instance; multi-instance deployments require Redis relay configuration for cross-process broadcast consistency.
+    \item The AI copilot currently uses rule-based explanation templates; optional LLM enrichment requires external API key configuration and is not enabled by default.
+\end{itemize}
+
+The project remains intentionally modular, with all identified limitations addressed through the registry-pattern architecture and configuration-driven feature toggles, providing clear upgrade paths for future iterations.

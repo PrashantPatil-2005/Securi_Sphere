@@ -1,0 +1,223 @@
+\chapter{IMPLEMENTATION}
+
+\section{Introduction}
+
+The Securi Sphere SIEM platform is implemented as a full-stack system comprising a Python-based Linux agent, a FastAPI backend with 41 API routers and 34 SQLAlchemy models, and a Next.js 14 TypeScript frontend with 28+ dashboard pages and 130+ React components. The implementation follows a modular, registry-pattern architecture where detection checkers, correlation matchers, and rule types are dynamically registered and discovered, enabling extensibility without modifying core engine code.
+
+\section{Detection Engine}
+
+The detection engine employs an extensible rule registry pattern based on the abstract base class `RuleChecker` (`backend/app/services/detection.py:38-66`). Each checker subclass implements a `check()` method that queries the database for threshold conditions and returns alert kwargs if thresholds are exceeded. The registry (`_CHECKER_REGISTRY`) maps rule type strings to checker instances, enabling dynamic lookup during engine execution.
+
+\noindent\textbf{Built-in Rule Types (13 total):}
+
+\begin{description}
+    \item[failed\_logins] Multiple failed SSH logins within a configurable time window (default: 5 failures in 5 min) — MITRE T1110/credential-access
+    \item[brute\_force] High volume of failed logins indicating brute force (default: 10 failures in 5 min) — MITRE T1110/credential-access
+    \item[high\_cpu] Sustained high CPU usage across 3 consecutive metric samples (default: 90\% threshold)
+    \item[high\_memory] Memory usage above threshold (default: 90\%)
+    \item[high\_disk] Disk usage above threshold (default: 85\%)
+    \item[service\_failure] A systemd service reported failure (default: 1 failure in 15 min)
+    \item[agent\_offline] Agent has not sent a heartbeat within threshold (staleness: 90 seconds)
+    \item[privilege\_escalation] Sudo or privilege escalation activity (default: 3 invocations in 5 min) — MITRE T1548.003/privilege-escalation
+    \item[root\_login] Direct root login detected (default: 1 login in 15 min) — MITRE T1078.003/initial-access
+    \item[ssh\_success\_after\_failures] Successful SSH login after multiple failures — likely compromised account — MITRE T1110/credential-access
+    \item[service\_stop] Critical service was stopped — possible attack or tampering — MITRE T1489/impact
+    \item[file\_integrity] Critical system file was modified — MITRE T1070.004/defense-evasion
+    \item[firewall\_block] Firewall blocked connection — possible scanning or attack — MITRE T1046/discovery
+    \item[network\_anomaly] Abnormal network connection volume — possible C2 or exfiltration — MITRE T1040/credential-access
+\end{description}
+
+The engine loop (`run_detection_for_host`) iterates over enabled `AlertRule` entries, looks up the registered checker, and calls `check()`. New rule types are added by registering a new `RuleChecker` subclass — no core engine modifications are required. The engine supports concurrent execution across hosts via async/await and maintains per-host isolation.
+
+\section{Correlation Engine}
+
+The correlation engine evaluates event sequences against three matcher algorithms to detect attack patterns that single-alert rules would miss (`backend/app/services/correlation_engine.py:59-113` and `backend/app/services/correlation/framework.py`):
+
+\begin{description}
+    \item[SequenceMatcher] Evaluates ordered events within a configurable time window. Example: failed $\rightarrow$ success $\rightarrow$ sudo = brute force pattern. Scoring includes +15\% privilege escalation bonus and +10\% high-volume bonus.
+    \item[CoOccurrenceMatcher] Performs order-independent set-subset checks. Example: service\_stop + agent\_disconnect indicates related infrastructure tampering.
+    \item[CrossHostMatcher] Groups same-attacker events across multiple hosts, identifying lateral movement via source\_ip or username correlation.
+\end{description}
+
+Confidence scoring is heuristic-based, ranging 0-100, computed from base rule confidence, severity bonuses, timeline compression bonuses, and cross-host impact bonuses. The engine serializes correlation runs per host using PostgreSQL advisory locks to prevent duplicate results.
+
+Default correlation rules include:
+\begin{itemize}
+    \item Brute force sequence: 3+ failed logins followed by successful login within 10 minutes
+    \item Lateral movement: Same source IP triggering failed logins on 3+ distinct hosts within 30 minutes
+    \item Privilege escalation chain: ssh\_login\_failure $\rightarrow$ sudo\_usage $\rightarrow$ root\_login
+    \item Co-occurrence: service\_failure + agent\_offline within 15 minutes
+\end{itemize}
+
+\section{Offense Engine}
+
+The QRadar-style offense engine groups related alerts into coherent investigation clusters (`backend/app/services/offense_engine.py:60-124`):
+
+\begin{itemize}
+    \item \textbf{Offense Clustering:} Alerts within a 30-minute window on the same host are grouped under a sequential offense number. Risk level escalates based on the highest severity alert in the cluster (critical $>$ high $>$ medium $>$ low).
+    \item \textbf{Related Entities:} Offenses track related hosts (as a list) and related users (unique usernames from auth events). The `_track_user` function maintains the related\_users list across linked alerts.
+    \item \textbf{Timeline Reconstruction:} Each offense maintains a timeline of entries (alert-type or event-type), sorted chronologically, limited to the most recent 500 entries. Timeline entries include type, ID, title, severity, timestamp, and source IP.
+    \item \textbf{Offense-to-Incident Promotion:} Critical or high-risk offenses can be promoted to incidents, which add notes fields, alert ID lists, event ID lists, and status tracking (open $\rightarrow$ investigating $\rightarrow$ resolved).
+\end{itemize}
+
+The offense engine processes new alerts via `process_new_alert`, links alerts to existing offenses, or creates new offenses with auto-generated offense numbers via a PostgreSQL sequence (`nextval('offense_number_seq')`).
+
+\section{Attack Timeline Reconstruction}
+
+The timeline engine (`backend/app/services/timeline.py:20-107`) builds AttackTimeline entities from correlated security events:
+
+\begin{itemize}
+    \item Event filtering: Only event types listed in `ATTACK_EVENT_TYPES` (the keys of EVENT\_MITRE\_MAP) are considered for timeline building.
+    \item Chain title generation: `_chain_title` produces descriptive titles such as "Potential Attack Chain: Brute Force $\rightarrow$ Access $\rightarrow$ Escalation" or "Potential Brute Force Activity" based on event type composition.
+    \item Confidence scoring: `_chain_confidence` assigns a 0-100 score based on failure count (+\text{5 per failure}, capped at 25), successful login (+20), privilege escalation (+15), and compressed timeline bonus (+10 if span $<$ 15 min).
+    \item Fingerprinting: Each timeline receives a SHA-256 fingerprint based on host ID, title, and minute-level timestamp bucket, enabling existing timeline detection and updates.
+    \item Minimum events: Timelines require $\ge$ 2 attack-event-type entries; fewer events produce no timeline.
+\end{itemize}
+
+Timelines are stored with severity classification: critical (confidence $\ge$ 80), high (confidence $\ge$ 60), medium (otherwise). The engine supports retrieval by host ID or global ordering by creation time, with a configurable limit of 50 timelines per query.
+
+\section{Modules and Libraries}
+
+The implementation comprises the following major modules:
+
+\begin{longtable}{|l|l|l|}
+\hline
+\textbf{Module} & \textbf{Member Responsibility} & \textbf{Key Files} \\
+\hline
+\textbf{Backend API} & Member 1 (Core SIEM) & `backend/app/routers/` (40 routers) \\
+\hline
+\textbf{Detection \& Correlation} & Member 1 & `backend/app/services/detection.py`, `correlation_engine.py`, `offense_engine.py` \\
+\hline
+\textbf{UEBA \& Analytics} & Member 1 & `backend/services/ueba.py`, `risk_trends.py`, `threat_score.py` \\
+\hline
+\textbf{Frontend Dashboard} & Member 2 & `frontend/app/(dashboard)/` (28 pages), `frontend/components/` (130+ components) \\
+\hline
+\textbf{Linux Agent} & Member 3 & `agent/agent/collector/`, `agent/agent/sender.py`, `agent/agent/buffer.py` \\
+\hline
+\textbf{Deployment} & Member 4 & `deploy/`, `helm/`, `k8s/`, `scripts/` (26 scripts) \\
+\hline
+\end{longtable}
+
+\section{Frontend Implementation}
+
+The Next.js 14 dashboard implements 28+ pages across the following domains:
+
+\begin{description}
+    \item[Auth Pages:] /login, /register, /forgot-password, /reset-password, /accept-invite
+    \item[Alerts Page] Alert listing with filtering, bulk actions, status mutation, and investigation pane
+    \item[Offenses Page] Offense grouping with detail view, summary cards, timeline, and incident promotion
+    \item[Incidents Page] Incident creation, management, notes, and alert/event associations
+    \item[MITRE Page] ATT\&CK heatmap with tactic coverage summary, technique drill-down, and animated metric cards
+    \item[UEBA Page] Baseline anomaly viewer with z-score severity, dismissal/resolution controls
+    \item[Hosts Page] Host list with risk scores, enrollment status, and metrics browser
+    \item[Events Page] Event browser with filtering, export, and search capabilities
+    \item[Analytics Page] KPI cards, severity breakdown, alert trend charts, and system health panel
+    \item[Offense Detail] Inline detail view with summary cards, actions, timeline, alerts list, and events list
+    \item[Incident Detail] Inline detail view with actions, alerts list, and notes management
+    \item[Simulation (Attack Lab) Page] Preset and custom attack injection, kill-chain preview, live progress, results, and run history
+    \item[Timeline Page] Attack timeline reconstruction with chain visualization
+    \item[Settings Page] User, notification, and system configuration
+    \item[AI Assistant] Floating copilot panel for alert explanation, natural language search, and investigation summaries
+\end{description}
+
+The frontend uses TanStack Query for data fetching, WebSocket real-time updates, and TailwindCSS with dark mode for the SOC aesthetic. 130+ React components include design-system components (Card, Pagination, LoadingState, ErrorState, FilterChip), form components, data-display components, and UI primitives.
+
+\section{Agent Implementation}
+
+The Linux agent implements telemetry collection, metric extraction, and event transmission:
+
+\begin{description}
+    \item[Collector] Reads system auth logs (journalctl, /var/log/auth.log), CPU/memory/disk metrics via psutil, and network connection data. Events are batched every 10 seconds.
+    \item[HMAC Signing] Each transmission includes an X-API-Key header and an X-Request-Signature computed as HMAC-SHA256(key, nonce\|timestamp\|payload) with per-request nonce validation at the backend gatekeeper.
+    \item[Offline Buffer] SQLite local buffer at `/var/lib/securi/buffer.db` stores events when the network is down. Auto-replay on reconnection sends buffered events with exponential backoff. Maximum buffer size is configurable.
+    \item[Heartbeat] Agents send a 30-second heartbeat to `/api/v1/agent/heartbeat`; the backend uses staleness (90 seconds without heartbeat) to mark hosts as offline and trigger the agent\_offline detection rule.
+    \item[Metrics] CPU\%, memory\%, disk\%, and network connection counts are reported as Metric model entries, stored in PostgreSQL and used by high\_cpu, high\_memory, and high\_disk detection rules.
+\end{description}
+
+\section{API Communication}
+
+The platform exposes 183+ API endpoints across 37 routers under the `/api/v1` prefix. Key router categories include:
+
+\begin{longtable}{|l|l|}
+\hline
+\textbf{Router} & \textbf{Purpose} \\
+\hline
+auth & Login, register, logout, password reset, MFA, OIDC/SSO callback \\
+hosts & Host enrollment, status, metrics browsing \\
+agent & Agent enrollment, heartbeat, event ingestion, offline buffer management \\
+events & Event CRUD, export, MITRE filtering, deduplication status \\
+alerts & Alert list, detail, bulk status mutation, feedback, IOC lookup \\
+alert\_rules & Detection rule CRUD, enable/disable toggles \\
+siem & SIEM query execution with field-based filtering \\
+search & Global search across events, alerts, offenses, incidents \\
+analytics & Dashboard KPI stats, charts, metrics, daily statistics \\
+audit & Audit log viewer with chain verification \\
+offenses & Offense listing, detail, status mutation, incident promotion \\
+incidents & Incident management, promotion from offenses, notes \\
+correlation\_rules & Correlation rule CRUD, enabled/disabled state \\
+mitre & MITRE technique browser, technique drill-down API \\
+threat\_scores & Host threat score history, risk trend data \\
+ueba & UEBA summary, anomaly listing, manual scan trigger, severity update \\
+notifications & Notification settings, rules, email/Telegram/Slack configuration \\
+assistant & AI copilot endpoints for alert explanation, NL search \\
+reports & Compliance report generation (SOC2, ISO27001, HIPAA) \\
+reference\_sets & Reference set CRUD, IOC list management \\
+building\_blocks & Reusable SIEM query building blocks \\
+playbooks & SOAR playbook management, playbook run history \\
+saved\_searches & Saved search CRUD, alert scheduling \\
+timeline & Attack timeline listing and detail \\
+system & System health, pipeline status, host status overview \\
+users & User management (admin only) \\
+ws & WebSocket connection management \\
+system & System health, pipeline status, host status overview \\
+ioc & VirusTotal IOC enrichment lookup \\
+telemetry & Platform telemetry, ingest statistics \\
+dashboard & Dashboard layout persistence \\
+metrics & Detailed metrics collection and reporting \\
+maintenance & Maintenance window management \\
+ioc & IOC lookup (VirusTotal integration) \\
+telemetry & Platform telemetry data \\
+\hline
+\end{longtable}
+
+\section{Algorithms and Core Workflows}
+
+\subsection{Detection Algorithm}
+
+The detection engine iterates over enabled `AlertRule` entries per host and dispatches to the registered `RuleChecker`:
+
+\begin{verbatim}
+for each enabled AlertRule:
+    checker = registry[rule.rule_type]
+    result = checker.check(db, host, rule, now)
+    if result is not None:
+        create_alert(db, host.id, result, rule.severity, rule.id, ...)
+\end{verbatim}
+
+Each checker implements condition querying via SQLAlchemy `select()` with `func.count()` aggregation, comparing the result against `rule.threshold`. Results include title, description, optional MITRE technique/tactic, and confidence score.
+
+\subsection{Correlation Algorithm}
+
+The correlation engine loads recent events (ordered by timestamp) and evaluates each enabled `CorrelationRule` against the three matcher algorithms:
+
+\begin{verbatim}
+for each enabled CorrelationRule:
+    matcher = _matcher_for_rule(rule)  # sequence / co_occurrence / cross_host
+    matched = matcher.matches(events, rule)
+    if matched:
+        confidence = matcher.score(matched, rule)
+        create_alert(...)  # with confidence score
+        store CorrelationResult(event_ids, confidence)
+\end{verbatim}
+
+Matcher scoring incorporates base rule confidence, severity bonuses, timeline compression bonuses, and cross-host impact bonuses, capped at 100.
+
+\subsection{Offline Buffer Workflow}
+
+\begin{enumerate}
+    \item Agent collects events locally (auth logs, metrics)
+    \item When network is down, events are written to SQLite buffer
+    \item Periodic reconnection check; on network restore, buffered events are sent
+    \item Backend validates signatures and processes events normally
+    \item Deduplication uses SHA-256(host\_id\|timestamp\|event\_type) fingerprint
+\end{enumerate}

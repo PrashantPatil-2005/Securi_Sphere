@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/ui/Panel";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { Button } from "@/components/ui/Button";
+import { useLiveAttackBanner } from "./LiveAttackBanner";
+import { AlertTriangle } from "lucide-react";
 
 interface Props {
   enabled: boolean;
@@ -38,6 +39,9 @@ export function AttackLabHeader({ enabled, showPurge, onPurge, purgePending }: P
           ) : undefined
         }
       />
+      {enabled && (
+        <LiveAttackBanner hostName="Attack Lab" hostId="attack-lab" />
+      )}
       {!enabled && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />

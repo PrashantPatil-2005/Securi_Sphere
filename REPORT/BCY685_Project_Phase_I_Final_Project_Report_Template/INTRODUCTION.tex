@@ -1,0 +1,62 @@
+\chapter{INTRODUCTION}
+
+Securi Sphere is a full-stack Security Information and Event Management (SIEM) platform designed for real-time monitoring, threat detection, and security incident response across small to medium Linux fleets. Inspired by IBM QRadar's 3-layer pipeline architecture, the platform provides an affordable, open-source alternative for educational and organizational security operations centers. The system collects telemetry from Linux agents, processes events through a detection and correlation engine, and presents findings through a modern web-based dashboard built with Next.js and TypeScript.
+
+The platform addresses the growing need for continuous security monitoring in environments where dedicated SOC infrastructure is cost-prohibitive. By combining agent-based telemetry collection, rule-based detection, correlation-driven offense grouping, and UEBA anomaly detection, Securi Sphere delivers a complete SIEM workflow from data ingestion to incident triage.
+
+The platform operates on a distributed architecture comprising three primary components: Linux agents, a FastAPI-based backend, and a Next.js frontend dashboard. Agents running on target hosts collect system logs, authentication events, metric data, and network flow information. Telemetry is transmitted via HTTPS with HMAC-SHA256 signing to ensure integrity and authenticity. The backend ingests, validates, normalizes, and stores events in PostgreSQL, with optional OpenSearch indexing for full-text search. Real-time updates are pushed to the frontend via WebSocket using Redis pub/sub.
+
+The detection engine employs an extensible rule registry pattern, where individual checker classes evaluate event streams against threshold-based, sequence, and co-occurrence criteria. Detected anomalies are grouped into QRadar-style offenses with attack timeline reconstruction, enabling analysts to follow correlated event sequences from initial compromise through lateral movement and impact.
+
+\section{Project Overview}
+
+The Securi Sphere platform's architecture spans the complete SIEM stack, from edge telemetry collection to central analysis and visualization. This Phase I report documents the project's implementation through the BCY685 Project Phase I framework, covering system design, implementation details, and verification results. The platform is designed for Docker Compose deployment on a single host with PostgreSQL and Redis, making it accessible for educational institutions, research laboratories, and small-to-medium organizations that cannot justify enterprise SIEM licensing costs.
+
+\section{Problem Statement}
+
+Traditional SIEM solutions for enterprises are prohibitively expensive, complex to deploy, and often overkill for small-scale or educational environments. Commercial platforms such as IBM QRadar, Splunk, or Micro Focus ArcSight require significant licensing fees, specialized hardware, and dedicated personnel for deployment, operation, and maintenance. Open-source alternatives, while freely available, typically demand manual configuration, lack integrated correlation engines, and provide limited out-of-the-box visualization capabilities. Consequently, security teams in resource-constrained environments face fragmented visibility, manual correlation overhead, and delayed incident response times.
+
+The Securi Sphere project was initiated to bridge this gap by providing a complete, lightweight SIEM platform deployable via Docker Compose on standard infrastructure. The platform implements the same 3-layer pipeline model as enterprise QRadar-style architectures—collection, processing, and search—while remaining accessible for educational, research, and small-scale operational use. The project encompasses agent-based telemetry collection, rule-based detection, correlation-driven offense grouping, UEBA anomaly detection, MITRE ATT\&CK visualization, and a complete SOC dashboard web interface.
+
+\section{Objectives}
+
+The primary objectives of the Securi Sphere project are:
+
+\begin{itemize}
+    \item Develop a lightweight Linux agent for system telemetry collection, including log monitoring, metric extraction, and HMAC-signed event transmission with offline SQLite buffering when network connectivity is unavailable.
+    \item Implement a rule-based detection engine with extensible checker registration, supporting 14 built-in rule types covering authentication failures, service integrity, system health, and network anomalies, with dynamic rule addition via the ABC-based registry pattern.
+    \item Build a correlation engine with three matcher algorithms (sequence matching for ordered event patterns, co-occurrence matching for order-independent event sets, and cross-host matching for lateral movement detection) to group related alerts into meaningful offenses.
+    \item Design a QRadar-style offense engine with configurable 30-minute clustering windows, risk-level escalation based on alert severity, and attack timeline reconstruction with MITRE technique assignment.
+    \item Implement UEBA (User \& Entity Behavior Analytics) with rolling daily baselines, z-score thresholding, and severity classification (critical: z$\geq$5, high: z$\geq$4, medium: z$\geq$3, low: z$\geq$threshold), with configurable warm-up periods for baseline establishment.
+    \item Provide a modern SOC dashboard with real-time WebSocket updates, MITRE ATT\&CK heatmapping and technique-level drill-down, incident promotion from offenses, UEBA anomaly viewing, and investigation workspace integration.
+    \item Ensure authentication and authorization via JWT (HS256/RS256) with refresh token rotation, TOTP-based MFA, RBAC enforcement (admin/analyst/viewer roles), security headers, tamper-evident audit logging with SHA-256 hash chains, and session management with concurrent session limits.
+\end{itemize}
+
+\section{Scope and Boundaries}
+
+The project scope encompasses the full SIEM pipeline from agent telemetry collection through to analyst dashboard visualization. Specific focus areas include:
+
+\begin{itemize}
+    \item Linux agent telemetry: auth logs (journalctl, /var/log/auth.log), system metrics (CPU\%, memory\%, disk\%) via psutil, process events, and network flow data. Events are batched every 10 seconds; heartbeats every 30 seconds. SQLite offline buffer stores events when the network is down; auto-replay on reconnection with exponential backoff. Maximum configurable buffer size supports up to 50,000 buffered events.
+    \item Detection: 14 built-in rule types (failed\_logins, brute\_force, high\_cpu, high\_memory, high\_disk, service\_failure, agent\_offline, privilege\_escalation, root\_login, ssh\_success\_after\_failures, service\_stop, file\_integrity, firewall\_block, network\_anomaly) with ABC-based checker registry pattern enabling dynamic rule addition without core engine modifications.
+    \item Correlation: sequence matching (ordered events within time window), co-occurrence matching (order-independent set-subset check), and cross-host matching (same attacker across multiple hosts via source\_ip or username correlation). Configurable clustering windows for offense grouping.
+    \item Offense grouping: configurable temporal clustering (default 30 minutes), related entity tracking (hosts, unique usernames from auth events), timeline persistence (limited to 500 entries per offense), risk-level escalation (critical $>$ high $>$ medium $>$ low), and offense-to-incident promotion with notes and status tracking (open $\rightarrow$ investigating $\rightarrow$ resolved).
+    \item UEBA: per-host and per-user baseline computation from rolling daily metrics, z-score anomaly detection with configurable threshold (default 2.5), severity classification, and manual scan trigger for baseline recalculation.
+    \item Dashboard: 29+ pages covering alerts, offenses, incidents, MITRE ATT\&CK heatmapping and technique drill-down, UEBA anomaly viewing, incident management, host risk browsing, event search and export, analytics KPI panels, timeline reconstruction, system health, settings, and AI-assisted investigation assistance.
+    \item API: 40 routers exposing 183+ endpoints under the `/api/v1` prefix for programmatic access, data export, and integration. Router categories include auth, agents, events, alerts, alert\_rules, siem, search, analytics, audit, offenses, incidents, correlation\_rules, mitre, threat\_scores, ueba, notifications, assistant, reports, reference\_sets, building\_blocks, playbooks, saved\_searches, timeline, system, users, ws, ioc, telemetry, and dashboard.
+\end{itemize}
+
+The project does not include Windows-specific agent features (beyond limited Windows event forwarding), network appliance integration, or hardware-based packet capture. These are noted as potential future enhancements.
+
+\section{Contributions}
+
+The Securi Sphere project demonstrates a complete, full-stack SIEM implementation across four team members' areas of responsibility:
+
+\begin{description}
+    \item[Member 1 -- Core SIEM / Backend:] FastAPI backend with 32 SQLAlchemy models, 40 API routers, detection engine with 14 registered rule types, correlation engine with three matcher algorithms, offense engine with 30-minute clustering and risk escalation, UEBA module with z-score anomaly detection, MITRE ATT\&CK heatmap and drill-down, audit logging with SHA-256 hash-chain integrity, JWT authentication with refresh token rotation and TOTP MFA, RBAC enforcement (admin/analyst/viewer), and WebSocket real-time updates via Redis pub/sub.
+    \item[Member 2 -- Frontend \& Dashboard:] Next.js 14 dashboard with 29 pages, 130+ React components, TailwindCSS dark mode optimized for SOC workflows, real-time WebSocket feeds, virtualized and responsive design, and page domains including alerts, offenses, incidents, MITRE, UEBA, hosts, events, analytics, timeline, system, settings, AI assistant, simulation lab, and profile.
+    \item[Member 3 -- Linux Agent:] Python-based collector reading system auth logs (journalctl, /var/log/auth.log), metric extraction via psutil, HMAC-SHA256 signed event transmission via HTTPS with per-agent API key and nonce validation, SQLite offline buffer at `/var/lib/securi/buffer.db` (configurable capacity up to 50,000 events), 30-second heartbeat protocol with 90-second staleness threshold, and metrics reporting (CPU\%, memory\%, disk\%, network connection counts).
+    \item[Member 4 -- Deployment \& Testing:] Docker Compose production configuration with PostgreSQL and Redis, Helm chart for Kubernetes orchestration, 29 deployment scripts, CI/CD pipelines via GitHub Actions (74 backend test files, 10 agent test files, 28 frontend test files including 20 unit and 8 E2E), k6 load testing validating 100+ events/second ingestion and WebSocket reconnection under 3 seconds, and comprehensive project documentation.
+\end{description}
+
+The project validates detection across 14 rule types, correlation through three matcher algorithms, UEBA baseline construction with z-score thresholding, MITRE ATT\&CK heatmap accuracy, and full-stack integration from agent event ingestion through dashboard visualization. Test coverage spans the detection pipeline, correlation engine, offense grouping, UEBA analytics, MITRE mapping, API endpoints, authentication and authorization, infrastructure components, and UI workflows across all three platform tiers.

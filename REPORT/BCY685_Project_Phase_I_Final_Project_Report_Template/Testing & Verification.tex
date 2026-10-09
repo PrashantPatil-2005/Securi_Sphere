@@ -1,0 +1,70 @@
+%==================================Testing & Verification.tex=============================
+\chapter{TESTING AND VERIFICATION}
+\label{ch:testing_verification}
+
+\section{Backend Test Suite}
+The FastAPI backend is validated by 74 test files encompassing async unit tests, integration tests, and property-based test suites. These cover the full component spectrum:
+
+\begin{description}
+    \item[\textbf{Detection}:] test\_detection.py, test\_detection\_matrix.py — validates all 14 registered rule types (failed\_logins, brute\_force, high\_cpu, high\_memory, high\_disk, service\_failure, agent\_offline, privilege\_escalation, root\_login, ssh\_success\_after\_failures, service\_stop, file\_integrity, firewall\_block, network\_anomaly) against seeded event data and threshold verification.
+    \item[\textbf{Correlation}:] test\_correlation\_validation.py, test\_correlation\_matchers.py — exercises the three matcher algorithms (sequence, co-occurrence, cross-host) with configurable windows and verifies offense grouping correctness.
+    \item[\textbf{Offense Engine}:] test\_offense\_engine.py, test\_offense\_timeline.py — tests 30-minute clustering window, risk escalation logic, timeline reconstruction, and offense-to-incident promotion workflows.
+    \item[\textbf{UEBA}:] test\_ueba.py — validates rolling 7-day baseline construction, z-score thresholding (default 2.5), and severity classification (critical: z$\geq$5, high: z$\geq$4, medium: z$\geq$3, low: z$\geq$threshold).
+    \item[\textbf{MITRE Mapping}:] test\_mitre.py, test\_mitre\_drilldown.py — verifies event-to-ATT\&CK technique mapping, heatmap data correctness, and technique drill-down API responses.
+    \item[\textbf{API \& Auth}:] test\_api.py, test\_rbac.py, test\_mfa.py, test\_oidc.py, test\_security.py — covers JWT authentication (HS256/RS256), refresh token rotation, TOTP-based MFA, role-based access control, and security header enforcement.
+    \item[\textbf{Infrastructure}:] test\_csp.py, test\_redis\_integration.py, test\_concurrency\_pg.py, test\_circuit\_breaker.py, test\_middleware.py — validates content security policy, Redis integration, PostgreSQL connection concurrency, circuit breaker patterns, and middleware chain correctness.
+    \item[\textbf{Data Management}:] test\_ingestion.py, test\_event\_payload.py, test\_ioc\_lookup.py, test\_export\_service.py, test\_backup.py, test\_recovery\_rate\_limit.py — tests event ingestion pipelines, IOC enrichment, service export, backup recovery, and rate limiting.
+    \item[\textbf{Concurrency \& Reliability}:] test\_concurrency\_pg.py, test\_circuit\_breaker.py, test\_shutdown.py, test\_startup\_shutdown.py — verifies graceful shutdown/startup, database concurrency safety, and pipeline reliability under failure conditions.
+    \item[\textbf{Database}:] test\_db\_pool.py, test\_read\_replica.py, test\_migrations.py — validates connection pool sizing, read replica functionality, and Alembic migration versioning.
+\end{description}
+
+Backend test functions total approximately 500+ across these 74 test files, exercising async execution paths, database transaction management, WebSocket event broadcasting, outbox pattern side effects, and error recovery scenarios.
+
+\section{Agent Test Suite}
+The Python Linux agent is validated by 10 test files covering the complete agent lifecycle:
+
+\begin{description}
+    \item[\textbf{Collector}:] test\_collector\_events.py — validates system log reading (auth.log, journald), psutil metric extraction (CPU\%, memory\%, disk\%), and network connection data capture at configured intervals (10s metrics, 30s heartbeats).
+    \item[\textbf{Buffer}:] test\_buffer.py — validates SQLite offline buffer operations: event storage at `/var/lib/securi/buffer.db`, maximum buffer size configuration (default 50,000 events), auto-replay on reconnection with exponential backoff, and buffer overflow handling.
+    \item[\textbf{Sender}:] test\_sender.py — validates HTTPS event transmission with HMAC-SHA256 signing (per-agent API key, per-request nonce, timestamp skew tolerance of 5 minutes), retry logic, and failure handling.
+    \item[\textbf{Integrity}:] test\_integrity.py — validates HMAC verification at the backend gatekeeper, nonce freshness enforcement (5-minute single-use), and timestamp skew detection.
+    \item[\textbf{Config}:] test\_config.py — validates agent configuration loading, threshold defaults, heartbeat interval customization, and offline buffer path configuration.
+    \item[\textbf{Metrics}:] Validates CPU%, memory%, disk% reporting as Metric model entries, used by high\_cpu, high\_memory, and high\_disk detection rules.
+\end{description}
+
+Agent test functions total approximately 67 across these 10 test files, covering collector event parsing, buffer persistence, HMAC signature validation, heartbeat staleness detection (90-second threshold), and integrity checks.
+
+\section{Frontend Test Suite}
+The Next.js 14 TypeScript frontend is validated by 28 test files:
+
+\begin{description}
+    \item[\textbf{Unit Tests} (20 files):] test\_alerts.test.tsx, test\_mitre.test.tsx, test\_offenses-incidents.test.tsx, test\_hosts.test.tsx, test\_events.test.tsx, test\_ueba.test.tsx, test\_timeline.test.tsx, test\_reports.test.tsx, test\_settings.test.tsx, test\_buildQuery.test.ts, test\_cn.test.ts, test\_PaginationBar.test.tsx, test\_SortSelect.test.tsx, test\_dashboard.test.tsx, test\_api-error.test.tsx, test\_websocket-alerts.test.tsx, test\_smoke.test.tsx, test\_cursorPaginationBar.test.tsx, test\_timeline.test.tsx, test\_ueba.test.tsx — covers dashboard page rendering, component interaction, API integration, WebSocket alerts handling, and user workflows.
+    \item[\textbf{E2E Tests} (8 files):] test\_intel-crud.spec.ts, test\_invite-flow.spec.ts, test\_lab-flow.spec.ts, test\_maintenance-flow.spec.ts, test\_offense-promotion.spec.ts, test\_smoke.spec.ts, test\_threat-scores.spec.ts, test\_maintenance-flow.spec.ts — validates full user flows including MITRE technique CRUD, agent invitation, attack lab injection and progress tracking, offense promotion from alerts, basic smoke scenarios, threat-score visualization, and maintenance window management.
+\end{description}
+
+Frontend test coverage spans 29 dashboard pages, MITRE heatmap browsing, UEBA anomaly viewing, offense management workflows, and real-time WebSocket update verification. All tests use TypeScript type safety and are run via Jest with React Testing Library.
+
+\section{Continuous Integration and Load Testing}
+The GitHub Actions CI pipeline automates test execution on every push and pull request:
+
+\begin{description}
+    \item[\textbf{Backend CI:}] Python version matrix (3.11, 3.12), dependency installation, 74-file test suite execution, SQLAlchemy model migration validation, and FastAPI startup/shutdown health checks.
+    \item[\textbf{Frontend CI:}] Node.js version matrix, npm dependency installation, 20 unit test execution, 8 E2E test execution via Playwright, and TypeScript type-checking.
+    \item[\textbf{Load Testing:}] k6 load tests validate sustained event ingestion of 100+ events/second per host, WebSocket reconnection under network disruption (target: <3s recovery), and dashboard page load performance under concurrent analyst sessions.
+    \item[\textbf{Security Testing:}] Automated security header verification, CORS origin validation, rate limiting enforcement, and TOTP MFA challenge-response testing.
+\end{description}
+
+\section{Verification Results Summary}
+
+\begin{longtable}{|l|l|l|}
+\hline
+\text{Component} & \text{Test Files} & \text{Coverage Description} \\
+\hline
+Backend & 74 & ~500+ test functions across detection, correlation, offense, UEBA, MITRE, API, infrastructure, and data management modules \\
+Agent & 10 & ~67 test functions covering collector, buffer, sender, integrity, config, and metrics modules \\
+Frontend & 28 & 20 unit test files + 8 E2E test files covering 29 dashboard pages, MITRE browsing, UEBA, and offense workflows \\
+\hline
+Total & 112 & ~567+ test functions across all three platform tiers \\
+\hline
+\end{longtable}
+\end{parameter>

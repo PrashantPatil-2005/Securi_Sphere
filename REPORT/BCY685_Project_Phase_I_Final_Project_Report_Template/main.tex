@@ -1,0 +1,114 @@
+\let\cleardoublepage\clearpage
+\documentclass[12pt,a4paper]{report}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+\usepackage{cite}
+\usepackage{framed}
+\usepackage{a4wide}
+\usepackage{float}
+\usepackage{epsfig}
+\usepackage{longtable}
+\usepackage{enumerate}
+\usepackage{afterpage}
+\usepackage{multirow}
+\usepackage{ragged2e}
+\usepackage{gensymb}
+\usepackage{amsfonts}
+\usepackage[left=2 cm,top=2 cm,right=2 cm,bottom= 2cm]{geometry}
+\usepackage{array}
+\usepackage{setspace}
+\usepackage{txfonts}
+\usepackage{lipsum}
+\usepackage{tikz}
+\usetikzlibrary{calc, positioning}
+\usepackage{subfiles} % Best loaded last in the preamble
+\usepackage{adjustbox}
+\newcommand{\Usefont}[1]{\fontfamily{#1}\selectfont}
+\usepackage{lscape} % for landscape tables
+\renewcommand{\baselinestretch}{1.7}
+\usepackage{xpatch}
+\usepackage{url}
+\usepackage{leqno}
+\usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{pdfpages}
+\usepackage{acronym}
+\usepackage{courier}
+\definecolor{color1}{HTML}{990505} %brown
+\definecolor{color2}{HTML}{2c72f5} %blue
+\definecolor{color4}{HTML}{c73d1e} %brown ---certificate
+\definecolor{color3}{HTML}{de0d0d} %{e00d0d} %{ed1c1c} %reddish brown
+
+\hyphenpenalty=5000
+\tolerance=1000
+\usepackage[nottoc]{tocbibind}
+\bibliographystyle{IEEEtran}
+\renewcommand{\bibname}{References}
+
+%********************************************************
+%*********************Figures*****************************
+% Save all figures in the folder figures and include them in your 
+% report using the command \includegraphics{figure-name}
+
+\graphicspath{{figures/}}
+
+
+\begin{document}
+\gdef \title{VISVESVARAYA TECHNOLOGICAL UNIVERSITY
+BELAGAVI - 590 018} % Project title
+%*******************************************************************
+% The font pages. The source tex files are there in the folder
+\include{coverpage} %Unless essential Do not edit this tex file
+
+
+%%********************Certificate*******************
+
+% To print name of only the seminar coordinator 1 in the certificate page
+\thispagestyle{empty}
+\include{certificate1} 
+
+% To print names of both the seminar coordinators in the certificate page
+%\include{certificate2} %Please uncomment this and comment the previous line
+
+%%***************************************************
+\thispagestyle{empty}
+\include{declaration}
+
+%%********************************Abstract***********************
+
+\pagenumbering{roman}
+\include{acknowledgement} 
+\include{abstract} 
+
+\thispagestyle{roman}
+\newpage
+
+%%**********************Table of Contents***********************
+
+\tableofcontents{}
+\thispagestyle{empty}
+\newpage
+\listoffigures
+\listoftables
+\cleardoublepage
+\setcounter{page}{1}
+\pagenumbering{arabic}
+
+%%********************Chapters**********
+
+\include{Introduction}
+\include{Literature Survey}
+\include{Problem Statement}
+\include{System Architecture}
+\include{Implementation}
+\include{Testing & Verification}
+\include{Conclusion & Future Enhancements}
+\include{Abbreviations}
+%%****This template uses IEEE bibliography style
+
+%%****This template uses IEEE bibliography style
+\include{reference}
+\end{document}

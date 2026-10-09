@@ -1,0 +1,85 @@
+%==================================Literature Survey.tex=============================
+\chapter{LITERATURE SURVEY}
+\label{ch:literature_survey}
+
+Two distinct but interrelated bodies of research contribute to the evolving landscape 
+of Security Information and Event Management (SIEM) and real-time threat detection.
+
+\section{Adaptive Thresholds and Rule-Based Detection in SIEM}
+Extensive research has been conducted on intrusion detection systems (IDS) and SIEM platforms 
+that employ threshold-based and rule-driven methodologies for threat identification. 
+Traditional approaches rely on static thresholds and manually tuned rule sets, which, 
+while effective for known attack patterns, struggle to adapt to evolving threat landscapes. 
+Recent work has explored adaptive threshold adjustment using statistical methods such as 
+z-score normalization and rolling percentiles, enabling dynamic sensitivity adjustment based 
+on baseline traffic behavior. The correlation of security events into meaningful offenses, 
+first popularized by QRadar's offense engine, has been studied extensively for its ability 
+to reduce alert fatigue by grouping related incidents into coherent attack narratives. 
+Research into correlation engine design has explored rule sequencing, temporal windowing, 
+and the tradeoff between detection precision and recall in high-volume event streams. 
+The SecuriSphere project implements a correlation engine with three matcher strategies 
+(event_id-based, script-based, and interval-based) that build upon these established 
+design patterns while providing configurable clustering windows for offense grouping.
+
+\section{MITRE ATT\&CK Mapping and Frameworks}
+The MITRE ATT\&CK framework has become a foundational taxonomy for mapping detected 
+security events to known adversary techniques and tactics. Research into automatic MITRE 
+mapping of IDS alerts and SIEM events has demonstrated significant improvement in 
+investigative efficiency when analysts can filter and search by technique coverage. 
+Heatmap visualizations of technique coverage enable rapid identification of gaps in 
+detection coverage and prioritize rule development. Studies have explored the use of 
+natural language processing to extract technique identifiers from unstructured event 
+descriptions, reducing manual labeling overhead. The SecuriSphere MITRE ATT\&CK panel 
+provides interactive technique heatmaps and drill-down capabilities, allowing analysts 
+to visualize detection coverage across the ATT\&CK matrix and identify under-monitored 
+tactics in real time.
+
+\section{UEBA and Behavior Analytics}
+User and Entity Behavior Analytics (UEBA) has emerged as a critical component for 
+detecting insider threats and compromised accounts through statistical anomaly detection. 
+Baseline models constructed from rolling daily or hourly activity metrics are compared 
+against real-time event streams, with anomalies flagged via z-score thresholding. 
+Research has established that baselines requiring a minimum number of observed days 
+before anomaly detection can achieve better precision-recall tradeoffs. The integration 
+of UEBA into SIEM platforms bridges the gap between point-in-time alert detection and 
+context-rich investigation, enabling analysts to correlate anomalous user behavior with 
+broader attack timelines. The SecuriSphere UEBA module constructs rolling baselines 
+for monitored entities and flags deviations using adaptive thresholding, supporting 
+the detection of compromised credentials and unusual data access patterns.
+
+\section{Correlation Engine Design and Offense grouping}
+Research into correlation engine design has explored rule sequencing, temporal windowing, 
+and the tradeoff between detection precision and recall in high-volume event streams. 
+The offense grouping paradigm, popularized by next-generation SIEM platforms, transforms 
+raw security events into actionable incidents through temporal and logical clustering. 
+Key design considerations include window duration selection, de-duplication strategies, 
+and the propagation of contextual metadata (such as MITRE techniques and risk scores) 
+through the offense lifecycle. The SecuriSphere correlation engine implements 30-minute 
+temporal clustering with script-based and event_id-based matching as alternative strategies, 
+providing configurable options for different deployment environments and threat profiles.
+
+\section{Summary and Gap Analysis}
+Collectively, these studies highlight the maturity of analytical techniques—statistical 
+thresholding, rule-based correlation, MITRE mapping, and UEBA—in security operations. 
+However, a noticeable gap exists in accessible, open-source SIEM deployments that 
+integrate rule-based detection, multi-strategy correlation, UEBA, and MITRE ATT\&CK 
+visualization within a single, unified stack suitable for educational or resource-constrained 
+environments. While enterprise-grade platforms (e.g., Splunk, IBM QRadar, Elastic SIEM) 
+offer extensive feature sets, they require significant licensing and infrastructure investment. 
+This project addresses that gap by providing a complete, Dockerized SIEM platform with 
+extensible detection (13 OpenSigma rule types), three-correlation matcher algorithms, 
+offense grouping with 30-minute temporal clustering, UEBA anomaly detection, and MITRE 
+ATT\&CK visualization, all within a unified Next.js frontend and FastAPI backend architecture 
+designed for horizontal scalability and educational deployment.
+
+\noindent\textbf{Key Contributions of This Project:}
+\begin{itemize}
+    \item Full-stack SIEM architecture spanning Linux agent, FastAPI backend, and Next.js frontend.
+    \item 13 OpenSigma-based detection rule types with pattern-matching extensibility.
+    \item Three-strategy correlation engine (event_id, script, interval-based) with configurable clustering.
+    \item 30-minute temporal offense grouping with MITRE ATT\&CK enrichment and risk scoring.
+    \item UEBA module with rolling baseline construction and z-score anomaly detection.
+    \item 28-page interactive dashboard covering threat intelligence, offenses, risk trends, and timelines.
+    \mbox{}\newline
+\end{itemize}
+\end{parameter>
