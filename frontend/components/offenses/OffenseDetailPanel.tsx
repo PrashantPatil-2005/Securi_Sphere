@@ -27,7 +27,13 @@ interface AiBrief {
 }
 
 const riskClass = (r: string) =>
-  r === "critical" ? "text-red-400" : r === "high" ? "text-orange-400" : r === "medium" ? "text-yellow-400" : "text-gray-400";
+  r === "critical"
+    ? "text-severity-critical"
+    : r === "high"
+      ? "text-severity-high"
+      : r === "medium"
+        ? "text-severity-medium"
+        : "text-severity-low";
 
 export function OffenseDetailPanel({
   selectedId,

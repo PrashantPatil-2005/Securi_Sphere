@@ -238,3 +238,30 @@ def test_sender_logging_throttle(sender, mock_session):
     sender._failure_log_suppressed = False
     sender.heartbeat()
     assert sender._failure_log_suppressed is True
+
+
+def test_sender_send_flows_empty_is_noop(sender, mock_session):
+    assert sender.send_flows([]) is True
+    mock_session.post.assert_not_called()
+
+
+def test_sender_send_flows_posts_to_flows_endpoint(sender, mock_session):
+    resp = MagicMock()
+    resp.status_code = 200
+    mock_session.post.return_value = resp
+    result = sender.send_flows([{"src_ip": "127.0.0.1", "dst_ip": "127.0.0.1", "dst_port": 22}])
+    assert result is True
+    path = mock_session.post.call_args.args[0]
+    assert path.endswith("/api/v1/agent/flows")
+
+
+def test_flush_sends_buffered_flows_to_flows_endpoint(tmp_buffer_db, sender, mock_session):
+    import agent.buffer as buf
+    buf.enqueue_flows([{"src_ip": "10.0.0.1", "dst_ip": "10.0.0.2", "dst_port": 80}])
+    resp = MagicMock()
+    resp.status_code = 200
+    mock_session.post.return_value = resp
+    sender.flush_buffer()
+    assert buf.queue_size() == 0
+    paths = [call.args[0] for call in mock_session.post.call_args_list]
+    assert any(p.endswith("/api/v1/agent/flows") for p in paths)

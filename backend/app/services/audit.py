@@ -37,6 +37,7 @@ async def log_audit(
     timestamp = datetime.now(timezone.utc)
     chain_seq, prev_hash = await _reserve_chain_slot(db)
     entry = AuditLog(
+        id=uuid.uuid4(),
         user_id=user_id,
         action=action,
         resource_type=resource_type,

@@ -6,59 +6,15 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useWsConnected } from "@/lib/websocket";
 import { LoadingState } from "@/components/design-system/LoadingState";
+import type { ComponentHealthResponse, ComponentHealthState } from "@/lib/types/system";
 
-interface SystemHealth {
-  status: string;
-  database: string;
-  redis: string;
-  environment: string;
-  search_backend: string;
-  job_queue_running: boolean;
-  job_queue_pending: number;
-  redis_configured: boolean;
-}
-
-interface HealthItemProps {
-  label: string;
-  status: "ok" | "degraded" | "error" | "unknown";
-}
-
-const statusDotColor: Record<string, string> = {
-  ok: "bg-success",
-  degraded: "bg-warning",
-  error: "bg-danger",
-  unknown: "bg-muted",
-};
-
-function StatusDot({ status }: { status: string }) {
-  const color = statusDotColor[status] || "bg-muted";
-
-  return (
-    <span className="relative flex h-2 w-2">
-      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-40 ${color}`} />
-      <span className={`relative inline-flex rounded-full h-2 w-2 ${color}`} />
-    </span>
-  );
-}
-
-function HealthItem({ label, status }: HealthItemProps) {
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-xs text-muted">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <StatusDot status={status} />
-        <span className="text-[11px] font-medium capitalize text-foreground">{status}</span>
-      </div>
-    </div>
-  );
-}
-
+/** Dashboard summary panel: per-component 4-state status from /system/health/components. */
 export const SystemHealthPanel = memo(function SystemHealthPanel() {
   const wsConnected = useWsConnected();
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["system-health"],
-    queryFn: () => api<SystemHealth>("/api/v1/system/health"),
-    staleTime: 60_000,
+    queryKey: ["system", "health", "components"],
+    queryFn: () => api<ComponentHealthResponse>("/api/v1/system/health/components"),
+    staleTime: 30_000,
     retry: 1,
   });
 
@@ -68,41 +24,44 @@ export const SystemHealthPanel = memo(function SystemHealthPanel() {
 
   if (isError || !data) {
     return (
-      <div className="space-y-1">
-        <HealthItem label="API" status="error" />
-        <HealthItem label="WebSocket" status={wsConnected ? "ok" : "error"} />
-        <HealthItem label="Database" status="unknown" />
-        <HealthItem label="Redis" status="unknown" />
-        <HealthItem label="Search" status="unknown" />
+      <div className="space-y-2">
+        <p className="text-xs text-muted">Component health unavailable.</p>
+        <p className="text-xs text-warning">WebSocket (local): {wsConnected ? "connected" : "disconnected"}</p>
         <button
           type="button"
           onClick={() => refetch()}
-          className="flex items-center gap-1.5 mt-2 text-[11px] text-muted hover:text-accent transition-colors"
+          className="flex items-center gap-1.5 text-[11px] text-muted hover:text-accent transition-colors"
         >
           <RefreshCw className="w-3 h-3" />
-          Retry health check
+          Retry component health
         </button>
       </div>
     );
   }
 
-  const dbStatus = data.database === "connected" ? "ok" : data.database === "degraded" ? "degraded" : "error";
-  const redisStatus = !data.redis_configured
-    ? "unknown"
-    : data.redis === "connected"
-      ? "ok"
-      : "degraded";
-  const searchStatus = data.search_backend === "opensearch" ? "ok" : "ok";
-  const queueStatus = data.job_queue_running ? "ok" : "degraded";
+  const dotColor: Record<ComponentHealthState, string> = {
+    healthy: "bg-success",
+    degraded: "bg-warning",
+    unavailable: "bg-danger",
+    unknown: "bg-muted",
+  };
 
   return (
     <div className="space-y-0.5">
-      <HealthItem label="API" status="ok" />
-      <HealthItem label="WebSocket" status={wsConnected ? "ok" : "error"} />
-      <HealthItem label="Database" status={dbStatus} />
-      <HealthItem label="Redis" status={redisStatus} />
-      <HealthItem label="Search" status={searchStatus} />
-      <HealthItem label="Job Queue" status={queueStatus} />
+      {data.components.map((c) => (
+        <div key={c.id} className="flex items-center justify-between py-1.5">
+          <span className="text-xs text-muted">{c.name}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span
+                className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-40 ${dotColor[c.status]}`}
+              />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${dotColor[c.status]}`} />
+            </span>
+            <span className="text-[11px] font-medium capitalize text-foreground">{c.status}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 });

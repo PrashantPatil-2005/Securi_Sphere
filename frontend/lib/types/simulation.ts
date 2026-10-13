@@ -22,6 +22,7 @@ export interface Scenario {
   steps: ScenarioStep[];
   expected_alerts: string[];
   expected_outcomes: string[];
+  notes?: string;
 }
 
 export interface ScenariosResponse {
@@ -45,10 +46,33 @@ export interface CustomSimulationStep {
   description?: string | null;
 }
 
+export type SimulationPace = "instant" | "stream";
+
+export interface SimulationRunResetResult {
+  message: string;
+  run_id: string;
+  events_deleted: number;
+  alerts_deleted: number;
+  timelines_deleted: number;
+  offense_events_deleted: number;
+  offenses_deleted: number;
+}
+
+export interface SimulationAlert {
+  id: string;
+  title: string;
+  severity: string;
+  rule_type?: string | null;
+  mitre_tactic?: string | null;
+  mitre_technique_id?: string | null;
+}
+
 export interface CustomSimulationRequest {
   host_id: string;
   name: string;
   steps: CustomSimulationStep[];
+  pace?: SimulationPace;
+  duration_seconds?: number | null;
 }
 
 export interface SimulationRunResult {
@@ -62,6 +86,9 @@ export interface SimulationRunResult {
   alert_ids: string[];
   timeline_ids: string[];
   offense_ids: string[];
+  incident_ids: string[];
+  alerts: SimulationAlert[];
+  expected_alerts: string[];
 }
 
 export interface SimulationRunSummary {
@@ -88,9 +115,12 @@ export interface SimulationRunDetail extends SimulationRunSummary {
   alert_ids: string[];
   timeline_ids: string[];
   offense_ids: string[];
+  incident_ids: string[];
+  alerts: SimulationAlert[];
+  expected_alerts: string[];
 }
 
-export type AttackLabTab = "presets" | "custom" | "history";
+export type AttackLabTab = "presets" | "custom" | "history" | "live" | "replay";
 
 export interface CustomStepDraft {
   id: string;

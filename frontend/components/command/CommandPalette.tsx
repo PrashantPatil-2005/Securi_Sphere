@@ -25,6 +25,7 @@ import {
   ScrollText,
   Settings,
   User,
+  UserSearch,
 } from "lucide-react";
 import { Dialog } from "@/components/ui/Dialog";
 import { canAccessRoute, useUser } from "@/lib/hooks/useUser";
@@ -67,7 +68,7 @@ export function CommandPalette() {
   const items: CommandItem[] = useMemo(() => {
     const all: CommandItem[] = [
       { id: "dash", label: "Go to Dashboard", path: "/", icon: LayoutDashboard, action: () => navigate("/"), keywords: ["home", "overview"] },
-      { id: "analytics", label: "Go to Analytics", path: "/analytics", icon: BarChart3, action: () => navigate("/analytics"), keywords: ["siem", "ueba", "charts"] },
+      { id: "analytics", label: "Go to Analytics", path: "/analytics", icon: BarChart3, action: () => navigate("/analytics"), keywords: ["siem", "charts", "kpi"] },
       { id: "threat-scores", label: "Threat score leaderboard", path: "/threat-scores", icon: ShieldAlert, action: () => navigate("/threat-scores"), keywords: ["risk", "ranking", "hosts"] },
       { id: "metrics", label: "Go to Metrics", path: "/metrics", icon: Gauge, action: () => navigate("/metrics"), keywords: ["host metrics"] },
       { id: "hosts", label: "Go to Hosts", path: "/hosts", icon: Server, action: () => navigate("/hosts"), keywords: ["add host", "enroll"] },
@@ -81,8 +82,10 @@ export function CommandPalette() {
       { id: "mitre", label: "Go to MITRE ATT&CK", path: "/mitre", icon: Target, action: () => navigate("/mitre"), keywords: ["attack", "techniques", "heatmap"] },
       { id: "timeline", label: "Go to Timeline", path: "/timeline", icon: Clock, action: () => navigate("/timeline"), keywords: ["attack chain", "replay"] },
       { id: "network", label: "Go to Network", path: "/network", icon: Network, action: () => navigate("/network"), keywords: ["topology", "graph"] },
+      { id: "ueba", label: "Go to UEBA", path: "/ueba", icon: UserSearch, action: () => navigate("/ueba"), keywords: ["ueba", "anomalies", "behavior", "baseline", "z-score", "insider", "user"] },
       { id: "search", label: "SIEM Search", path: "/search", icon: Search, action: () => navigate("/search"), keywords: ["query", "siem", "saved search"] },
       { id: "sim", label: "Open Attack Lab", path: "/simulation", icon: FlaskConical, action: () => navigate("/simulation"), keywords: ["attack", "lab", "demo", "simulation"] },
+      { id: "demo", label: "Demo Center", path: "/demo", icon: FlaskConical, action: () => navigate("/demo"), keywords: ["demo", "demonstration", "scenario"] },
       { id: "rules", label: "Go to Detection Rules", path: "/rules", icon: Shield, action: () => navigate("/rules"), keywords: ["correlation", "detection"] },
       { id: "intel", label: "Go to Threat Intel", path: "/intel", icon: BookMarked, action: () => navigate("/intel"), keywords: ["ioc", "reference sets", "building blocks"] },
       { id: "reports", label: "Go to Reports", path: "/reports", icon: FileText, action: () => navigate("/reports"), keywords: ["compliance", "executive", "pdf"] },

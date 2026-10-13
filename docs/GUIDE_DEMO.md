@@ -12,9 +12,13 @@ Use this flow for guide presentations and viva demos.
 ### Option A — Simulation only (no VM, fastest)
 
 1. Run `.\scripts\demo-setup.ps1` (Windows) or `./scripts/demo-setup.sh` (Linux)
-2. Or register at `/register`, add a host from **Hosts** (stays inactive — that is fine), then use Attack Lab
+2. Or just start the backend with `DEMO_MODE=true` — it seeds the `demo@securi.local`
+   user **and** a target host named `demo-server`. Open **Attack Lab** and run.
 
-**Tip:** For dashboard KPI charts to include simulated data during the demo, set `EXCLUDE_SIMULATED_FROM_DASHBOARD=false` in backend `.env` and restart. Purge simulated data from **Attack Lab** when finished.
+No host appears? Add one from **Hosts** — it stays `inactive` without an
+enrolled agent, which does not affect the run.
+
+**Tip:** For dashboard KPI charts to include simulated data during the demo, set `EXCLUDE_SIMULATED_FROM_DASHBOARD=false` in backend `.env` and restart. Purge simulated data from **Attack Lab → History** when finished.
 
 ### Option B — With live agent (optional)
 
@@ -41,7 +45,8 @@ Skip E2E: `.\scripts\validate-demo-flow.ps1 -SkipE2E`
 | Email | `demo@securi.local` |
 | Password | `Demo1234!` |
 
-With `DEMO_MODE=true` in `backend/.env`, the demo user is also seeded automatically on backend startup.
+With `DEMO_MODE=true` in `backend/.env`, the demo user **and** the
+`demo-server` target host are seeded automatically on backend startup.
 
 ## Demo flow (< 5 minutes)
 

@@ -1,3 +1,5 @@
+import logging
+
 from datetime import datetime
 from uuid import UUID
 
@@ -16,6 +18,8 @@ from app.schemas.validators import InetStr
 from app.services.audit import log_audit
 from app.services.audit_chain import verify_audit_chain
 from app.services.export_service import respond_export
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -45,6 +49,9 @@ class AuditIntegrityResponse(BaseModel):
     entries_checked: int
     chain_head_hash: str | None
     latest_chain_seq: int | None
+    #: False when the verified window stopped before the newest audit entry
+    #: (limit/from_seq window) — the tail of the chain was NOT checked.
+    window_complete: bool = True
     failure: AuditIntegrityFailure | None = None
 
 
@@ -129,12 +136,33 @@ async def export_audit_logs(
 
 @router.get("/integrity", response_model=AuditIntegrityResponse)
 async def verify_audit_integrity(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_roles("admin")),
-    limit: int = Query(10_000, ge=1, le=50_000),
+    limit: int | None = Query(None, ge=1, le=1_000_000),
     from_seq: int | None = Query(None, ge=1),
 ):
-    result = await verify_audit_chain(db, limit=limit, from_seq=from_seq)
+    """Verify the audit hash chain.
+
+    By default the FULL chain is verified (no limit). Pass an explicit
+    `limit`/`from_seq` to check a window of a very large chain — the response
+    then reports `window_complete=false` if the tail was not covered.
+
+    On failure the endpoint still returns HTTP 200 (integrity state is data,
+    not a transport error) but:
+    - writes an `audit_integrity_failure` audit entry (best-effort) so the
+      tamper attempt is itself recorded in the (possibly broken) chain,
+    - logs an ERROR for server-side monitoring,
+    - returns honest `entries_checked` (how many entries verified before the
+      first mismatch) and the failure details.
+    """
+    # Default (no limit, no from_seq): verify the entire chain so a long
+    # history cannot silently leave its tail unchecked.
+    effective_limit = limit
+    if from_seq is None and limit is None:
+        effective_limit = None
+
+    result = await verify_audit_chain(db, limit=effective_limit, from_seq=from_seq)
     failure = None
     if result.failure:
         failure = AuditIntegrityFailure(
@@ -143,11 +171,42 @@ async def verify_audit_integrity(
             expected=result.failure.expected,
             actual=result.failure.actual,
         )
+        # Record the failure itself so tampering is not silent. Best-effort:
+        # if this write fails (e.g. the break is severe), the response still
+        # carries the failure details.
+        logger.error(
+            "Audit chain integrity failure at chain_seq=%s reason=%s "
+            "(entries_checked=%s, window_complete=%s)",
+            result.failure.chain_seq,
+            result.failure.reason,
+            result.entries_checked,
+            result.window_complete,
+        )
+        try:
+            await log_audit(
+                db,
+                user_id=user.id,
+                action="audit_integrity_failure",
+                resource_type="audit_chain",
+                resource_id=None,
+                ip_address=client_ip(request),
+                details={
+                    "chain_seq": result.failure.chain_seq,
+                    "reason": result.failure.reason,
+                    "entries_checked": result.entries_checked,
+                    "window_complete": result.window_complete,
+                },
+            )
+            await db.commit()
+        except Exception:
+            logger.exception("failed to record audit_integrity_failure entry")
+            await db.rollback()
     return AuditIntegrityResponse(
         valid=result.valid,
         immutable_enabled=settings.audit_immutable,
         entries_checked=result.entries_checked,
         chain_head_hash=result.chain_head_hash,
         latest_chain_seq=result.latest_chain_seq,
+        window_complete=result.window_complete,
         failure=failure,
     )

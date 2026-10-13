@@ -39,7 +39,7 @@ def flow_to_event(flow: FlowIngest) -> EventIngest:
         severity=flow.severity,
         description=" · ".join(parts),
         source=flow.source or "flow-collector",
-        raw_log=f"FLOW {proto} {flow.src_ip} {flow.dst_ip}",
+        raw_log=f"FLOW {proto} {flow.src_ip}:{flow.src_port or 0} → {flow.dst_ip}:{flow.dst_port or 0}",
         timestamp=flow.timestamp,
         metadata=metadata,
     )

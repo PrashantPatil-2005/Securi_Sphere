@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { api } from "@/lib/api";
+import { passwordPolicyError } from "@/lib/password";
 import { MfaSecurityPanel } from "@/components/profile/MfaSecurityPanel";
 import type { UserMe } from "@/lib/hooks/useUser";
 
@@ -56,8 +57,9 @@ export default function ProfilePage() {
   function handlePasswordSubmit(e: FormEvent) {
     e.preventDefault();
     setPasswordError("");
-    if (newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters");
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) {
+      setPasswordError(policyError);
       return;
     }
     if (newPassword !== confirmPassword) {

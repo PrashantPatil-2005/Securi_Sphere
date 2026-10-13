@@ -11,6 +11,7 @@ import type {
   HostRiskDetail,
   HostFilters,
 } from "@/lib/types/host";
+import type { HostAgentStatus } from "@/lib/types/system";
 
 export function useHostList(params: {
   page: number;
@@ -175,5 +176,34 @@ export function useHostMetrics(hostId: string | null, enabled = true) {
       }[]>(`/api/v1/metrics?host_id=${hostId!}&limit=1`),
     enabled: enabled && !!hostId,
     staleTime: 30_000,
+  });
+}
+
+export interface HostFlowStatus {
+  host_id: string;
+  collector_active: boolean;
+  flow_count_24h: number;
+  distinct_dst_ports_24h: number;
+  last_flow_at: string | null;
+}
+
+/** Fetch flow-collector status for a specific host. */
+export function useHostFlowStatus(hostId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["hosts", "flow-status", hostId],
+    queryFn: () => api<HostFlowStatus>(`/api/v1/hosts/${hostId!}/flow-status`),
+    enabled: enabled && !!hostId,
+    staleTime: 30_000,
+  });
+}
+
+/** Fetch enriched agent operational status for a specific host. */
+export function useHostAgentStatus(hostId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ["hosts", "agent-status", hostId],
+    queryFn: () => api<HostAgentStatus>(`/api/v1/hosts/${hostId!}/agent-status`),
+    enabled: enabled && !!hostId,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
   });
 }

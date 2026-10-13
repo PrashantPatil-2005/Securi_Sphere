@@ -19,7 +19,7 @@ async def test_analyst_can_create_incident(analyst_client: AsyncClient):
         "/api/v1/incidents",
         json={"title": "Analyst incident", "description": "test", "severity": "medium"},
     )
-    assert res.status_code == 200
+    assert res.status_code == 201
     assert res.json()["title"] == "Analyst incident"
 
 

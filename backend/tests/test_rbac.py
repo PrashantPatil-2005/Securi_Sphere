@@ -6,6 +6,9 @@ def test_supported_rule_types_complete():
     expected = {
         "failed_logins", "brute_force", "high_cpu", "high_memory",
         "high_disk", "service_failure", "agent_offline",
+        "privilege_escalation", "root_login", "ssh_success_after_failures",
+        "service_stop", "file_integrity", "firewall_block", "network_anomaly",
+        "port_scan",
     }
     assert expected == set(SUPPORTED_RULE_TYPES)
 

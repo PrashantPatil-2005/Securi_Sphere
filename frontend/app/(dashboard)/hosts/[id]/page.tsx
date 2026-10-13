@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useHostDetail, useHostRisk, useHostAlerts, useHostEvents, useHostOffenses, useHostMetrics } from "@/lib/hooks/useHosts";
+import { useHostDetail, useHostRisk, useHostAlerts, useHostEvents, useHostOffenses, useHostMetrics, useHostFlowStatus } from "@/lib/hooks/useHosts";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { QueryError } from "@/components/ui/QueryError";
 import { HostDetailHeader } from "@/components/hosts/HostDetailHeader";
@@ -22,6 +22,7 @@ export default function HostDetailPage() {
   const { data: eventsData, isLoading: eventsLoading } = useHostEvents(hostId);
   const { data: offensesData, isLoading: offensesLoading } = useHostOffenses(hostId);
   const { data: metricsData } = useHostMetrics(hostId);
+  const { data: flowStatus } = useHostFlowStatus(hostId);
 
   if (hostLoading) {
     return (
@@ -55,7 +56,7 @@ export default function HostDetailPage() {
         {/* Left column: Risk + Agent Health */}
         <div className="lg:col-span-1 space-y-6">
           <HostRiskSection risk={risk} isLoading={riskLoading} />
-          <HostAgentHealth host={host} metrics={latestMetrics} />
+          <HostAgentHealth host={host} metrics={latestMetrics} flowStatus={flowStatus ?? null} />
         </div>
 
         {/* Right column: Activity + Alerts + Offenses */}

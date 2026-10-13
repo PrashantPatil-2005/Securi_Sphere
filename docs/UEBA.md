@@ -34,12 +34,17 @@ Default threshold: **2.5** (`UEBA_Z_THRESHOLD`).
 
 ## UI
 
-**Analytics** page → **UEBA baseline anomalies** panel
+**`/ueba`** page (Intelligence → UEBA) — the full view:
 
-- View open anomalies
+- Summary cards (open / critical / high / medium)
+- Filters by status, severity and entity type (host / user)
 - Dismiss / resolve
 - **Run scan** (manual trigger)
 - Links to linked alert or host
+
+**Analytics** page → **UEBA baseline anomalies** panel — a compact subset
+(hard-coded to open anomalies, top 25) with a **View all** link to `/ueba`.
+Both surfaces share the same React Query cache keys, so they stay in sync.
 
 ## API
 

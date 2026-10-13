@@ -4,9 +4,11 @@ import Link from "next/link";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, establishSession } from "@/lib/api";
+import { passwordPolicyError } from "@/lib/password";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { PasswordStrength } from "@/components/ui/PasswordStrength";
 import { CardSkeleton } from "@/components/ui/Skeleton";
 
 function AcceptInviteForm() {
@@ -47,6 +49,13 @@ function AcceptInviteForm() {
     e.preventDefault();
     if (!token) return;
     setError("");
+    if (!ssoOnly) {
+      const policyError = passwordPolicyError(password);
+      if (policyError) {
+        setError(policyError);
+        return;
+      }
+    }
     setLoading(true);
     try {
       await api("/api/v1/users/invites/accept", {
@@ -113,15 +122,18 @@ function AcceptInviteForm() {
           onChange={(e) => setSsoOnly(e.target.checked)}
         />
         {!ssoOnly && (
-          <Input
-            label="Password"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
+          <div className="space-y-2">
+            <Input
+              label="Password"
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+            <PasswordStrength password={password} />
+          </div>
         )}
         <Button type="submit" loading={loading} className="w-full" size="lg" disabled={!preview}>
           Create account

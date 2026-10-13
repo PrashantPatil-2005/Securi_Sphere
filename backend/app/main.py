@@ -45,9 +45,11 @@ async def init_db() -> None:
     await migrate_schema()
     async with async_session() as db:
         from app.routers.auth import seed_roles, seed_dev_users, seed_demo_users
+        from app.routers.hosts import seed_demo_host
         await seed_roles(db)
         await seed_dev_users(db)
         await seed_demo_users(db)
+        await seed_demo_host(db)
         await seed_alert_rules(db)
         await seed_mitre(db)
         await seed_correlation_rules(db)

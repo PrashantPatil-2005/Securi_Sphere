@@ -1,6 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// HostDetailHeader navigates via the app router and toasts on mutation results.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/hosts",
+  useSearchParams: () => new URLSearchParams(),
+  useParams: () => ({}),
+}));
+
+vi.mock("@/components/ui/Toast", () => ({
+  useToast: () => ({ toast: vi.fn(), dismiss: vi.fn() }),
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 import { HostRow } from "@/components/hosts/HostRow";
 import { HostEmptyState } from "@/components/hosts/HostEmptyState";
 import { HostDetailHeader } from "@/components/hosts/HostDetailHeader";

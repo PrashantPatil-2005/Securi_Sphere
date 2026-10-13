@@ -48,21 +48,34 @@ async def close_redis() -> None:
     _redis = None
 
 
+def _discard_redis_client(client) -> None:
+    """Drop the cached client after a runtime failure so the next call reconnects."""
+    global _redis
+    if _redis is client:
+        _redis = None
+
+
 async def _sliding_window(key: str, max_requests: int, window_seconds: int) -> tuple[bool, int]:
     redis = await _redis_client()
     if redis:
-        now = int(time.time())
-        window_key = f"recovery:{key}"
-        pipe = redis.pipeline()
-        pipe.zremrangebyscore(window_key, 0, now - window_seconds)
-        pipe.zadd(window_key, {f"{now}:{time.time_ns()}": now})
-        pipe.zcard(window_key)
-        pipe.expire(window_key, window_seconds)
-        results = await pipe.execute()
-        count = results[2]
-        if count > max_requests:
-            return False, window_seconds
-        return True, 0
+        try:
+            now = int(time.time())
+            window_key = f"recovery:{key}"
+            pipe = redis.pipeline()
+            pipe.zremrangebyscore(window_key, 0, now - window_seconds)
+            pipe.zadd(window_key, {f"{now}:{time.time_ns()}": now})
+            pipe.zcard(window_key)
+            pipe.expire(window_key, window_seconds)
+            results = await pipe.execute()
+            count = results[2]
+            if count > max_requests:
+                return False, window_seconds
+            return True, 0
+        except Exception as exc:
+            # Redis outage must not turn login/recovery into HTTP 500 — degrade to the
+            # in-memory limiter so requests still get rate limited (single-instance).
+            logger.warning("Redis rate limiter failed, using in-memory fallback: %s", exc)
+            _discard_redis_client(redis)
 
     now = time.time()
     bucket = _memory[key]

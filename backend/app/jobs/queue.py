@@ -115,7 +115,18 @@ class JobQueue:
         return await self._memory.pending_count()
 
     async def _worker(self, worker_id: int) -> None:
+        import time
+
+        last_heartbeat = 0.0
         while self.is_running:
+            if self._use_redis and (time.monotonic() - last_heartbeat) >= 15:
+                try:
+                    from app.jobs.redis_broker import publish_worker_heartbeat
+
+                    await publish_worker_heartbeat(worker_id)
+                except Exception:  # noqa: BLE001 — heartbeat must never kill the worker
+                    logger.debug("worker heartbeat publish failed", exc_info=True)
+                last_heartbeat = time.monotonic()
             job = await self._dequeue(timeout=1.0)
             if job is None:
                 continue

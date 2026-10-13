@@ -24,7 +24,7 @@ async def test_incident_crud_and_notes(analyst_client: AsyncClient):
         "/api/v1/incidents",
         json={"title": "Test incident", "description": "Integration test", "severity": "high", "host_id": host_id},
     )
-    assert create.status_code == 200
+    assert create.status_code == 201, create.text
     incident_id = create.json()["id"]
 
     link = await analyst_client.post(f"/api/v1/incidents/{incident_id}/alerts/{alert_items[0]['id']}")

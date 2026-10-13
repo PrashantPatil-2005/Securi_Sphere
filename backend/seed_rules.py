@@ -1,0 +1,3 @@
+from app.services.correlation_engine import seed_correlation_rules
+import inspect
+print(inspect.getsource(seed_correlation_rules))

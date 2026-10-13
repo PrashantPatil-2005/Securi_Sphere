@@ -20,10 +20,23 @@ from datetime import datetime, timezone
 pytestmark = pytest.mark.integration
 
 
+async def _admin_user_id():
+    """Return a real user id — hosts.created_by has a FK to users."""
+    from sqlalchemy import select as _select
+    from app.models.user import User as _User
+
+    async with async_session() as db:
+        user = (
+            await db.execute(_select(_User).where(_User.email == "admin@test.local"))
+        ).scalar_one()
+        return user.id
+
+
 @pytest.mark.asyncio
 async def test_concurrent_alert_creation_no_duplicates(prepare_database):
+    created_by = await _admin_user_id()
     async with async_session() as db:
-        host = Host(name="concurrency-host", status="online", created_by=uuid4())
+        host = Host(name="concurrency-host", status="online", created_by=created_by)
         db.add(host)
         await db.flush()
         host_id = host.id
@@ -42,6 +55,7 @@ async def test_concurrent_alert_creation_no_duplicates(prepare_database):
                 )
                 .on_conflict_do_nothing(
                     index_elements=["host_id", "title"],
+                    index_where=text("(status)::text = 'open' AND rule_id IS NULL"),
                 )
             )
             result = await db.execute(stmt)
@@ -66,8 +80,9 @@ async def test_concurrent_alert_creation_no_duplicates(prepare_database):
 
 @pytest.mark.asyncio
 async def test_concurrent_offense_creation(prepare_database):
+    created_by = await _admin_user_id()
     async with async_session() as db:
-        host = Host(name="offense-concurrency-host", status="online", created_by=uuid4())
+        host = Host(name="offense-concurrency-host", status="online", created_by=created_by)
         db.add(host)
         await db.flush()
         host_id = host.id
@@ -127,8 +142,9 @@ async def test_concurrent_offense_creation(prepare_database):
 
 @pytest.mark.asyncio
 async def test_offense_numbers_are_unique(prepare_database):
+    created_by = await _admin_user_id()
     async with async_session() as db:
-        host = Host(name="offense-unique-host", status="online", created_by=uuid4())
+        host = Host(name="offense-unique-host", status="online", created_by=created_by)
         db.add(host)
         await db.flush()
         host_id = host.id
@@ -177,8 +193,9 @@ async def test_offense_number_uses_sequence(prepare_database):
 
 @pytest.mark.asyncio
 async def test_concurrent_fingerprints_no_crash(prepare_database):
+    created_by = await _admin_user_id()
     async with async_session() as db:
-        host = Host(name="fingerprint-concurrency-host", status="online", created_by=uuid4())
+        host = Host(name="fingerprint-concurrency-host", status="online", created_by=created_by)
         db.add(host)
         await db.flush()
         host_id = host.id
@@ -212,8 +229,9 @@ async def test_concurrent_fingerprints_no_crash(prepare_database):
 
 @pytest.mark.asyncio
 async def test_concurrent_different_fingerprints(prepare_database):
+    created_by = await _admin_user_id()
     async with async_session() as db:
-        host = Host(name="diff-fp-host", status="online", created_by=uuid4())
+        host = Host(name="diff-fp-host", status="online", created_by=created_by)
         db.add(host)
         await db.flush()
         host_id = host.id
@@ -245,7 +263,7 @@ async def test_concurrent_refresh_token_rotation(prepare_database):
     async with async_session() as db:
         role = (await db.execute(select(Role).where(Role.name == "admin"))).scalar_one()
         user = User(
-            email="refresh_concurrent@test.local",
+            email=f"refresh_concurrent_{uuid4().hex[:8]}@test.local",
             hashed_password=hash_password("Test1234!"),
             role_id=role.id,
             full_name="Refresh Test",
@@ -313,7 +331,7 @@ async def test_concurrent_password_reset(prepare_database):
     async with async_session() as db:
         role = (await db.execute(select(Role).where(Role.name == "admin"))).scalar_one()
         user = User(
-            email="reset_concurrent@test.local",
+            email=f"reset_concurrent_{uuid4().hex[:8]}@test.local",
             hashed_password=hash_password("OldPass123!"),
             role_id=role.id,
             full_name="Reset Test",

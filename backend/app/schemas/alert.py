@@ -21,6 +21,7 @@ class AlertResponse(BaseModel):
     confidence: float | None = None
     assigned_to: UUID | None = None
     mitre_technique_id: str | None = None
+    source: str | None = None
     created_at: datetime
     resolved_at: datetime | None
     resolved_by: UUID | None

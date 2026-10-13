@@ -2,18 +2,17 @@
 
 import { PageHeader } from "@/components/ui/Panel";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
-import { Button } from "@/components/ui/Button";
-import { useLiveAttackBanner } from "./LiveAttackBanner";
 import { AlertTriangle } from "lucide-react";
+import { useSimulationMode } from "@/lib/hooks/useSimulationMode";
+import { Badge } from "@/components/design-system/Badge";
 
 interface Props {
   enabled: boolean;
-  showPurge: boolean;
-  onPurge: () => void;
-  purgePending: boolean;
 }
 
-export function AttackLabHeader({ enabled, showPurge, onPurge, purgePending }: Props) {
+export function AttackLabHeader({ enabled }: Props) {
+  const { mode, hostInfo } = useSimulationMode();
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -23,25 +22,15 @@ export function AttackLabHeader({ enabled, showPurge, onPurge, purgePending }: P
             <HelpTooltip content="Generate realistic attack events on an enrolled host. Run a scenario, then follow the investigation guide to triage alerts and offenses." />
           </span>
         }
-        subtitle="Inject synthetic events for demos and SOC training. Dashboard charts may hide simulated data by default — purge when done."
-        action={
-          showPurge ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={purgePending}
-              loading={purgePending}
-              onClick={onPurge}
-            >
-              Purge simulated data
-            </Button>
-          ) : undefined
+        subtitle={mode === "live"
+          ? `Live Linux Lab — ${hostInfo?.hostName || ''} — ${hostInfo?.agentOnline ? 'Agent online' : 'Agent offline'}`
+          : mode === "replay"
+            ? "Event Replay — Sanitized event sequences with controlled time progression"
+            : mode === "presets"
+              ? "Guided Synthetic Simulation — Exercise real normalization, detection, correlation, and alert-building logic"
+              : "Attack Simulation Lab"
         }
       />
-      {enabled && (
-        <LiveAttackBanner hostName="Attack Lab" hostId="attack-lab" />
-      )}
       {!enabled && (
         <div className="flex items-start gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
           <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
@@ -52,6 +41,11 @@ export function AttackLabHeader({ enabled, showPurge, onPurge, purgePending }: P
             </p>
           </div>
         </div>
+      )}
+      {mode && mode !== "presets" && (
+        <Badge className="ms-2">
+          {mode === "live" ? "LIVE" : mode === "replay" ? "REPLAYED" : "SYNTHETIC"}
+        </Badge>
       )}
     </div>
   );

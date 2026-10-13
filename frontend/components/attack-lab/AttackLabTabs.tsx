@@ -7,6 +7,8 @@ const TABS = [
   { id: "presets" as const, label: "Presets" },
   { id: "custom" as const, label: "Custom" },
   { id: "history" as const, label: "History" },
+  { id: "live" as const, label: "Live Linux Lab" },
+  { id: "replay" as const, label: "Event Replay" },
 ];
 
 interface Props {

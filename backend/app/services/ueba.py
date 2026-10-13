@@ -326,5 +326,5 @@ async def scan_ueba_anomalies(db: AsyncSession) -> dict:
                 else:
                     created += 1
 
-    logger.info("ueba scan complete", extra={"created": created, "updated": updated})
+    logger.info("ueba scan complete", extra={"anomalies_created": created, "anomalies_updated": updated})
     return {"enabled": True, "created": created, "updated": updated, "hosts_scanned": len(hosts), "users_scanned": len(usernames)}

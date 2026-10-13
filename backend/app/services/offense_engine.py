@@ -131,6 +131,10 @@ async def link_alert_to_offense(db: AsyncSession, alert: Alert) -> Offense:
         title=alert.title,
         risk_level=RISK_FROM_SEVERITY.get(alert.severity, "medium"),
     )
+    # Events open the offense with a generic placeholder; the alert is what
+    # actually names the attack, so let it claim the headline.
+    if offense.title.startswith("Security activity:"):
+        offense.title = alert.title
 
     dup = (
         await db.execute(
@@ -142,7 +146,6 @@ async def link_alert_to_offense(db: AsyncSession, alert: Alert) -> Offense:
     if not dup:
         db.add(OffenseEvent(offense_id=offense.id, alert_id=alert.id))
         offense.alert_count += 1
-        offense.event_count += 1
         offense.updated_at = datetime.now(timezone.utc)
         _append_timeline_entry(offense, {
             "type": "alert",

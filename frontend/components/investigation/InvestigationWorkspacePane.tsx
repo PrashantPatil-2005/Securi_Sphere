@@ -1,22 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
-import { api } from "@/lib/api";
+import { AlertTriangle, RotateCcw, Sparkles } from "lucide-react";
+import { api, errorStatus } from "@/lib/api";
 import { useAssistant } from "@/lib/assistant/AssistantProvider";
 import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
+import { useUser } from "@/lib/hooks/useUser";
 import { InvestigationTrail } from "@/components/InvestigationTrail";
 import { WorkspaceNextActions } from "@/components/investigation/WorkspaceNextActions";
 import { IocLookupPanel } from "@/components/IocLookupPanel";
-import { Panel } from "@/components/ui/Panel";
+import { Panel, EmptyState } from "@/components/ui/Panel";
 import { QueryError } from "@/components/ui/QueryError";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import type { InvestigationWorkspace } from "@/lib/types/investigation";
+import type { InvestigationWorkspace, WorkspaceTimelineEntry } from "@/lib/types/investigation";
 
 function buildWorkspaceQuery(params: {
   alertId?: string | null;
@@ -37,19 +38,45 @@ interface Props {
   incidentId?: string | null;
 }
 
+const TIMELINE_TYPE_LABELS: Record<WorkspaceTimelineEntry["type"], string> = {
+  incident: "Incident",
+  alert: "Alert",
+  offense: "Offense",
+  event: "Event",
+  note: "Note",
+  timeline: "Timeline",
+};
+
 export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { openWithContext } = useAssistant();
+  const { data: currentUser } = useUser();
 
   const path = buildWorkspaceQuery({ alertId, offenseId, incidentId });
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ["investigation", "workspace", alertId, offenseId, incidentId],
     queryFn: () => api<InvestigationWorkspace>(path!),
     enabled: !!path,
+    retry: (failureCount, err) => {
+      const status = errorStatus(err);
+      // 401/403/404 are deterministic — retrying only delays the state the user must see.
+      if (status && [400, 401, 403, 404].includes(status)) return false;
+      return failureCount < 1;
+    },
   });
+
+  // Developer diagnostics only — never surfaces secrets or raw server internals in the UI.
+  useEffect(() => {
+    if (!isError) return;
+    console.error("[case-workspace] failed to load", {
+      path,
+      status: errorStatus(error),
+      detail: error instanceof Error ? error.message : String(error),
+    });
+  }, [isError, error, path]);
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -75,6 +102,39 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["investigation"] });
       queryClient.invalidateQueries({ queryKey: ["offenses"] });
+    },
+  });
+
+  const incidentStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api(`/api/v1/incidents/${id}/status?status=${encodeURIComponent(status)}`, {
+        method: "PATCH",
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["investigation"] });
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      toast("success", "Incident status updated");
+    },
+    onError: (err) => {
+      const status = errorStatus(err);
+      toast("error", status === 403 ? "Your role cannot change incident status" : "Failed to update incident status");
+    },
+  });
+
+  const incidentAssignMutation = useMutation({
+    mutationFn: ({ id, assignedTo }: { id: string; assignedTo: string | null }) =>
+      api(`/api/v1/incidents/${id}/assign`, {
+        method: "PATCH",
+        body: JSON.stringify({ assigned_to: assignedTo }),
+      }),
+    onSuccess: (_r, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["investigation"] });
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      toast("success", vars.assignedTo ? "Incident assigned" : "Assignment cleared");
+    },
+    onError: (err) => {
+      const status = errorStatus(err);
+      toast("error", status === 403 ? "Your role cannot assign incidents" : "Failed to update assignment");
     },
   });
 
@@ -105,10 +165,84 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
 
   if (!path) return null;
   if (isLoading) return <TableSkeleton rows={8} />;
-  if (isError) return <QueryError onRetry={() => refetch()} />;
+
+  if (isError) {
+    const status = errorStatus(error);
+    const detail = error instanceof Error ? error.message : undefined;
+
+    if (status === 404) {
+      return (
+        <Panel title="Case not found">
+          <EmptyState
+            title="This case is no longer available"
+            description={
+              detail ||
+              "The incident, offense, or alert you opened does not exist, or it was removed."
+            }
+          />
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Link href="/incidents" className="btn-ghost text-sm">Browse incidents</Link>
+            <Link href="/alerts" className="btn-ghost text-sm">Browse alerts</Link>
+            <Link href="/offenses" className="btn-ghost text-sm">Browse offenses</Link>
+          </div>
+        </Panel>
+      );
+    }
+
+    if (status === 401 || status === 403) {
+      return (
+        <QueryError
+          message="You do not have access to this case"
+          description="Your current role cannot open this case. Sign in with an analyst or admin account, or ask an administrator for access."
+          onRetry={() => refetch()}
+          retrying={isFetching}
+        />
+      );
+    }
+
+    const unreachable = status === 0 || (status != null && status >= 500);
+    return (
+      <QueryError
+        message={unreachable ? "Case data could not be loaded" : "Failed to load case data"}
+        description={
+          unreachable
+            ? "The backend did not complete the request. Check your connection, then retry — the same request will be sent again."
+            : detail || "Something went wrong while loading this case."
+        }
+        onRetry={() => refetch()}
+        retrying={isFetching}
+      />
+    );
+  }
   if (!data) return null;
 
   const { alert, offense, incident, host, events, timelines, linked_alerts } = data;
+  const investigationTimeline = data.investigation_timeline ?? [];
+  const entities = data.entities ?? { hosts: [], accounts: [], network_ips: [] };
+  const mitre = data.mitre ?? { technique_ids: [], tactics: [] };
+  const provenance = data.provenance ?? { simulated: false, sources: [] };
+  const partialErrors = data.partial_errors ?? [];
+
+  const hasCaseContent =
+    !!(alert || offense || incident || host) ||
+    events.length > 0 ||
+    timelines.length > 0 ||
+    investigationTimeline.length > 0;
+  if (!hasCaseContent) {
+    return (
+      <Panel title="Empty case">
+        <EmptyState
+          title="No data linked to this case"
+          description="This record exists, but no alerts, offenses, host context, events, or timelines are linked to it yet."
+        />
+      </Panel>
+    );
+  }
+
+  const role = currentUser?.role?.name;
+  const canActOnIncident =
+    !!incident && !!currentUser && (role === "analyst" || role === "admin");
+  const assignedToMe = !!incident?.assigned_to && incident.assigned_to === currentUser?.id;
 
   return (
     <div className="space-y-4">
@@ -119,6 +253,50 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
         hostName={host?.name}
         incidentId={incident?.id}
       />
+
+      {isFetching && (
+        <p className="text-xs text-muted" role="status" aria-live="polite">
+          Refreshing case data…
+        </p>
+      )}
+
+      {provenance.simulated && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden />
+          <span>
+            Synthetic demo data — generated by the Demo Center, not live telemetry.
+            {provenance.sources.length > 0 && (
+              <> Sources: {provenance.sources.join(", ")}.</>
+            )}
+          </span>
+        </div>
+      )}
+
+      {partialErrors.length > 0 && (
+        <div
+          role="alert"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <span>
+              Some case data could not be loaded: {partialErrors.join(", ")}.
+              What is shown may be incomplete.
+            </span>
+            <button
+              type="button"
+              className="btn-ghost text-xs shrink-0 inline-flex items-center gap-1"
+              disabled={isFetching}
+              onClick={() => refetch()}
+            >
+              <RotateCcw className="w-3 h-3" aria-hidden />
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       <WorkspaceNextActions
         data={data}
@@ -162,6 +340,11 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
               <SeverityBadge severity={alert.severity} />
               <span className="font-semibold">{alert.title}</span>
               <span className="text-xs text-muted capitalize">{alert.status}</span>
+              {alert.source === "simulation" && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-200 border border-amber-500/40">
+                  SIMULATED
+                </span>
+              )}
             </div>
             {alert.description && <p className="text-sm text-muted">{alert.description}</p>}
             <div className="flex flex-wrap gap-2">
@@ -249,13 +432,106 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
               <SeverityBadge severity={incident.severity} />
               <span className="font-medium">{incident.title}</span>
               <span className="text-xs text-muted capitalize">{incident.status}</span>
+              {incident.simulated && (
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-200 border border-amber-500/40">
+                  SIMULATED
+                </span>
+              )}
             </div>
             {incident.description && <p className="text-sm text-muted">{incident.description}</p>}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+              <span>
+                Assignee:{" "}
+                <span className="text-foreground">
+                  {incident.assignee_email || "Unassigned"}
+                </span>
+              </span>
+              {incident.confidence != null && incident.confidence > 0 && (
+                <span>Confidence {(incident.confidence * 100).toFixed(0)}%</span>
+              )}
+              {incident.first_observed && (
+                <span>First observed {new Date(incident.first_observed).toLocaleString()}</span>
+              )}
+              {incident.last_observed && (
+                <span>Last observed {new Date(incident.last_observed).toLocaleString()}</span>
+              )}
+              <Link href={`/incidents/${incident.id}`} className="btn-ghost text-xs">
+                Incident detail
+              </Link>
+            </div>
+            {canActOnIncident && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
+                {incident.status === "open" && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    disabled={incidentStatusMutation.isPending}
+                    onClick={() => incidentStatusMutation.mutate({ id: incident.id, status: "investigating" })}
+                  >
+                    Start investigating
+                  </button>
+                )}
+                {(incident.status === "open" || incident.status === "investigating") && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-success"
+                    disabled={incidentStatusMutation.isPending}
+                    onClick={() => incidentStatusMutation.mutate({ id: incident.id, status: "resolved" })}
+                  >
+                    Resolve
+                  </button>
+                )}
+                {incident.status === "resolved" && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    disabled={incidentStatusMutation.isPending}
+                    onClick={() => incidentStatusMutation.mutate({ id: incident.id, status: "closed" })}
+                  >
+                    Close
+                  </button>
+                )}
+                {(incident.status === "resolved" || incident.status === "closed") && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    disabled={incidentStatusMutation.isPending}
+                    onClick={() => incidentStatusMutation.mutate({ id: incident.id, status: "investigating" })}
+                  >
+                    Reopen
+                  </button>
+                )}
+                {!assignedToMe && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    disabled={incidentAssignMutation.isPending || !currentUser}
+                    onClick={() =>
+                      currentUser &&
+                      incidentAssignMutation.mutate({ id: incident.id, assignedTo: currentUser.id })
+                    }
+                  >
+                    Assign to me
+                  </button>
+                )}
+                {incident.assigned_to && (
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs"
+                    disabled={incidentAssignMutation.isPending}
+                    onClick={() => incidentAssignMutation.mutate({ id: incident.id, assignedTo: null })}
+                  >
+                    Unassign
+                  </button>
+                )}
+              </div>
+            )}
             {incident.notes.length > 0 && (
               <ul className="text-sm space-y-2 border-t border-border-subtle pt-3">
                 {incident.notes.map((n) => (
                   <li key={n.id} className="text-muted">
                     <span className="text-xs tabular-nums">{new Date(n.created_at).toLocaleString()}</span>
+                    {n.user_email && <span className="text-xs"> — {n.user_email}</span>}
                     <p className="text-foreground mt-0.5">{n.content}</p>
                   </li>
                 ))}
@@ -264,7 +540,80 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
             <IncidentNoteForm
               onSubmit={(content) => noteMutation.mutate({ incidentId: incident.id, content })}
               pending={noteMutation.isPending}
+              disabled={!canActOnIncident}
             />
+          </div>
+        </Panel>
+      )}
+
+      {(mitre.technique_ids.length > 0 || mitre.tactics.length > 0) && (
+        <Panel title="MITRE ATT&CK">
+          <div className="space-y-2">
+            {mitre.technique_ids.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-xs text-muted">Techniques:</span>
+                {mitre.technique_ids.map((t) => (
+                  <Link
+                    key={t}
+                    href="/mitre"
+                    className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent border border-accent/20 hover:border-accent/50"
+                  >
+                    {t}
+                  </Link>
+                ))}
+              </div>
+            )}
+            {mitre.tactics.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-xs text-muted">Tactics:</span>
+                {mitre.tactics.map((t) => (
+                  <span
+                    key={t}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-muted/40 text-muted border border-border-subtle capitalize"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </Panel>
+      )}
+
+      {(entities.hosts.length > 0 || entities.accounts.length > 0 || entities.network_ips.length > 0) && (
+        <Panel title="Entities">
+          <div className="space-y-2 text-sm">
+            {entities.hosts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted">Hosts:</span>
+                {entities.hosts.map((h) =>
+                  h.id ? (
+                    <Link key={h.id} href={`/hosts/${h.id}`} className="hover:text-accent">
+                      {h.name}
+                      {h.ip && <span className="text-muted font-mono"> ({h.ip})</span>}
+                    </Link>
+                  ) : (
+                    <span key={h.name} className="text-muted">{h.name}</span>
+                  ),
+                )}
+              </div>
+            )}
+            {entities.accounts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted">Accounts:</span>
+                {entities.accounts.map((a) => (
+                  <span key={a} className="font-mono text-xs">{a}</span>
+                ))}
+              </div>
+            )}
+            {entities.network_ips.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted">Network IPs:</span>
+                {entities.network_ips.map((ip) => (
+                  <span key={ip} className="font-mono text-xs">{ip}</span>
+                ))}
+              </div>
+            )}
           </div>
         </Panel>
       )}
@@ -277,6 +626,11 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
                 <Link href={workspaceHref({ alertId: a.id })} className="hover:text-accent inline-flex items-center gap-2">
                   <SeverityBadge severity={a.severity} />
                   {a.title}
+                  {a.source === "simulation" && (
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-200 border border-amber-500/40">
+                      SIMULATED
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}
@@ -284,7 +638,46 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
         </Panel>
       )}
 
-      {events.length > 0 && (
+      {investigationTimeline.length > 0 && (
+        <Panel title="Investigation timeline">
+          <ul className="text-sm space-y-2 max-h-96 overflow-y-auto">
+            {investigationTimeline.map((entry, i) => (
+              <li key={`${entry.type}-${entry.ref_id ?? i}`} className="flex gap-3 items-start">
+                <span className="text-xs tabular-nums text-muted shrink-0 w-36">
+                  {new Date(entry.timestamp).toLocaleString()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/40 text-muted border border-border-subtle">
+                      {TIMELINE_TYPE_LABELS[entry.type] ?? entry.type}
+                    </span>
+                    {entry.severity && <SeverityBadge severity={entry.severity} />}
+                    <TimelineEntryLink entry={entry} hostId={host?.id}>{entry.title}</TimelineEntryLink>
+                    {entry.simulated && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-200 border border-amber-500/40">
+                        SIMULATED
+                      </span>
+                    )}
+                  </div>
+                  {entry.type === "event" && entry.description && (
+                    <details className="mt-1">
+                      <summary className="text-xs text-muted cursor-pointer">Raw event</summary>
+                      <pre className="mt-1 text-[11px] font-mono text-muted whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+                        {entry.description}
+                      </pre>
+                    </details>
+                  )}
+                  {entry.type !== "event" && entry.description && (
+                    <p className="text-xs text-muted mt-0.5 truncate">{entry.description}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {events.length > 0 && investigationTimeline.length === 0 && (
         <Panel title="Related events">
           <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto">
             {events.map((e) => (
@@ -317,14 +710,44 @@ export function InvestigationWorkspacePane({ alertId, offenseId, incidentId }: P
   );
 }
 
+function TimelineEntryLink({
+  entry,
+  hostId,
+  children,
+}: {
+  entry: WorkspaceTimelineEntry;
+  hostId?: string;
+  children: React.ReactNode;
+}) {
+  let href: string | null = null;
+  if (entry.type === "alert" && entry.ref_id) href = workspaceHref({ alertId: entry.ref_id });
+  else if (entry.type === "offense" && entry.ref_id) href = workspaceHref({ offenseId: entry.ref_id });
+  else if (entry.type === "incident" && entry.ref_id) href = `/incidents/${entry.ref_id}`;
+  else if (entry.type === "event" && hostId) {
+    const params = new URLSearchParams({ host_id: hostId, include_simulated: "true" });
+    href = `/events?${params.toString()}`;
+  }
+
+  if (!href) return <span className="min-w-0 truncate">{children}</span>;
+  return (
+    <Link href={href} className="hover:text-accent min-w-0 truncate">
+      {children}
+    </Link>
+  );
+}
+
 function IncidentNoteForm({
   onSubmit,
   pending,
+  disabled,
 }: {
   onSubmit: (content: string) => void;
   pending?: boolean;
+  disabled?: boolean;
 }) {
   const [content, setContent] = useState("");
+
+  if (disabled) return null;
 
   return (
     <form

@@ -49,6 +49,7 @@ async def test_siem_ref_filter(admin_client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_reference_set_triggers_detection_alert(analyst_client: AsyncClient):
+    from datetime import datetime, timezone, timedelta
     from tests.integration.helpers import enroll_test_host, ingest_events
 
     host_id, api_key = await enroll_test_host(analyst_client, "ref-intel-detect-host")
@@ -64,6 +65,8 @@ async def test_reference_set_triggers_detection_alert(analyst_client: AsyncClien
         json={"values": ["198.51.100.42"]},
     )
 
+    # Use a recent timestamp — events older than the retention window are rejected.
+    recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
     await ingest_events(
         analyst_client,
         api_key,
@@ -72,8 +75,8 @@ async def test_reference_set_triggers_detection_alert(analyst_client: AsyncClien
             "severity": "medium",
             "description": "Failed login from bad IP",
             "source": "test",
-            "raw_log": "failed login",
-            "timestamp": "2026-07-07T12:00:00+00:00",
+            "raw_log": f"failed login {uuid.uuid4().hex[:8]}",
+            "timestamp": recent_ts,
             "metadata": {"source_ip": "198.51.100.42"},
         }],
     )

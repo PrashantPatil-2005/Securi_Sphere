@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowLeft, CheckCircle } from "lucide-react";
 import { api } from "@/lib/api";
+import { passwordPolicyError } from "@/lib/password";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { PasswordStrength } from "@/components/ui/PasswordStrength";
@@ -25,7 +26,8 @@ function ResetForm() {
     setError("");
     if (!token) { setError("Invalid or missing reset token"); return; }
     if (password !== confirm) { setError("Passwords do not match"); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+    const policyError = passwordPolicyError(password);
+    if (policyError) { setError(policyError); return; }
     setLoading(true);
     try {
       await api("/api/v1/auth/reset-password", { method: "POST", body: JSON.stringify({ token, new_password: password }) }, false);

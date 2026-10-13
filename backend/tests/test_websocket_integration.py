@@ -82,10 +82,13 @@ async def test_ws_slow_client_does_not_block():
     mgr.connect(ws_fast)
     mgr.connect(ws_slow)
 
-    try:
-        await asyncio.wait_for(mgr._broadcast_local({"type": "test"}), timeout=2.0)
-    except asyncio.TimeoutError:
-        pytest.fail("Slow client blocked broadcast")
+    # Keep the send timeout small so the broadcast returns quickly even though
+    # the slow client never completes. The fast client must still be served.
+    with patch("app.websocket.manager.WS_SEND_TIMEOUT_SECONDS", 0.5):
+        try:
+            await asyncio.wait_for(mgr._broadcast_local({"type": "test"}), timeout=3.0)
+        except asyncio.TimeoutError:
+            pytest.fail("Slow client blocked broadcast")
 
     ws_fast.send_text.assert_awaited_once()
 

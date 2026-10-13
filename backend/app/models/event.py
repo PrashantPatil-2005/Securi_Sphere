@@ -27,5 +27,9 @@ class Event(Base):
     normalized_event: Mapped[dict | None] = mapped_column(JSONB)
     metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    process_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    parent_process_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    docker_service_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    docker_container_name: Mapped[str | None] = mapped_column(String(255), index=True)
 
     host: Mapped["Host"] = relationship("Host", back_populates="events")

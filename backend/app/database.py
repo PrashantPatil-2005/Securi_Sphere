@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 import logging
+import os
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -10,7 +11,16 @@ from app.core.db_pool import engine_options
 
 logger = logging.getLogger(__name__)
 
-engine = create_async_engine(settings.database_url, echo=settings.sql_echo, **engine_options())
+# Use TEST_DATABASE_URL env var if set and contains 'securi_test',
+# otherwise fall back to settings.database_url (dev DB).
+# This allows the test infrastructure to override the database URL.
+_db_url = os.environ.get("DATABASE_URL", "")
+if "securi_test" in _db_url:
+    _effective_db_url = _db_url
+else:
+    _effective_db_url = settings.database_url
+
+engine = create_async_engine(_effective_db_url, echo=settings.sql_echo, **engine_options())
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

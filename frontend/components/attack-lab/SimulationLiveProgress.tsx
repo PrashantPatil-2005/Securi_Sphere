@@ -1,57 +1,88 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EmotionBanner, ProgressSteps } from "@/components/ui/EmotionState";
-import { useUxEnabled } from "@/lib/featureFlags";
+import { useFeedItems, useSecurityFeedStore } from "@/lib/websocket";
 import { track } from "@/lib/telemetry";
 
-const STAGES = [
-  "Preparing scenario",
-  "Injecting events",
-  "Running detection rules",
-  "Correlating offenses",
-  "Building timelines",
-];
+/**
+ * Pipeline stages, matching what `execute_simulation_run` actually does.
+ * Events are detected as they land, so the run spends its first phase
+ * injecting and its tail correlating + building timelines.
+ */
+const STAGES = ["Injecting events", "Correlating offenses", "Building timelines"];
 
-interface Props {
-  running: boolean;
-  scenarioName?: string;
+interface FeedItem {
+  _type?: string;
+  _ts?: number;
+  host_id?: string;
+  event_type?: string;
+  description?: string;
+  title?: string;
 }
 
-export function SimulationLiveProgress({ running, scenarioName }: Props) {
-  const enabled = useUxEnabled("ux_live_simulation_enabled");
-  const [stageIndex, setStageIndex] = useState(0);
+export interface SimulationLiveProgressProps {
+  running: boolean;
+  scenarioName?: string;
+  hostId: string;
+  expectedEvents?: number;
+  runStartedAt: number | null;
+}
+
+export function SimulationLiveProgress({
+  running,
+  scenarioName,
+  hostId,
+  expectedEvents,
+  runStartedAt,
+}: SimulationLiveProgressProps) {
+  const { subscribe, getSnapshot } = useSecurityFeedStore(120);
+  const feed = useFeedItems(subscribe, getSnapshot) as FeedItem[];
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    if (!running || !enabled) {
-      setStageIndex(0);
-      return;
-    }
-
+    if (!running || !runStartedAt) return;
     track("simulation_started", { scenario: scenarioName });
-    setStageIndex(0);
-
-    const timers = STAGES.map((_, i) =>
-      setTimeout(() => {
-        setStageIndex(i);
-        track("simulation_stage", { stage: STAGES[i], index: i });
-      }, i * 900),
+    setElapsed(0);
+    const tick = setInterval(
+      () => setElapsed(Math.round((Date.now() - runStartedAt) / 1000)),
+      500,
     );
+    return () => clearInterval(tick);
+  }, [running, runStartedAt, scenarioName]);
 
-    return () => timers.forEach(clearTimeout);
-  }, [running, enabled, scenarioName]);
+  const { seen, alertCount, latest } = useMemo(() => {
+    const windowStart = runStartedAt ?? 0;
+    const runEvents = feed.filter(
+      (item) =>
+        item._type === "security_feed" &&
+        item.host_id === hostId &&
+        (item._ts ?? 0) >= windowStart,
+    );
+    const runAlerts = feed.filter(
+      (item) => item._type === "new_alert" && (item._ts ?? 0) >= windowStart,
+    );
+    return {
+      seen: runEvents.length,
+      alertCount: runAlerts.length,
+      latest: runEvents[0]?.description || runEvents[0]?.event_type || "",
+    };
+  }, [feed, hostId, runStartedAt]);
 
-  if (!enabled || !running) return null;
+  if (!running) return null;
+
+  const done = expectedEvents ? seen >= expectedEvents : false;
+  const stageIndex = done ? 1 : 0;
+  const denominator = expectedEvents ? `/${expectedEvents}` : "";
 
   return (
     <div className="space-y-3">
       <EmotionBanner
         tone="progress"
-        title="Attack unfolding live"
+        title={scenarioName ? `Attack unfolding live — ${scenarioName}` : "Attack unfolding live"}
         message={
-          scenarioName
-            ? `Running ${scenarioName} — watch the security feed for real-time events.`
-            : "Simulated attack stages are executing across the pipeline."
+          `${seen}${denominator} events injected · ${alertCount} alerts · ${elapsed}s elapsed` +
+          (latest ? ` · latest: ${latest}` : "")
         }
       />
       <ProgressSteps steps={STAGES} currentIndex={stageIndex} />

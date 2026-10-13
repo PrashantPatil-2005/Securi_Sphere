@@ -58,6 +58,9 @@ class ConnectionManager:
         if websocket in self.active:
             self.active.remove(websocket)
 
+    def local_connection_count(self) -> int:
+        return len(self.active)
+
     async def broadcast(self, message: dict[str, Any]) -> None:
         if self._use_redis:
             from app.websocket.redis_pubsub import publish_ws_message

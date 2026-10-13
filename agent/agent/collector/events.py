@@ -8,14 +8,15 @@ logger = logging.getLogger(__name__)
 
 LOG_PATHS = ["/var/log/auth.log", "/var/log/syslog"]
 
-# SSH patterns — ordered by specificity to catch real sshd auth.log lines
+# SSH patterns — ordered by specificity to catch real sshd auth.log lines.
+# The trailing "port N ssh2" is optional: truncated/journald-shortened lines omit it.
 SSH_SUCCESS_RE = re.compile(
     r"Accepted (?:publickey|password|keyboard-interactive|gssapi-with-mic|"
-    r"hostbased) for (\S+) from ([\d.]+) port \d+ ssh2", re.I
+    r"hostbased) for (\S+) from ([\d.]+)(?: port \d+ ssh2)?", re.I
 )
 SSH_FAILURE_RE = re.compile(
     r"Failed (?:password|publickey|keyboard-interactive|gssapi-with-mic|"
-    r"hostbased|preauth) for (\S+) from ([\d.]+) port \d+ ssh2", re.I
+    r"hostbased|preauth) for (\S+) from ([\d.]+)(?: port \d+ ssh2)?", re.I
 )
 SSH_INVALID_RE = re.compile(r"Invalid user (\S+) from ([\d.]+)", re.I)
 # Also catch "Failed passwords" (plural) and "pam_unix" auth failures

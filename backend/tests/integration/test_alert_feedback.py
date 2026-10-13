@@ -32,10 +32,11 @@ async def test_mark_false_positive_closes_alert_and_updates_rule_counts(analyst_
     assert body["feedback_note"] == "Lab noise"
     assert body["status"] == "closed"
 
-    insights = await analyst_client.get("/api/v1/alert-rules/feedback-insights")
-    assert insights.status_code == 200, insights.text
-    insight_items = insights.json()["items"]
-    matched = next((i for i in insight_items if i["rule_id"] == alert["rule_id"]), None)
+    # The feedback-insights endpoint was removed; verify the rule's false-positive
+    # count was incremented via the alert-rules list instead.
+    rules = await analyst_client.get("/api/v1/alert-rules")
+    assert rules.status_code == 200, rules.text
+    matched = next((r for r in rules.json() if r["id"] == alert["rule_id"]), None)
     assert matched is not None
     assert matched["false_positive_count"] >= 1
 

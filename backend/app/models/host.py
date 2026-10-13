@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import INET, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,6 +26,7 @@ class Host(Base):
     health_status: Mapped[str] = mapped_column(String(20), default="healthy")
     status: Mapped[str] = mapped_column(String(20), default="offline", index=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivery_stats: Mapped[dict | None] = mapped_column(JSONB)
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

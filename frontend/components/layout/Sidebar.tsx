@@ -29,6 +29,7 @@ import {
   Wrench,
   FolderSearch,
   BookMarked,
+  UserSearch,
 } from "lucide-react";
 import { logoutApi } from "@/lib/api";
 import { useUser, canAccessRoute } from "@/lib/hooks/useUser";
@@ -90,15 +91,17 @@ const navSections: NavSection[] = [
       { href: "/mitre", label: "MITRE ATT&CK", icon: Target },
       { href: "/timeline", label: "Timeline", icon: Clock },
       { href: "/network", label: "Network", icon: Network },
+      { href: "/ueba", label: "UEBA", icon: UserSearch },
       { href: "/search", label: "Search", icon: Search },
     ],
   },
-  {
+{
     title: "Lab",
     items: [
       { href: "/simulation", label: "Attack Lab", icon: FlaskConical },
+      { href: "/demo", label: "Demo Center", icon: FlaskConical },
     ],
-  },
+},
   {
     title: "Management",
     items: [

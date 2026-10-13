@@ -473,7 +473,27 @@ async def forgot_password(
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     ))
     reset_url = f"{settings.frontend_url}/reset-password?token={token}"
-    await send_email(user.email, "Password Reset", f"<p>Reset your password: <a href='{reset_url}'>{reset_url}</a></p>")
+    sent = await send_email(
+        user.email,
+        "Password Reset",
+        f"<p>Reset your password: <a href='{reset_url}'>{reset_url}</a></p>",
+    )
+    if not sent:
+        # Never leak delivery status to the client (account-enumeration guard),
+        # but make the failure loud in logs and keep local flows usable.
+        if settings.environment == "production":
+            logger.error(
+                "Password reset email FAILED to deliver to %s — user %s will not receive a link",
+                user.email,
+                user.id,
+            )
+        else:
+            logger.warning(
+                "Password reset email not delivered (SMTP unconfigured or failing). "
+                "Dev reset link for %s: %s",
+                user.email,
+                reset_url,
+            )
     await log_audit(db, "password_reset_requested", user_id=user.id, ip_address=client_ip(request))
     return {"message": "If the email exists, a reset link has been sent"}
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -26,6 +26,18 @@ class Incident(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confidence: Mapped[float] = mapped_column(default=0.0)
+    first_observed: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_observed: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    affected_hosts: Mapped[list] = mapped_column(JSONB, default=list)
+    affected_users: Mapped[list] = mapped_column(JSONB, default=list)
+    affected_services: Mapped[list] = mapped_column(JSONB, default=list)
+    affected_containers: Mapped[list] = mapped_column(JSONB, default=list)
+    mitre_technique_ids: Mapped[list] = mapped_column(JSONB, default=list)
+    mitre_tactics: Mapped[list] = mapped_column(JSONB, default=list)
+    simulated: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[str | None] = mapped_column(String(20), default=None)
+
     notes: Mapped[list["IncidentNote"]] = relationship("IncidentNote", back_populates="incident")
     alert_links: Mapped[list["IncidentAlert"]] = relationship("IncidentAlert", back_populates="incident")
 

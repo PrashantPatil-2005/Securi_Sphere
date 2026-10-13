@@ -11,6 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { CHART_THEME, CHART_MARGINS } from "@/lib/design/chartTheme";
 
 interface TrendPoint {
   period: string;
@@ -68,16 +69,16 @@ function EventTrendChart({ total, security, authentication, service }: Props) {
 
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#243044" vertical={false} />
-        <XAxis dataKey="period" tick={{ fontSize: 10, fill: "#7b8ba3" }} stroke="#243044" />
-        <YAxis tick={{ fontSize: 11, fill: "#7b8ba3" }} stroke="#243044" width={40} />
-        <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044", fontSize: 12 }} />
+      <LineChart data={chartData} margin={CHART_MARGINS.default}>
+        <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} vertical={false} />
+        <XAxis dataKey="period" tick={{ fontSize: 10, fill: CHART_THEME.axis }} stroke={CHART_THEME.grid} />
+        <YAxis tick={{ fontSize: 11, fill: CHART_THEME.axis }} stroke={CHART_THEME.grid} width={40} />
+        <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} labelStyle={CHART_THEME.tooltip.labelStyle} />
         <Legend wrapperStyle={{ fontSize: 11 }} />
-        <Line type="monotone" dataKey="total" stroke="#4c9aff" dot={false} strokeWidth={2} name="Total" isAnimationActive={false} />
-        <Line type="monotone" dataKey="security" stroke="#ff6b6b" dot={false} strokeWidth={1.5} name="Security" isAnimationActive={false} />
-        <Line type="monotone" dataKey="authentication" stroke="#f5c842" dot={false} strokeWidth={1.5} name="Auth" isAnimationActive={false} />
-        <Line type="monotone" dataKey="service" stroke="#3dd68c" dot={false} strokeWidth={1.5} name="Service" isAnimationActive={false} />
+        <Line type="monotone" dataKey="total" stroke={CHART_THEME.colors.primary} dot={false} strokeWidth={2} name="Total" isAnimationActive={false} />
+        <Line type="monotone" dataKey="security" stroke={CHART_THEME.colors.danger} dot={false} strokeWidth={1.5} name="Security" isAnimationActive={false} />
+        <Line type="monotone" dataKey="authentication" stroke={CHART_THEME.colors.warning} dot={false} strokeWidth={1.5} name="Auth" isAnimationActive={false} />
+        <Line type="monotone" dataKey="service" stroke={CHART_THEME.colors.success} dot={false} strokeWidth={1.5} name="Service" isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
   );

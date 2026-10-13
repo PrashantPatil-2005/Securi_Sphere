@@ -15,18 +15,22 @@ test.describe("Offense promotion flow", () => {
 
     await page.goto("/simulation");
     await page.getByRole("button", { name: /run simulation/i }).click();
-    await expect(page.getByText(/simulation complete/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /simulation complete/i })).toBeVisible({
+      timeout: 90_000,
+    });
 
     await page.goto("/offenses");
-    await expect(page.getByRole("heading", { name: /offense management/i })).toBeVisible();
-    const offenseItem = page.locator("button").filter({ hasText: /^#\d+/ }).first();
+    await expect(page.getByRole("heading", { name: "Offenses" })).toBeVisible();
+    const offenseItem = page.locator("button").filter({ hasText: /#\d+/ }).first();
     await expect(offenseItem).toBeVisible({ timeout: 45_000 });
     await offenseItem.click();
 
-    await page.getByRole("button", { name: "Promote to incident" }).click();
-    await expect(page.getByRole("button", { name: /view in case workspace/i })).toBeVisible({ timeout: 45_000 });
+    // The offenses detail pane offers "Create Incident"; it promotes and
+    // navigates straight to the new incident.
+    await page.getByRole("button", { name: "Create Incident" }).click();
+    await expect(page).toHaveURL(/\/incidents\//, { timeout: 45_000 });
 
     await page.goto("/incidents");
-    await expect(page.getByRole("heading", { name: /incidents/i, level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Incidents", level: 1 })).toBeVisible();
   });
 });

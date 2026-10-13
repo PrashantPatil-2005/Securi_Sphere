@@ -9,6 +9,7 @@ from agent.buffer import init_db, _agent_rss_mb
 from agent.collector.logs import collect_events
 from agent.collector.events import LogTailer
 from agent.collector.metrics import collect_metrics
+from agent.collector.flows import collect_flows
 from agent.config import load_config
 from agent.sender import Sender, AGENT_VERSION
 from agent.integrity import compute_agent_hash
@@ -19,6 +20,8 @@ logger = logging.getLogger("securi-agent")
 HEARTBEAT_INTERVAL = 30
 METRICS_INTERVAL = 30
 LOG_INTERVAL = 10
+FLOW_INTERVAL = 15
+SEEN_FLOW_MAX = 10000
 
 _shutdown_requested = False
 _shutdown_event = threading.Event()
@@ -70,12 +73,16 @@ def main() -> None:
 
     sender = Sender(server_url, api_key, signing=bool(config.get("signing_enabled")))
     tailer = LogTailer()
+    flow_cfg = config.get("flow_collector") or {}
+    flows_enabled = bool(flow_cfg.get("enabled"))
+    seen_flows: set[tuple] = set()
+    last_flows = 0.0
     last_heartbeat = 0.0
     last_metrics = 0.0
     last_logs = 0.0
 
     rss = _agent_rss_mb()
-    logger.info("Securi agent v%s started for %s (rss=%.0fMB)", AGENT_VERSION, server_url, rss)
+    logger.info("Securi agent v%s started for %s (rss=%.0fMB, flows=%s)", AGENT_VERSION, server_url, rss, "on" if flows_enabled else "off")
 
     try:
         while not _shutdown_requested:
@@ -87,7 +94,12 @@ def main() -> None:
 
             if now - last_heartbeat >= HEARTBEAT_INTERVAL:
                 try:
-                    sender.heartbeat({"agent_hash": compute_agent_hash(), "agent_version": AGENT_VERSION})
+                    sender.heartbeat({
+                        "agent_hash": compute_agent_hash(),
+                        "agent_version": AGENT_VERSION,
+                        "flows_enabled": flows_enabled,
+                        "delivery": sender.delivery_stats(),
+                    })
                 except Exception:
                     logger.exception("Heartbeat failed")
                 last_heartbeat = now
@@ -122,6 +134,21 @@ def main() -> None:
                 except Exception:
                     logger.exception("Log collection failed")
                 last_logs = now
+
+            if flows_enabled and now - last_flows >= FLOW_INTERVAL:
+                try:
+                    flows = collect_flows(seen_flows)
+                    if flows:
+                        success = sender.send_flows(flows)
+                        if not success:
+                            from agent.buffer import enqueue_flows
+                            stored = enqueue_flows(flows)
+                            logger.warning("Server unreachable — buffered %d flows", stored)
+                    if len(seen_flows) > SEEN_FLOW_MAX:
+                        seen_flows.clear()
+                except Exception:
+                    logger.exception("Flow collection failed")
+                last_flows = now
 
             _shutdown_event.wait(timeout=1.0)
     finally:

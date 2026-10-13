@@ -26,6 +26,7 @@ export function useUebaAnomalies(params: {
   return useQuery({
     queryKey: ["ueba", "anomalies", status, severity, entityType, limit],
     queryFn: () => api<UebaAnomaly[]>(`/api/v1/ueba/anomalies${q}`),
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { api, establishSession } from "@/lib/api";
+import { passwordPolicyError } from "@/lib/password";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -43,8 +44,9 @@ export default function RegisterPage() {
       setError("Passwords do not match");
       return;
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      setError(policyError);
       return;
     }
     setLoading(true);

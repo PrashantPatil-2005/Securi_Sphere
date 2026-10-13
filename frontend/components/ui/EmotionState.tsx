@@ -29,12 +29,14 @@ export const EmotionBanner = memo(function EmotionBanner({
   message,
   action,
   className,
+  children,
 }: {
   tone?: EmotionTone;
   title: string;
   message?: string;
   action?: ReactNode;
   className?: string;
+  children?: ReactNode;
 }) {
   return (
     <div className={cn("emotion-banner", TONE_CLASS[tone], className)} role="status">
@@ -45,6 +47,7 @@ export const EmotionBanner = memo(function EmotionBanner({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{title}</p>
           {message && <p className="text-xs text-muted mt-0.5">{message}</p>}
+          {children}
         </div>
         {action}
       </div>

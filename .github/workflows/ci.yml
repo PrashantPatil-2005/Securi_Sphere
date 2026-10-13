@@ -224,6 +224,11 @@ jobs:
           ASYNC_EVENT_PIPELINE: "false"
           ALLOW_REGISTRATION: "true"
           ENABLE_SIMULATION: "true"
+          # seed_dev_users only runs when ENVIRONMENT=development AND this is set;
+          # without it the E2E database has no users and loginAsAdmin can never pass.
+          DEV_USER_PASSWORD: "testpass123"
+          # Keep simulated events visible so the golden path's offenses resolve.
+          EXCLUDE_SIMULATED_FROM_DASHBOARD: "false"
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -254,6 +259,10 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           E2E_FULL_STACK: "1"
+          # Playwright reads the process env, not the backend's - must match the
+          # DEV_USER_PASSWORD that seeded admin@test.local above.
+          DEV_USER_PASSWORD: "testpass123"
+          E2E_ADMIN_PASSWORD: "testpass123"
 
   docker-build:
     runs-on: ubuntu-latest

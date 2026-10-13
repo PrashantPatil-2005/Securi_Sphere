@@ -30,7 +30,7 @@ export function canAccessRoute(role: string | undefined, href: string): boolean 
   }
 
   if (role === "viewer") {
-    const viewerBlocked = ["/reports", "/simulation", "/rules"];
+    const viewerBlocked = ["/reports", "/simulation", "/rules", "/demo"];
     if (viewerBlocked.some((p) => href === p || href.startsWith(`${p}/`))) {
       return false;
     }

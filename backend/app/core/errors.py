@@ -13,6 +13,22 @@ from app.core.logging import request_id_var
 logger = logging.getLogger(__name__)
 
 
+def json_safe(value: Any) -> Any:
+    """Make validation errors JSON-serializable.
+
+    Pydantic puts the original exception object in ``ctx['error']`` for
+    ``value_error`` failures, which ``json.dumps`` cannot encode — the response
+    then crashes with a 500 instead of returning the 422 with the real message.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [json_safe(v) for v in value]
+    return str(value)
+
+
 def error_body(
     *,
     code: str,
@@ -53,7 +69,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             code="validation_error",
             message="Request validation failed",
             status_code=422,
-            details=exc.errors(),
+            details=json_safe(exc.errors()),
         ),
     )
 
@@ -66,7 +82,7 @@ async def pydantic_validation_exception_handler(request: Request, exc: PydanticV
             code="validation_error",
             message="Request validation failed",
             status_code=422,
-            details=exc.errors(),
+            details=json_safe(exc.errors()),
         ),
     )
 

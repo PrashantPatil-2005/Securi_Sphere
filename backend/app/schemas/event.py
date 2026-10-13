@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.validators import InetStr
+
 
 class EventResponse(BaseModel):
     id: UUID
@@ -11,6 +13,7 @@ class EventResponse(BaseModel):
     severity: str
     description: str | None
     source: str | None
+    source_ip: InetStr = None
     raw_log: str | None
     timestamp: datetime
 

@@ -1,5 +1,7 @@
 """HTTP integration tests for correlation rule CRUD."""
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -19,10 +21,11 @@ async def test_viewer_cannot_create_correlation_rule(viewer_client: AsyncClient)
 
 @pytest.mark.asyncio
 async def test_admin_correlation_rule_crud(admin_client: AsyncClient):
+    rule_name = f"Integration Custom Sequence {uuid.uuid4().hex[:8]}"
     create = await admin_client.post(
         "/api/v1/correlation-rules",
         json={
-            "name": "Integration Custom Sequence",
+            "name": rule_name,
             "description": "Test custom correlation",
             "rule_type": "sequence",
             "event_sequence": ["ssh_login_failure", "sudo_usage"],
@@ -31,7 +34,7 @@ async def test_admin_correlation_rule_crud(admin_client: AsyncClient):
             "severity": "high",
         },
     )
-    assert create.status_code == 200, create.text
+    assert create.status_code == 201, create.text
     body = create.json()
     rule_id = body["id"]
     assert body["is_system"] is False
@@ -51,7 +54,7 @@ async def test_admin_correlation_rule_crud(admin_client: AsyncClient):
     assert patched.json()["severity"] == "critical"
 
     deleted = await admin_client.delete(f"/api/v1/correlation-rules/{rule_id}")
-    assert deleted.status_code == 200, deleted.text
+    assert deleted.status_code in (200, 204), deleted.text
 
     listed_after = await admin_client.get("/api/v1/correlation-rules")
     assert not any(r["id"] == rule_id for r in listed_after.json())

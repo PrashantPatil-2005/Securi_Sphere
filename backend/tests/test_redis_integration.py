@@ -109,8 +109,12 @@ async def test_redis_job_enqueue_dequeue(require_redis):
 
 @pytest.mark.asyncio
 async def test_redis_job_priority_order(require_redis):
-    from app.jobs.redis_broker import enqueue_job, dequeue_job
+    from app.jobs.redis_broker import enqueue_job, dequeue_job, QUEUE_ORDER
     from app.jobs.queue import Job
+
+    # Clear any leftover jobs from prior runs so priority order is deterministic.
+    if QUEUE_ORDER:
+        await require_redis.delete(*QUEUE_ORDER)
 
     low = Job(priority=10, name="low_job", payload={})
     normal = Job(priority=5, name="normal_job", payload={})

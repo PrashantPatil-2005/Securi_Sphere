@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
@@ -111,6 +111,11 @@ class AuditChainVerification:
     chain_head_hash: str | None
     latest_chain_seq: int | None
     failure: AuditChainFailure | None = None
+    #: True when the verified window reached the newest entry in the table.
+    #: A False value means the check was partial (limit/from_seq window) and
+    #: the tail of the chain was NOT verified — callers must not report this
+    #: as a fully-verified chain.
+    window_complete: bool = True
 
 
 def verify_audit_entries(entries: list[AuditLog]) -> AuditChainVerification:
@@ -123,11 +128,12 @@ def verify_audit_entries(entries: list[AuditLog]) -> AuditChainVerification:
             latest_chain_seq=None,
         )
 
+    checked = 0
     for entry in entries:
         if entry.prev_hash != prev_hash:
             return AuditChainVerification(
                 valid=False,
-                entries_checked=0,
+                entries_checked=checked,
                 chain_head_hash=None,
                 latest_chain_seq=entry.chain_seq,
                 failure=AuditChainFailure(
@@ -136,12 +142,13 @@ def verify_audit_entries(entries: list[AuditLog]) -> AuditChainVerification:
                     expected=prev_hash,
                     actual=entry.prev_hash,
                 ),
+                window_complete=False,
             )
         expected = hash_audit_log(entry, prev_hash)
         if entry.entry_hash != expected:
             return AuditChainVerification(
                 valid=False,
-                entries_checked=0,
+                entries_checked=checked,
                 chain_head_hash=None,
                 latest_chain_seq=entry.chain_seq,
                 failure=AuditChainFailure(
@@ -150,35 +157,47 @@ def verify_audit_entries(entries: list[AuditLog]) -> AuditChainVerification:
                     expected=expected,
                     actual=entry.entry_hash,
                 ),
+                window_complete=False,
             )
         prev_hash = entry.entry_hash
+        checked += 1
 
     return AuditChainVerification(
         valid=True,
-        entries_checked=len(entries),
+        entries_checked=checked,
         chain_head_hash=prev_hash,
         latest_chain_seq=entries[-1].chain_seq,
+        window_complete=True,
     )
 
 
 async def fetch_audit_chain(
     db: AsyncSession,
     *,
-    limit: int = 10_000,
+    limit: int | None = 10_000,
     from_seq: int | None = None,
 ) -> list[AuditLog]:
     q: Select[tuple[AuditLog]] = select(AuditLog).order_by(AuditLog.chain_seq.asc())
     if from_seq is not None:
         q = q.where(AuditLog.chain_seq >= from_seq)
-    q = q.limit(limit)
+    if limit is not None:
+        q = q.limit(limit)
     return list((await db.execute(q)).scalars().all())
 
 
 async def verify_audit_chain(
     db: AsyncSession,
     *,
-    limit: int = 10_000,
+    limit: int | None = 10_000,
     from_seq: int | None = None,
 ) -> AuditChainVerification:
     entries = await fetch_audit_chain(db, limit=limit, from_seq=from_seq)
-    return verify_audit_entries(entries)
+    result = verify_audit_entries(entries)
+    if entries:
+        # Did the verified window reach the newest entry in the table? A window
+        # that stopped at `limit` entries (oldest-first) leaves the tail
+        # unverified — window_complete=False lets the API report that honestly.
+        max_seq = (await db.execute(select(func.max(AuditLog.chain_seq)))).scalar_one_or_none()
+        if max_seq is not None and entries[-1].chain_seq < max_seq:
+            result.window_complete = False
+    return result

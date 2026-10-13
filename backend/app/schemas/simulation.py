@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -65,6 +66,8 @@ class CustomSimulationRequest(BaseModel):
     host_id: UUID
     name: str = Field(min_length=1, max_length=255)
     steps: list[CustomSimulationStep] = Field(min_length=1, max_length=MAX_CUSTOM_STEPS)
+    pace: Literal["instant", "stream"] = "instant"
+    duration_seconds: float | None = Field(None, ge=0, le=120)
 
 
 class SimulationStepInput(BaseModel):
@@ -72,6 +75,15 @@ class SimulationStepInput(BaseModel):
     offset_seconds: int
     severity: str | None = None
     description: str | None = None
+
+
+class SimulationAlertInfo(BaseModel):
+    id: UUID
+    title: str
+    severity: str
+    rule_type: str | None = None
+    mitre_tactic: str | None = None
+    mitre_technique_id: str | None = None
 
 
 class SimulationRunResponse(BaseModel):
@@ -85,6 +97,9 @@ class SimulationRunResponse(BaseModel):
     alert_ids: list[UUID] = Field(default_factory=list)
     timeline_ids: list[UUID] = Field(default_factory=list)
     offense_ids: list[UUID] = Field(default_factory=list)
+    incident_ids: list[UUID] = Field(default_factory=list)
+    alerts: list[SimulationAlertInfo] = Field(default_factory=list)
+    expected_alerts: list[str] = Field(default_factory=list)
 
 
 class SimulationRunSummary(BaseModel):
@@ -113,3 +128,6 @@ class SimulationRunDetail(SimulationRunSummary):
     alert_ids: list[UUID] = Field(default_factory=list)
     timeline_ids: list[UUID] = Field(default_factory=list)
     offense_ids: list[UUID] = Field(default_factory=list)
+    incident_ids: list[UUID] = Field(default_factory=list)
+    alerts: list[SimulationAlertInfo] = Field(default_factory=list)
+    expected_alerts: list[str] = Field(default_factory=list)

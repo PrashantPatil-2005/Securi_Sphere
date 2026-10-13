@@ -13,9 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 async def send_email(to: str, subject: str, body: str) -> bool:
-    if not settings.smtp_user or not settings.smtp_password:
-        logger.info("Email (dev mode): to=%s subject=%s", to, subject)
-        return True
+    if not settings.smtp_host or not settings.smtp_user or not settings.smtp_password:
+        logger.warning(
+            "Email NOT sent — SMTP not configured (set MAIL_HOST/MAIL_USER/MAIL_PASSWORD in the env file the backend loads). to=%s subject=%s",
+            to,
+            subject,
+        )
+        return False
     try:
         import aiosmtplib
         from email.mime.text import MIMEText

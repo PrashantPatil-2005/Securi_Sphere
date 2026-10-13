@@ -93,6 +93,29 @@ SUPPORTED_RULE_TYPES = _CHECKER_REGISTRY.keys()
 # Built-in checkers
 # ---------------------------------------------------------------------------
 
+
+async def get_source_ip_summary(
+    db: AsyncSession, host_id, since: datetime
+) -> str | None:
+    """Most frequent attacker source IP among failed logins in the window."""
+    row = (
+        await db.execute(
+            select(Event.source_ip, func.count().label("hits"))
+            .where(
+                Event.host_id == host_id,
+                Event.event_type == "ssh_login_failure",
+                Event.timestamp >= since,
+                Event.source_ip.is_not(None),
+            )
+            .group_by(Event.source_ip)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+    ).first()
+    return str(row[0]) if row else None
+
+
+
 @register_checker
 class FailedLoginsChecker(RuleChecker):
     rule_type = "failed_logins"
@@ -112,7 +135,10 @@ class FailedLoginsChecker(RuleChecker):
         ).scalar_one()
         if count >= (rule.threshold or 5):
             return {
-                "title": "SSH brute force in progress on " + host.name + " from " + (get_source_ip_summary(db, host.id, since) or "unknown IP"),
+                "title": "SSH brute force in progress on "
+                + host.name
+                + " from "
+                + (await get_source_ip_summary(db, host.id, since) or "unknown IP"),
                 "description": f"{count} failed logins in {rule.window_minutes} minutes, same source IP, then success",
                 "mitre_technique_id": "T1110",
                 "mitre_tactic": "credential-access",
@@ -252,8 +278,31 @@ class AgentOfflineChecker(RuleChecker):
     description = "Agent has not sent a heartbeat within threshold"
 
     async def check(self, db, host, rule, now):
-        # This checker is triggered by update_host_statuses, not polling.
-        # The staleness check happens there.
+        # Live agents are handled by update_host_statuses (heartbeat staleness).
+        # Simulated runs inject explicit `agent_disconnect` events so heartbeat
+        # loss can be demonstrated without stopping a real agent.
+        window = timedelta(minutes=rule.window_minutes or 1)
+        since = now - window
+        count = (
+            await db.execute(
+                select(func.count()).select_from(Event).where(
+                    Event.host_id == host.id,
+                    Event.event_type == "agent_disconnect",
+                    Event.timestamp >= since,
+                )
+            )
+        ).scalar_one()
+        if count >= 1:
+            return {
+                "title": f"Agent offline on {host.name}",
+                "description": (
+                    f"{count} agent disconnect event(s) recorded — telemetry "
+                    "pipeline interrupted, host state unverified"
+                ),
+                "mitre_technique_id": "T1499",
+                "mitre_tactic": "impact",
+                "confidence": 0.8,
+            }
         return None
 
 
@@ -473,6 +522,86 @@ class NetworkAnomalyChecker(RuleChecker):
         return None
 
 
+@register_checker
+class PortScanChecker(RuleChecker):
+    rule_type = "port_scan"
+    description = "Multiple distinct destination ports contacted from one source — reconnaissance"
+
+    async def check(self, db, host, rule, now):
+        window = timedelta(minutes=rule.window_minutes or 5)
+        since = now - window
+        threshold = int(rule.threshold or 10)
+
+        # Group network_flow events by source IP, count distinct destination ports.
+        # dst_port lives in the flow metadata JSON produced by flow_to_event().
+        rows = (
+            await db.execute(
+                select(
+                    Event.source_ip,
+                    func.count(func.distinct(Event.metadata_["dst_port"].astext)).label("distinct_ports"),
+                    func.count().label("flow_count"),
+                )
+                .where(
+                    Event.host_id == host.id,
+                    Event.event_type == "network_flow",
+                    Event.timestamp >= since,
+                    Event.source_ip.is_not(None),
+                    Event.metadata_["dst_port"].is_not(None),
+                )
+                .group_by(Event.source_ip)
+                .order_by(func.count(func.distinct(Event.metadata_["dst_port"].astext)).desc())
+                .limit(1)
+            )
+        ).first()
+        if not rows or rows.distinct_ports < threshold:
+            return None
+
+        src_ip, distinct_ports, flow_count = rows[0], rows[1], rows[2]
+
+        # Collect the observed destination ports and a sample of event IDs for the alert body.
+        port_rows = (
+            await db.execute(
+                select(Event.metadata_["dst_port"].astext)
+                .where(
+                    Event.host_id == host.id,
+                    Event.event_type == "network_flow",
+                    Event.timestamp >= since,
+                    Event.source_ip == src_ip,
+                )
+                .distinct()
+                .limit(20)
+            )
+        ).scalars().all()
+        event_ids = (
+            await db.execute(
+                select(Event.id)
+                .where(
+                    Event.host_id == host.id,
+                    Event.event_type == "network_flow",
+                    Event.timestamp >= since,
+                    Event.source_ip == src_ip,
+                )
+                .order_by(Event.timestamp.asc())
+                .limit(10)
+            )
+        ).scalars().all()
+        ports_display = ", ".join(sorted({str(p) for p in port_rows}))
+        refs = ", ".join(str(e) for e in event_ids[:5])
+        return {
+            "title": f"Port scan from {src_ip} on {host.name}",
+            "description": (
+                f"{src_ip} contacted {distinct_ports} distinct destination ports "
+                f"in {rule.window_minutes} minutes ({flow_count} flows). "
+                f"Observed ports: {ports_display}. "
+                f"Source: {src_ip} → target host {host.name}. "
+                f"Event refs: {refs}"
+            ),
+            "mitre_technique_id": "T1046",
+            "mitre_tactic": "discovery",
+            "confidence": 0.85,
+        }
+
+
 # ---------------------------------------------------------------------------
 # Alert creation helper
 # ---------------------------------------------------------------------------
@@ -657,6 +786,7 @@ async def seed_alert_rules(db: AsyncSession) -> None:
         # ── Network & Perimeter ──────────────────────────────────────────
         {"name": "Firewall Block Surge", "rule_type": "firewall_block", "threshold": 10, "window_minutes": 5, "severity": "medium"},
         {"name": "Network Anomaly", "rule_type": "network_anomaly", "threshold": 50, "window_minutes": 5, "severity": "high"},
+        {"name": "Port Scan / Network Recon", "rule_type": "port_scan", "threshold": 10, "window_minutes": 5, "severity": "high"},
     ]
     for rule in defaults:
         db.add(AlertRule(**rule))

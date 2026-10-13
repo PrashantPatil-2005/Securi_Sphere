@@ -121,6 +121,9 @@ async def asyncio_gather_llen(redis) -> list[int]:
 DEAD_LETTER_QUEUE = "securi:jobs:dead-letter"
 MAX_DEAD_LETTER_SIZE = 1000
 
+WORKER_HEARTBEAT_KEY = "securi:worker:heartbeat"
+WORKER_HEARTBEAT_TTL_SECONDS = 45
+
 
 async def enqueue_dead_letter(job: Job) -> None:
     redis = await get_redis()
@@ -128,3 +131,46 @@ async def enqueue_dead_letter(job: Job) -> None:
         return
     await redis.lpush(DEAD_LETTER_QUEUE, job_to_json(job))
     await redis.ltrim(DEAD_LETTER_QUEUE, 0, MAX_DEAD_LETTER_SIZE - 1)
+
+
+async def publish_worker_heartbeat(worker_id: int) -> None:
+    """Refresh the shared worker liveness key (any live worker keeps it fresh)."""
+    import time
+
+    redis = await get_redis()
+    if not redis:
+        return
+    try:
+        await redis.set(
+            WORKER_HEARTBEAT_KEY,
+            f"{worker_id}:{time.time():.0f}",
+            ex=WORKER_HEARTBEAT_TTL_SECONDS,
+        )
+    except Exception as exc:
+        logger.debug("worker heartbeat publish failed: %s", exc)
+
+
+async def worker_heartbeat_age_seconds() -> float | None:
+    """Seconds since any worker last refreshed the heartbeat key.
+
+    Returns None when Redis is unreachable or no heartbeat has ever been
+    published (e.g. workers disabled) — callers must treat None as unknown,
+    not as healthy.
+    """
+    import time
+
+    redis = await get_redis()
+    if not redis:
+        return None
+    try:
+        raw = await redis.get(WORKER_HEARTBEAT_KEY)
+    except Exception as exc:
+        logger.debug("worker heartbeat read failed: %s", exc)
+        return None
+    if not raw:
+        return None
+    try:
+        _worker_id, ts = str(raw).split(":", 1)
+        return max(0.0, time.time() - float(ts))
+    except (ValueError, TypeError):
+        return None

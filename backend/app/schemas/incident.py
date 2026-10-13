@@ -17,6 +17,10 @@ class NoteCreate(BaseModel):
     content: str
 
 
+class IncidentAssignRequest(BaseModel):
+    assigned_to: UUID | None = None
+
+
 class IncidentResponse(BaseModel):
     id: UUID
     title: str
@@ -27,6 +31,8 @@ class IncidentResponse(BaseModel):
     assigned_to: UUID | None
     created_at: datetime
     resolved_at: datetime | None
+    simulated: bool = False
+    source: str | None = None
     model_config = {"from_attributes": True}
 
 

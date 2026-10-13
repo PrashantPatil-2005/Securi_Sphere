@@ -23,6 +23,7 @@ import requests
 
 from agent.buffer import (
     dequeue_all,
+    get_dropped_count,
     queue_size,
     remove_by_ids,
     purge_stale,
@@ -65,6 +66,8 @@ class Sender:
         self._consecutive_failures = 0
         self._current_backoff = INITIAL_BACKOFF_SECONDS
         self._last_attempt = 0.0
+        self._last_success_at: float | None = None
+        self._last_flush_at: float | None = None
         self._backoff_event = threading.Event()
         self._auth_failed = False
         self._last_failure_log_time: float = 0.0
@@ -125,6 +128,7 @@ class Sender:
             self._current_backoff = INITIAL_BACKOFF_SECONDS
             self._auth_failed = False
             self._failure_log_suppressed = False
+            self._last_success_at = time.time()
             return True
         except requests.RequestException as e:
             self._consecutive_failures = min(self._consecutive_failures + 1, MAX_CONSECUTIVE_FAILURES)
@@ -155,6 +159,26 @@ class Sender:
     def is_auth_failed(self) -> bool:
         return self._auth_failed
 
+    def delivery_stats(self) -> dict:
+        """Sanitized delivery telemetry for the heartbeat — counts and timestamps only."""
+        def _iso(ts: float | None) -> str | None:
+            if not ts:
+                return None
+            return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        try:
+            buffered = queue_size()
+        except Exception:  # noqa: BLE001 — telemetry must never break the heartbeat
+            buffered = None
+        return {
+            "buffered_events": buffered,
+            "last_flush_at": _iso(self._last_flush_at),
+            "last_success_at": _iso(self._last_success_at),
+            "consecutive_failures": self._consecutive_failures,
+            "dropped_events": get_dropped_count(),
+            "auth_failed": self._auth_failed,
+        }
+
     def heartbeat(self, payload: dict | None = None) -> bool:
         return self._post("/api/v1/agent/heartbeat", payload or {})
 
@@ -176,8 +200,18 @@ class Sender:
                 return False
         return True
 
+    def send_flows(self, flows: list[dict]) -> bool:
+        if not flows:
+            return True
+        for start in range(0, len(flows), MAX_SEND_BATCH_SIZE):
+            chunk = flows[start : start + MAX_SEND_BATCH_SIZE]
+            if not self._post("/api/v1/agent/flows", {"flows": chunk}):
+                return False
+        return True
+
     def flush_buffer(self) -> None:
         purge_stale(STALE_ITEM_MAX_AGE_HOURS)
+        self._last_flush_at = time.time()
 
         buffered = queue_size()
         if buffered > 0:
@@ -201,6 +235,8 @@ class Sender:
             event_ids: list[int] = []
             metrics_batch: list[dict] = []
             metric_ids: list[int] = []
+            flows_batch: list[dict] = []
+            flow_ids: list[int] = []
 
             for item_id, kind, payload in batch:
                 if not isinstance(payload, dict):
@@ -212,6 +248,9 @@ class Sender:
                 ):
                     metrics_batch.append(payload)
                     metric_ids.append(item_id)
+                elif kind == "flow":
+                    flows_batch.append(payload)
+                    flow_ids.append(item_id)
                 elif kind == "event":
                     events_batch.append(payload)
                     event_ids.append(item_id)
@@ -238,6 +277,13 @@ class Sender:
                     logger.info("Flush chunk sent: %d metrics", len(metrics_batch))
                 else:
                     logger.warning("Flush chunk failed: %d metrics — will retry", len(metrics_batch))
+
+            if flows_batch:
+                if self.send_flows(flows_batch):
+                    sent_ids.extend(flow_ids)
+                    logger.info("Flush chunk sent: %d flows", len(flows_batch))
+                else:
+                    logger.warning("Flush chunk failed: %d flows — will retry", len(flows_batch))
 
         if sent_ids:
             remove_by_ids(sent_ids)

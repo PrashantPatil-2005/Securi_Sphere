@@ -12,6 +12,7 @@ from app.core.health import readiness
 from app.database import get_db, get_db_read
 from app.dependencies import require_roles
 from app.jobs.queue import job_queue
+from app.jobs.redis_broker import redis_ping
 from app.models.alert import Alert
 from app.models.event import Event
 from app.models.host import Host
@@ -27,13 +28,37 @@ async def system_health(user: User = Depends(require_roles("admin"))):
     ready = await readiness()
     pending = await job_queue.pending_count()
     os_health = await opensearch_cluster_health() if settings.opensearch_url else None
+
+    checks = ready.get("checks", {})
+    database = "connected" if checks.get("database") == "ok" else "error"
+
+    if not settings.redis_url:
+        redis_status = "not_configured"
+    else:
+        try:
+            redis_status = "connected" if await redis_ping() else "error"
+        except Exception:
+            redis_status = "error"
+
+    if settings.job_queue_backend == "redis" and settings.redis_url:
+        # Workers run in the dedicated worker container — broker reachability is the signal.
+        job_queue_status = "ok" if redis_status == "connected" else "error"
+    elif job_queue.is_running:
+        job_queue_status = "ok"
+    else:
+        # In-process memory queue with workers disabled: enqueued jobs are never processed.
+        job_queue_status = "error"
+
     return {
         **ready,
+        "database": database,
+        "redis": redis_status,
         "environment": settings.environment,
         "search_backend": "opensearch" if opensearch_enabled() else "postgres",
         "opensearch": os_health,
         "job_queue_backend": job_queue.backend_name,
         "job_queue_running": job_queue.is_running,
+        "job_queue_status": job_queue_status,
         "job_queue_pending": pending,
         "job_queue_run_workers": settings.job_queue_run_workers,
         "ws_pubsub_backend": ws_manager.backend_name,
@@ -41,6 +66,18 @@ async def system_health(user: User = Depends(require_roles("admin"))):
         "simulation_enabled": settings.enable_simulation,
         "registration_enabled": settings.allow_registration,
     }
+
+
+@router.get("/health/components")
+async def system_health_components(user: User = Depends(require_roles("admin"))):
+    """Per-component operational health with safe diagnostics.
+
+    Four-state vocabulary per component: healthy | degraded | unavailable | unknown.
+    Never exposes connection strings, credentials, tokens, or exception traces.
+    """
+    from app.services.system_health import build_component_status
+
+    return await build_component_status()
 
 
 @router.get("/pipeline")

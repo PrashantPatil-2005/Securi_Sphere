@@ -87,12 +87,16 @@ def event_payload(
     if offset_seconds:
         from datetime import timedelta
         ts = ts + timedelta(seconds=offset_seconds)
+    # Ingest deduplicates on (host, event_type, raw_log/description). Default the
+    # raw_log to a unique value so repeated calls yield distinct events; pass an
+    # explicit raw_log when a test wants to exercise dedup itself.
+    unique = uuid.uuid4().hex[:12]
     return {
         "event_type": event_type,
         "severity": severity,
         "description": description or f"Test {event_type}",
         "source": "integration-test",
-        "raw_log": raw_log or description or f"test {event_type}",
+        "raw_log": raw_log or f"test {event_type} {unique}",
         "timestamp": ts.isoformat(),
     }
 

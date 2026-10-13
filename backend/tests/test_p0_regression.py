@@ -295,7 +295,11 @@ class TestPostgresDedupRace:
                 results.append(dup)
                 await db.commit()
 
-        await asyncio.gather(*[_check() for _ in range(10)])
+        # Force the Postgres fallback path (this test targets Postgres race
+        # handling). With Redis configured, is_duplicate uses a small Redis
+        # pool that cannot absorb 10 concurrent connections.
+        with patch("app.services.ingest_dedup._get_redis", new_callable=AsyncMock, return_value=None):
+            await asyncio.gather(*[_check() for _ in range(10)])
 
         assert results[0] is False, "First request should not be duplicate"
         assert all(r is True for r in results[1:]), "Subsequent requests should be duplicate"

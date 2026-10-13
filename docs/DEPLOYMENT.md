@@ -12,7 +12,7 @@ Complete guide to host the Securi dashboard on Linux and run a live demo.
 | **Redis** | 6379 (internal) | Background jobs |
 | **Agent** (on each monitored VM) | — | Sends events/metrics to API |
 
-The dashboard has **no hardcoded dummy data**. Charts show real agent data. Empty states mean no hosts are reporting yet. The only synthetic data comes from the **Simulation** feature (admin-only), which is hidden from dashboard analytics by default.
+The dashboard has **no hardcoded dummy data**. Charts show real agent data. Empty states mean no hosts are reporting yet. The only synthetic data comes from the **Attack Lab** feature (admin-only), which is hidden from dashboard analytics by default.
 
 ---
 
@@ -219,7 +219,7 @@ For HTTPS servers, use `https://securi.yourdomain.com` as `--server`.
 |---------|-------|--------|
 | Overview | Dashboard, Analytics, Metrics | Live API data |
 | Operations | Hosts, Maintenance, Events, Alerts, Offenses, Investigations | Full |
-| Intelligence | MITRE, Timeline, Network, Search | Full |
+| Intelligence | MITRE, Timeline, Network, UEBA, Search | Full |
 | Administration | Rules, Reports, Audit, Simulation, System Health | Admin/analyst RBAC |
 | Settings | Theme, notifications, system info | Theme + notifications wired |
 
@@ -242,7 +242,7 @@ After the stack is up:
 This creates:
 - User: `demo@securi.local` / `Demo1234!`
 - Host: `demo-server`
-- Runs `brute_force` simulation (optional: `RUN_SIMULATION=false ./scripts/demo-setup.sh ...`)
+- Runs `multi_stage_attack` simulation (optional: `RUN_SIMULATION=false ./scripts/demo-setup.sh ...`)
 
 ### Show simulation on dashboard charts
 
@@ -263,11 +263,11 @@ Restart backend, run simulation, then show Dashboard → Alerts → Timeline →
 5. **Offenses** — grouped incidents
 6. **Timeline** — attack chain reconstruction
 7. **MITRE ATT&CK** — technique mapping
-8. **Simulation** (admin) — run `brute_force` live if no real attacks yet
+8. **Attack Lab** (admin) — run **Multi-Stage Attack** live if no real attacks yet
 
 ### Clean up after demo
 
-In the dashboard: **Simulation → Purge simulated data**
+In the dashboard: **Attack Lab → History → purge simulated data**
 
 Or via API:
 

@@ -31,7 +31,14 @@ export async function loginAsAdmin(page: Page) {
   await page.goto("/login");
   await expect(page.getByLabel("Email address")).toBeVisible({ timeout: 30_000 });
 
-  const passwords = ["testpass123", "newpass456"];
+  const passwords = [
+    process.env.E2E_ADMIN_PASSWORD,
+    process.env.DEV_USER_PASSWORD,
+    "testpass123",
+    "newpass456",
+    "Admin1234!",
+    "Securi2026!",
+  ].filter((p): p is string => Boolean(p));
   let loggedIn = false;
 
   for (const password of passwords) {
@@ -77,8 +84,19 @@ export async function loginAsAdmin(page: Page) {
 export async function addHost(page: Page, hostName: string) {
   await page.goto("/hosts");
   await dismissBlockingOverlays(page);
-  await expect(page.getByPlaceholder("New host name")).toBeVisible({ timeout: 15_000 });
-  await page.getByPlaceholder("New host name").fill(hostName);
-  await page.getByRole("button", { name: "Add host" }).click();
+
+  // Header button opens the Add Host dialog.
+  await page.getByRole("button", { name: "Add Host", exact: true }).first().click();
+
+  const addDialog = page.getByRole("dialog", { name: "Add Host" });
+  await expect(addDialog).toBeVisible({ timeout: 15_000 });
+  await addDialog.getByPlaceholder("e.g. server-prod-03").fill(hostName);
+  await addDialog.getByRole("button", { name: "Add Host", exact: true }).click();
+
+  // Success opens an Enrollment Token dialog that must be dismissed.
+  const tokenDialog = page.getByRole("dialog", { name: /Enrollment Token/i });
+  await expect(tokenDialog).toBeVisible({ timeout: 15_000 });
+  await tokenDialog.getByRole("button", { name: "Done" }).click();
+
   await expect(page.getByText(hostName).first()).toBeVisible({ timeout: 15_000 });
 }

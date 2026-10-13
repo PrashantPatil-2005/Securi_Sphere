@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 _redis_client = None
 
 
-def event_fingerprint(host_id, timestamp: datetime, event_type: str, raw_log: str | None) -> str:
-    raw = f"{host_id}:{timestamp.isoformat()}:{event_type}:{raw_log or ''}"
+def event_fingerprint(host_id, event_type: str, raw_log: str | None = None, description: str | None = None) -> str:
+    key_part = raw_log or description or ""
+    raw = f"{host_id}:{event_type}:{key_part}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
 

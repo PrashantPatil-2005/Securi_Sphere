@@ -2,6 +2,9 @@ import { test, expect } from "@playwright/test";
 
 const fullStack = !!process.env.E2E_FULL_STACK;
 
+const adminPassword =
+  process.env.E2E_ADMIN_PASSWORD || process.env.DEV_USER_PASSWORD || "testpass123";
+
 test.describe("Invite acceptance flow", () => {
   test.skip(!fullStack, "Set E2E_FULL_STACK=1 with backend + Postgres running");
 
@@ -10,12 +13,13 @@ test.describe("Invite acceptance flow", () => {
     const email = `invited-e2e-${stamp}@test.local`;
     const password = "InvitePass123!";
 
-    const loginRes = await request.post("http://localhost:8000/api/v1/auth/login", {
-      data: { email: "admin@test.local", password: "testpass123" },
+    // Relative URLs go through the Next proxy, so this works against any baseURL.
+    const loginRes = await request.post("/api/v1/auth/login", {
+      data: { email: "admin@test.local", password: adminPassword },
     });
     expect(loginRes.ok()).toBeTruthy();
 
-    const inviteRes = await request.post("http://localhost:8000/api/v1/users/invites", {
+    const inviteRes = await request.post("/api/v1/users/invites", {
       data: { email, role: "viewer", full_name: "E2E Invited" },
     });
     expect(inviteRes.ok()).toBeTruthy();
@@ -28,9 +32,18 @@ test.describe("Invite acceptance flow", () => {
     await expect(page.getByRole("heading", { name: "Accept invitation" })).toBeVisible();
     await expect(page.getByText(email)).toBeVisible();
 
-    await page.getByLabel("Password").fill(password);
+    // "Password" also matches the SSO checkbox label, so scope to the input.
+    await page.getByRole("textbox", { name: "Password", exact: true }).fill(password);
     await page.getByRole("button", { name: "Create account" }).click();
-    await expect(page).toHaveURL("/", { timeout: 15_000 });
-    await expect(page.getByText(/getting started|dashboard/i).first()).toBeVisible({ timeout: 10_000 });
+
+    // Accepting an invite creates the account but does not issue a session,
+    // so the invitee lands on the sign-in page.
+    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+
+    // The new credentials must actually work.
+    const invitedLogin = await request.post("/api/v1/auth/login", {
+      data: { email, password },
+    });
+    expect(invitedLogin.ok()).toBeTruthy();
   });
 });

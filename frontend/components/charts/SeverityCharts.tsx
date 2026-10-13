@@ -2,13 +2,14 @@
 
 import { memo } from "react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { CHART_THEME, axisProps, CHART_MARGINS } from "@/lib/design/chartTheme";
 
 const COLORS: Record<string, string> = {
-  critical: "#ff6b6b",
-  high: "#ff9f43",
-  medium: "#f5c842",
-  low: "#4c9aff",
-  info: "#7b8ba3",
+  critical: CHART_THEME.severity[0],
+  high: CHART_THEME.severity[1],
+  medium: CHART_THEME.severity[2],
+  low: CHART_THEME.severity[3],
+  info: CHART_THEME.severity[4],
 };
 
 interface Item {
@@ -39,16 +40,16 @@ function SeverityCharts({ distribution }: { distribution: Item[] }) {
                 <Cell key={d.severity} fill={COLORS[d.severity] || "#888"} />
               ))}
             </Pie>
-            <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
+            <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} labelStyle={CHART_THEME.tooltip.labelStyle} />
           </PieChart>
         </ResponsiveContainer>
       </div>
       <div>
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={data}>
-            <XAxis dataKey="severity" stroke="#7b8ba3" tick={{ fontSize: 11 }} />
-            <YAxis stroke="#7b8ba3" width={32} />
-            <Tooltip contentStyle={{ background: "#111820", border: "1px solid #243044" }} />
+          <BarChart data={data} margin={CHART_MARGINS.default}>
+            <XAxis dataKey="severity" {...axisProps} tick={{ fontSize: 11, fill: CHART_THEME.axis }} />
+            <YAxis {...axisProps} width={32} />
+            <Tooltip contentStyle={CHART_THEME.tooltip.contentStyle} labelStyle={CHART_THEME.tooltip.labelStyle} />
             <Bar dataKey="count" name="Alerts" isAnimationActive={false}>
               {data.map((d) => (
                 <Cell key={d.severity} fill={COLORS[d.severity] || "#888"} />

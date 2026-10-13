@@ -115,6 +115,12 @@ async def prepare_database():
         async with async_session() as db:
             await seed_roles(db)
             await seed_alert_rules(db)
+            # Reset the audit hash chain. The chain is append-only and verified
+            # end-to-end, so stale entries written by older code (different hash
+            # format) would permanently fail integrity checks. This runs only on
+            # the dedicated test database, never the dev/production DB.
+            from sqlalchemy import text as _text
+            await db.execute(_text("TRUNCATE TABLE audit_logs RESTART IDENTITY"))
             roles = {r.name: r for r in (await db.execute(select(Role))).scalars().all()}
             for email, role_name in TEST_USERS.items():
                 existing = (
@@ -141,12 +147,10 @@ async def prepare_database():
     except Exception as exc:
         _db_failed = True
         pytest.fail(f"Database setup failed: {exc}")
+
     yield
 
     # Only reset dedicated test databases — never truncate the developer LAN DB.
-    if "securi_test" not in settings.database_url:
-        return
-
     from app.database import async_session as _cleanup_session
     from sqlalchemy import text as _text
 
@@ -168,6 +172,30 @@ async def prepare_database():
             except Exception:
                 pass
         await _db.commit()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_redis_clients():
+    """Close cached Redis clients after each test.
+
+    The app caches module-level Redis clients bound to the running event loop.
+    pytest-asyncio creates a fresh loop per test, so a cached client from a prior
+    test would reference a closed loop and raise "Event loop is closed". Closing
+    them after each test forces a clean reconnect on the next use. This mirrors
+    production shutdown and does not affect app behavior.
+    """
+    yield
+    from app.services.ingest_dedup import close_redis as _close_dedup
+    from app.jobs.redis_broker import close_redis as _close_broker
+    from app.websocket.redis_pubsub import close_redis as _close_pubsub
+    from app.middleware.rate_limit import close_redis as _close_rl
+    from app.services.recovery_rate_limit import close_redis as _close_recovery
+
+    for _close in (_close_dedup, _close_broker, _close_pubsub, _close_rl, _close_recovery):
+        try:
+            await _close()
+        except Exception:
+            pass
 
 
 @pytest_asyncio.fixture

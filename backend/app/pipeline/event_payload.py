@@ -22,6 +22,24 @@ _IPV4_RE = re.compile(
 )
 _SOURCE_MAX = 50
 
+# Top-level agent event keys promoted into metadata when absent. These match
+# the normalizer's extraction aliases (normalizer.py:63-64) plus port keys used
+# by the port_scan checker's metadata['dst_port'] lookups.
+_PROMOTED_TOP_LEVEL_KEYS = (
+    "username",
+    "user",
+    "account",
+    "source_ip",
+    "src_ip",
+    "ip",
+    "remote_addr",
+    "src_port",
+    "dst_port",
+    "source_port",
+    "destination_port",
+    "protocol",
+)
+
 
 def safe_inet(value: Any) -> str | None:
     if value is None:
@@ -72,12 +90,22 @@ def sanitize_event_dict(raw: dict) -> dict:
     if isinstance(source, str) and len(source) > _SOURCE_MAX:
         data["source"] = source[:_SOURCE_MAX]
     metadata = data.get("metadata")
-    if isinstance(metadata, dict):
-        cleaned = dict(metadata)
-        for ip_key in ("source_ip", "src_ip", "ip", "remote_addr"):
-            if ip_key in cleaned:
-                cleaned[ip_key] = safe_inet(cleaned[ip_key])
-        data["metadata"] = cleaned
+    if not isinstance(metadata, dict):
+        metadata = {}
+    else:
+        metadata = dict(metadata)
+    # Agents (v3 collectors) emit username/source_ip at the TOP level of each
+    # event dict, not inside metadata. The EventIngest schema only models
+    # `metadata`, so those keys were silently dropped and Event.username stayed
+    # NULL for real auth events. Promote known field names into metadata (only
+    # when absent) so the normalizer's metadata extraction works unchanged.
+    for key in _PROMOTED_TOP_LEVEL_KEYS:
+        if key in data and key not in metadata and data[key] is not None:
+            metadata[key] = data[key]
+    for ip_key in ("source_ip", "src_ip", "ip", "remote_addr"):
+        if ip_key in metadata:
+            metadata[ip_key] = safe_inet(metadata[ip_key])
+    data["metadata"] = metadata
     return data
 
 

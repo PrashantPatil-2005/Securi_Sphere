@@ -16,7 +16,7 @@ async def test_simulation_creates_offense_and_promotes(analyst_client: AsyncClie
         pytest.skip("Simulation requires admin role in this environment")
     assert sim.status_code == 200, sim.text
 
-    offenses_res = await analyst_client.get("/api/v1/offenses")
+    offenses_res = await analyst_client.get("/api/v1/offenses?include_simulated=true")
     assert offenses_res.status_code == 200
     items = offenses_res.json().get("items", [])
     host_offenses = [o for o in items if str(o.get("host_id")) == str(host_id)]

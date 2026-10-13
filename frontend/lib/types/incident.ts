@@ -11,7 +11,34 @@ export interface IncidentSummary {
   assigned_to: string | null;
   created_at: string;
   resolved_at: string | null;
+  simulated?: boolean;
+  source?: string | null;
 }
+
+/** List-row shape returned by GET /api/v1/incidents. */
+export type IncidentResponse = IncidentSummary;
+
+export interface IncidentFilters {
+  severity: string;
+  status: string;
+  host_id: string;
+  q: string;
+}
+
+export const DEFAULT_INCIDENT_FILTERS: IncidentFilters = {
+  severity: "",
+  status: "",
+  host_id: "",
+  q: "",
+};
+
+export const INCIDENT_SORT_OPTIONS = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "severity:desc", label: "Severity (high to low)" },
+  { value: "severity:asc", label: "Severity (low to high)" },
+  { value: "title:asc", label: "Title A-Z" },
+] as const;
 
 export interface IncidentNote {
   id: string;

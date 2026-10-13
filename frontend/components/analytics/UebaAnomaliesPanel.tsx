@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, ArrowRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import { Panel, EmptyState } from "@/components/ui/Panel";
@@ -80,9 +80,18 @@ export function UebaAnomaliesPanel() {
           : "Behavioral spikes vs rolling baselines"
       }
       action={
-        <Button size="sm" variant="ghost" loading={scanMutation.isPending} onClick={() => scanMutation.mutate()}>
-          Run scan
-        </Button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/ueba"
+            className="text-xs text-accent hover:underline inline-flex items-center gap-1"
+          >
+            View all
+            <ArrowRight className="w-3 h-3" />
+          </Link>
+          <Button size="sm" variant="ghost" loading={scanMutation.isPending} onClick={() => scanMutation.mutate()}>
+            Run scan
+          </Button>
+        </div>
       }
     >
       {isLoading ? (

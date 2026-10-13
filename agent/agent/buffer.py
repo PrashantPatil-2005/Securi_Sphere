@@ -16,6 +16,13 @@ MAX_EVENT_SIZE_BYTES = 4096
 MAX_DEQUEUE_ITEMS = 200
 STALE_ITEM_MAX_AGE_HOURS = 24
 
+_dropped_total = 0
+
+
+def get_dropped_count() -> int:
+    """Events the buffer refused to store (oversized, full, or SQLite rejection)."""
+    return _dropped_total
+
 
 def _agent_rss_mb() -> float:
     try:
@@ -102,15 +109,22 @@ def _purge_batch_wrappers(conn: sqlite3.Connection) -> int:
     return len(ids_to_delete)
 
 
+def enqueue(event: dict, priority: int = 0) -> None:
+    """Append a payload to the agent's internal buffer (test compatibility)."""
+    enqueue_event(event, kind="event")
+
+
 def enqueue_event(event: dict, kind: str = "event") -> bool:
     """Buffer a single dict as one SQLite row.
 
     Each row is small (~300-2000 bytes). No nesting, no batch wrappers.
-    kind is "event" or "metric".
+    kind is "event", "metric", or "flow".
     """
+    global _dropped_total
     payload_json = json.dumps(event, default=str)
     payload_bytes = len(payload_json.encode("utf-8"))
     if payload_bytes > MAX_EVENT_SIZE_BYTES:
+        _dropped_total += 1
         logger.warning(
             "Oversized event dropped: kind=event bytes=%d limit=%d type=%s",
             payload_bytes, MAX_EVENT_SIZE_BYTES,
@@ -122,6 +136,7 @@ def enqueue_event(event: dict, kind: str = "event") -> bool:
     current_mb = _buffer_size_mb()
 
     if current_size >= MAX_BUFFER_ITEMS:
+        _dropped_total += 1
         logger.warning("Buffer full (%d items) — dropping event", current_size)
         return False
 
@@ -144,6 +159,7 @@ def enqueue_event(event: dict, kind: str = "event") -> bool:
         conn.close()
         return True
     except sqlite3.DataError as exc:
+        _dropped_total += 1
         logger.error(
             "SQLite rejected event write (%d bytes): %s — dropping",
             payload_bytes, exc,
@@ -162,6 +178,10 @@ def enqueue_events(events: list[dict], kind: str = "event") -> int:
 
 def enqueue_metrics(metrics: list[dict]) -> int:
     return enqueue_events(metrics, kind="metric")
+
+
+def enqueue_flows(flows: list[dict]) -> int:
+    return enqueue_events(flows, kind="flow")
 
 
 def dequeue_all(max_items: int = MAX_DEQUEUE_ITEMS) -> list[tuple[int, str, dict]]:

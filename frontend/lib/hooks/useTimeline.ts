@@ -22,6 +22,7 @@ export function useTimelines(params: {
   return useQuery({
     queryKey: ["timelines", page, pageSize, hostId, preset, fromTime, toTime],
     queryFn: () => api<Timeline[]>(`${API.TIMELINE.LIST}${q}`),
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 }

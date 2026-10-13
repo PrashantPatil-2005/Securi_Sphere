@@ -1,188 +1,125 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSecurityFeed } from "@/lib/websocket";
+import { useEffect, useMemo, useState } from "react";
+import { useFeedItems, useSecurityFeedStore } from "@/lib/websocket";
 import { EmotionBanner, ProgressSteps } from "@/components/ui/EmotionState";
-import { useToast } from "@/components/ui/Toast";
+import { groupByStage, stageForEvent } from "@/lib/attackChain";
 
-interface LiveAttackBannerProps {
-  hostName: string;
-  hostId: string;
+const TITLE_BY_RANK = (rank: number, hostName: string) =>
+  rank >= 6
+    ? `IMPACT DETECTED on ${hostName}`
+    : rank >= 5
+      ? `PERSISTENCE CONFIRMED on ${hostName}`
+      : rank >= 4
+        ? `PRIVILEGE ESCALATION on ${hostName}`
+        : rank >= 3
+          ? `ACCESS GAINED on ${hostName}`
+          : rank >= 2
+            ? `ATTACK IN PROGRESS on ${hostName}`
+            : `RECONNAISSANCE on ${hostName}`;
+
+interface FeedItem {
+  _type?: string;
+  _ts?: number;
+  host_id?: string;
+  event_type?: string;
+  description?: string;
+  title?: string;
+  severity?: string;
 }
 
-function LiveAttackBanner({ hostName, hostId }: LiveAttackBannerProps) {
-  const { feedItems, isConnected } = useSecurityFeed();
-  const [attackState, setAttackState] = useState<{
-    stage: "BRUTE_FORCE" | "ACCESS_GAINED" | "PRIVILEGE_ESCALATION" | "IMPACT" | "COMPROMISE_CONFIRMED";
-    failedCount: number;
-    totalThreshold: number;
-    successSeen: boolean;
-    sudoSeen: boolean;
-    serviceStopSeen: boolean;
-    lastUpdate: string;
-  }>({
-    stage: "BRUTE_FORCE",
-    failedCount: 0,
-    totalThreshold: 10,
-    successSeen: false,
-    sudoSeen: false,
-    serviceStopSeen: false,
-    lastUpdate: "",
-  });
+export interface LiveAttackBannerProps {
+  running: boolean;
+  hostId: string;
+  hostName: string;
+  scenarioName?: string;
+  expectedEvents?: number;
+  runStartedAt: number | null;
+  /** Keep the banner up briefly after the run so the final stage lands. */
+  dwellMs?: number;
+}
+
+export function LiveAttackBanner({
+  running,
+  hostId,
+  hostName,
+  scenarioName,
+  expectedEvents,
+  runStartedAt,
+  dwellMs = 20_000,
+}: LiveAttackBannerProps) {
+  const { subscribe, getSnapshot } = useSecurityFeedStore(120);
+  const feed = useFeedItems(subscribe, getSnapshot) as FeedItem[];
+  const [dwellActive, setDwellActive] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (running) {
+      setDwellActive(false);
+      return;
+    }
+    if (!runStartedAt) return;
+    setDwellActive(true);
+    const timer = setTimeout(() => setDwellActive(false), dwellMs);
+    return () => clearTimeout(timer);
+  }, [running, runStartedAt, dwellMs]);
 
-    // Filter recent SSH auth events for this host
-    const sshEvents = feedItems
-      .filter(
-        (item) =>
-          item.host_id === hostId &&
-          (item.event_type === "ssh_login_failure" ||
-            item.event_type === "ssh_login_success" ||
-            item.event_type === "sudo_usage")
-      )
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  useEffect(() => {
+    if (!running || !runStartedAt) return;
+    setElapsed(0);
+    const tick = setInterval(
+      () => setElapsed(Math.round((Date.now() - runStartedAt) / 1000)),
+      500,
+    );
+    return () => clearInterval(tick);
+  }, [running, runStartedAt]);
 
-    let failedCount = 0;
-    let successSeen = false;
-    let sudoSeen = false;
-    let serviceStopSeen = false;
+  const { stage, steps, eventCount, alertCount, latest } = useMemo(() => {
+    const windowStart = runStartedAt ?? 0;
+    const runEvents = feed.filter(
+      (item) =>
+        item._type === "security_feed" &&
+        item.host_id === hostId &&
+        (item._ts ?? 0) >= windowStart,
+    );
+    const runAlerts = feed.filter(
+      (item) => item._type === "new_alert" && (item._ts ?? 0) >= windowStart,
+    );
 
-    for (const event of sshEvents) {
-      if (event.event_type === "ssh_login_failure") {
-        failedCount += 1;
-      } else if (event.event_type === "ssh_login_success") {
-        successSeen = true;
-      } else if (event.event_type === "sudo_usage") {
-        sudoSeen = true;
-      }
-    }
+    const groups = groupByStage(runEvents, (item) => stageForEvent(item.event_type));
+    const topRank = groups.at(-1)?.stage.rank ?? 0;
+    const last = runEvents[0];
 
-    // Determine attack stage
-    let stage:
-      | "BRUTE_FORCE"
-      | "ACCESS_GAINED"
-      | "PRIVILEGE_ESCALATION"
-      | "IMPACT"
-      | "COMPROMISE_CONFIRMED";
-
-    if (successSeen && sudoSeen) {
-      stage = "IMPACT";
-    } else if (successSeen) {
-      stage = "ACCESS_GAINED";
-    } else if (failedCount >= (attackState.totalThreshold || 10)) {
-      stage = "BRUTE_FORCE";
-    } else {
-      stage = "BRUTE_FORCE";
-    }
-
-    setAttackState({
-      stage,
-      failedCount,
-      totalThreshold: attackState.totalThreshold,
-      successSeen,
-      sudoSeen,
-      serviceStopSeen,
-      lastUpdate: new Date().toISOString(),
-    });
-  }, [feedItems, isConnected, hostId]);
-
-  // Render progress steps based on stage
-  const stages: string[] = [];
-  const currentIndex: number = [];
-
-  if (attackState.stage === "COMPROMISE_CONFIRMED") {
-    stages.push("Brute force", "Access gained", "Privilege escalation", "Impact confirmed");
-    currentIndex.push(3);
-  } else if (attackState.stage === "IMPACT") {
-    stages.push("Brute force", "Access gained", "Privilege escalation", "Impact");
-    currentIndex.push(3);
-  } else if (attackState.stage === "PRIVILEGE_ESCALATION") {
-    stages.push("Brute force", "Access gained", "Privilege escalation");
-    currentIndex.push(2);
-  } else if (attackState.stage === "ACCESS_GAINED") {
-    stages.push("Brute force", "Access gained");
-    currentIndex.push(1);
-  } else {
-    stages.push("Brute force");
-    currentIndex.push(0);
-  }
-
-  // Get progress text
-  const getProgressText = () => {
-    if (attackState.stage === "COMPROMISE_CONFIRMED") {
-      return "Attack compromise confirmed — SSH account takeover";
-    }
-    if (attackState.stage === "BRUTE_FORCE") {
-      return `Failing logins (${attackState.failedCount}/${attackState.totalThreshold}) → waiting for success`;
-    }
-    if (attackState.stage === "ACCESS_GAINED") {
-      return "Success achieved → waiting for privilege escalation";
-    }
-    if (attackState.stage === "PRIVILEGE_ESCALATION") {
-      return "Privilege escalation detected → waiting for impact";
-    }
-    if (attackState.stage === "IMPACT") {
-      return "Impact activity detected";
-    }
-    return "";
-  };
-
-  // Get banner title and tone
-  const getBannerInfo = () => {
-    if (attackState.stage === "COMPROMISE_CONFIRMED") {
-      return {
-        title: "ATTACK COMPROMISED — SSH account takeover on " + hostName,
-        tone: "success" as const,
-      };
-    }
-    if (attackState.stage === "BRUTE_FORCE") {
-      return {
-        title: "ATTACK IN PROGRESS — SSH brute force on " + hostName,
-        tone: "urgency" as const,
-      };
-    }
-    if (attackState.stage === "ACCESS_GAINED") {
-      return {
-        title: "ACCESS GAINED — Successful login detected on " + hostName,
-        tone: "urgency" as const,
-      };
-    }
-    if (attackState.stage === "PRIVILEGE_ESCALATION") {
-      return {
-        title: "PRIVILEGE ESCALATION DETECTED on " + hostName,
-        tone: "confidence" as const,
-      };
-    }
-    if (attackState.stage === "IMPACT") {
-      return {
-        title: "IMPACT ACTIVITY DETECTED on " + hostName,
-        tone: "urgency" as const,
-      };
-    }
     return {
-      title: "SECURITY ALERT — " + hostName,
-      tone: "calm" as const,
+      stage: {
+        rank: topRank,
+        label: groups.at(-1)?.stage.label ?? "Injection",
+      },
+      steps: groups.map((g) => g.stage.label),
+      eventCount: runEvents.length,
+      alertCount: runAlerts.length,
+      latest: last?.description || last?.event_type || "",
     };
-  };
+  }, [feed, hostId, runStartedAt]);
 
-  const { title, tone } = getBannerInfo();
+  const visible = (running || dwellActive) && !!runStartedAt && eventCount > 0;
+  if (!visible) return null;
 
-  if (!isConnected) {
-    return null;
-  }
+  const tone = running ? "urgency" : alertCount > 0 ? "success" : "confidence";
+  const title = TITLE_BY_RANK(stage.rank, hostName);
+  const progressText = running
+    ? `Stage: ${stage.label} — ${eventCount}${expectedEvents ? `/${expectedEvents}` : ""} events injected${latest ? ` · latest: ${latest}` : ""}`
+    : `${eventCount} events injected · ${alertCount} alerts raised${scenarioName ? ` · ${scenarioName}` : ""}`;
 
   return (
     <EmotionBanner tone={tone} title={title}>
-      <ProgressSteps steps={stages} currentIndex={currentIndex[0]} />
-      <p className="mt-2 text-sm text-muted line-clamp-2">
-        {getProgressText()}
-      </p>
+      {steps.length > 0 && (
+        <div className="mt-2">
+          <ProgressSteps steps={steps} currentIndex={Math.max(steps.length - 1, 0)} />
+        </div>
+      )}
+      <p className="mt-2 text-xs text-muted">{progressText}</p>
+      {running && <p className="mt-1 text-xs text-muted">{elapsed}s elapsed · streaming</p>}
     </EmotionBanner>
   );
-}
-
-export function useLiveAttackBanner(hostId: string, hostName: string) {
-  return <LiveAttackBanner hostName={hostName} hostId={hostId} />;
 }

@@ -24,7 +24,7 @@ test.describe("Securi smoke", () => {
 
     test("critical pages load after login", async ({ page }) => {
       await loginAsAdmin(page);
-      for (const path of ["/rules", "/alerts", "/simulation"]) {
+      for (const path of ["/rules", "/alerts", "/simulation", "/ueba"]) {
         await page.goto(path);
         await dismissBlockingOverlays(page);
         await expect(page.locator("h1").first()).toBeVisible({ timeout: 15_000 });

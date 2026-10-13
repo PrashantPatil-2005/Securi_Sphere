@@ -52,8 +52,8 @@ function OffensesPageContent() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Offenses</h1>
-        <p className="text-sm text-muted mt-1">
+        <h1 className="page-title">Offenses</h1>
+        <p className="page-subtitle">
           Security activity grouped into investigation clusters
         </p>
       </div>

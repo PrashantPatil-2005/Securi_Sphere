@@ -80,6 +80,9 @@ function parseApiError(body: unknown, status: number): string {
     if (Array.isArray(o.detail)) return o.detail.map(String).join("; ");
     const nested = o.error as Record<string, unknown> | undefined;
     if (nested) {
+      if (nested.code === "internal_error") {
+        return "Something went wrong on the server. Please try again in a moment.";
+      }
       if (typeof nested.message === "string" && nested.code !== "validation_error") {
         return nested.message;
       }
@@ -89,7 +92,9 @@ function parseApiError(body: unknown, status: number): string {
           if (!d || typeof d !== "object") return String(d);
           const item = d as Record<string, unknown>;
           const loc = Array.isArray(item.loc) ? item.loc.filter((x) => x !== "body").join(".") : "";
-          const msg = typeof item.msg === "string" ? item.msg : String(item);
+          const raw = typeof item.msg === "string" ? item.msg : String(item);
+          // Pydantic prefixes custom validators with "Value error, " — show the real message.
+          const msg = raw.startsWith("Value error, ") ? raw.slice("Value error, ".length) : raw;
           return loc ? `${loc}: ${msg}` : msg;
         });
         return parts.join("; ");
@@ -100,8 +105,23 @@ function parseApiError(body: unknown, status: number): string {
   if (status === 403) return "Insufficient permissions — admin or analyst role required";
   if (status === 429) return "Too many attempts. Please wait a few minutes and try again.";
   if (status === 401) return "Not logged in — please sign in again";
-  if (status >= 500) return "Server error — check backend logs";
+  if (status >= 500) return "Something went wrong on the server. Please try again in a moment.";
   return "Request failed";
+}
+
+/** HTTP-aware error so callers can branch on 401/403/404/5xx without parsing messages. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+export function errorStatus(err: unknown): number | undefined {
+  return err instanceof ApiError ? err.status : undefined;
 }
 
 export async function api<T>(
@@ -124,7 +144,10 @@ export async function api<T>(
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new Error("Cannot reach the server. Make sure the backend is running on " + BACKEND_URL);
+    throw new ApiError(
+      "Cannot reach the server. Make sure the backend is running on " + BACKEND_URL,
+      0,
+    );
   }
 
   if (res.status === 401 && retry) {
@@ -138,18 +161,18 @@ export async function api<T>(
       });
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => null);
-        throw new Error(parseApiError(err, retryRes.status));
+        throw new ApiError(parseApiError(err, retryRes.status), retryRes.status);
       }
       if (retryRes.status === 204) return {} as T;
       return retryRes.json();
     }
     redirectToLogin();
-    throw new Error("Session expired");
+    throw new ApiError("Session expired", 401);
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => null);
-    throw new Error(parseApiError(err, res.status));
+    throw new ApiError(parseApiError(err, res.status), res.status);
   }
 
   if (res.status === 204) return {} as T;
@@ -173,7 +196,10 @@ export async function apiRaw(path: string, options: RequestInit = {}, retry = tr
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
-    throw new Error("Cannot reach the server. Make sure the backend is running on " + BACKEND_URL);
+    throw new ApiError(
+      "Cannot reach the server. Make sure the backend is running on " + BACKEND_URL,
+      0,
+    );
   }
 
   if (res.status === 401 && retry) {
@@ -187,17 +213,17 @@ export async function apiRaw(path: string, options: RequestInit = {}, retry = tr
       });
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => null);
-        throw new Error(parseApiError(err, retryRes.status));
+        throw new ApiError(parseApiError(err, retryRes.status), retryRes.status);
       }
       return retryRes;
     }
     redirectToLogin();
-    throw new Error("Session expired");
+    throw new ApiError("Session expired", 401);
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => null);
-    throw new Error(parseApiError(err, res.status));
+    throw new ApiError(parseApiError(err, res.status), res.status);
   }
 
   return res;

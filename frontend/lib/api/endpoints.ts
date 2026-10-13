@@ -112,7 +112,6 @@ export const API = {
   // Analytics
   ANALYTICS: {
     SUMMARY: "/api/v1/analytics/summary",
-    UEBA_ANOMALIES: "/api/v1/analytics/ueba/anomalies",
     THREAT_SCORES: "/api/v1/analytics/threat-scores",
     RISK_TRENDS: "/api/v1/analytics/risk-trends",
   },

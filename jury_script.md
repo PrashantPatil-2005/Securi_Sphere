@@ -3,128 +3,211 @@ JURY SCRIPT — 5-Minute Attack Scenario Script
 
 VIVA VOCE SCRIPT FOR SECURI DEMONSTRATION
 
-[ ] Show host online + agent token working
-[ ] Start the Linux attack script; show raw log for 10 seconds ("this is the evidence")
-[ ] Switch to Alerts: "The SIEM named it."
-[ ] Switch to Offense timeline: "It correlated the kill chain."
+Everything quoted below was captured from a real run of
+`multi_stage_attack` on the seeded `demo-server` host. Read it as
+"what will actually be on screen", not as an aspiration.
+
+[ ] Attack Lab → run **Multi-Stage Attack** (streams for ~10 s)
+[ ] Point at the raw log tail: "this is the evidence"
+[ ] Switch to Alerts: "the SIEM named it"
+[ ] Switch to the offense: "it correlated the kill chain"
 [ ] Point at MITRE. Stop. Take questions.
+
+----------------------------------------------------------------------
+
+WHAT THE RUN PRODUCES (verified)
+---------------------------------------------------------------
+
+Host:            demo-server (seeded automatically when DEMO_MODE=true)
+Scenario:        Multi-Stage Attack — 17 steps, ~5 min of attack time,
+                 streamed over ~10 s of wall clock
+Events:          17 injected, all carrying `source = simulation`
+Alerts:          6
+Offense:         1 — titled with the headline alert, 16 events, 6 alerts
+Timeline:        1 reconstructed attack chain
+
+The six alerts, exactly as they appear:
+
+  [high]     SSH brute force in progress on demo-server from 198.51.100.23
+             rule=failed_logins          MITRE T1110
+  [critical] Brute Force Attempt
+             rule=brute_force            MITRE T1110
+  [critical] Compromised account on demo-server
+             rule=ssh_success_after_failures   MITRE T1110
+  [critical] Privilege escalation on demo-server
+             rule=privilege_escalation   MITRE T1548.003
+  [critical] Direct root login on demo-server
+             rule=root_login             MITRE T1078.003
+  [high]     Service Failure
+             rule=service_failure        (no MITRE mapping)
+
+Attacker IP in every injected line: 198.51.100.23
+Compromised user in every injected line:  svc_deploy
 
 ----------------------------------------------------------------------
 
 SCRIPT (approximately 5 minutes)
 
 ---------------------------------------------------------------
-1. HOST STATUS (approximately 30 seconds)
+0. WHAT WE ARE LOOKING AT (approximately 20 seconds)
 ---------------------------------------------------------------
 
-TARGET: "This is our Linux host, currently online and enrolled in Securi.
-The agent is actively sending telemetry — you can see the heartbeat
-is green, the token is valid, and the host is registered."
+TARGET: "Securi is a QRadar-style SIEM. Events come in, detection rules
+fire alerts, alerts correlate into offenses, an offense becomes an
+incident case. I will walk one attack through all five stages."
 
-ACTION: Point to the dashboard showing host status = "online".
-KEY POINT: The agent is running, classifying events in real-time.
+ACTION: Open the sidebar so the structure is visible:
+Overview → Operations → Intelligence → Lab → Management.
 
----------------------------------------------------------------
-2. RAW EVIDENCE — 10 SECONDS (approximately 1 minute)
----------------------------------------------------------------
-
-TARGET: "Here is the raw authentication log from the host. This is
-the raw evidence — the uninterpreted auth.log file."
-
-[SHOW raw auth.log output for ~10 seconds, scrolling or fixed window]
-
-[POINT at the screen] "These are the raw log lines — 12 failed SSH
-attempts, followed by one success, followed by sudo usage."
-
-TALK TRACK: "This is what the Linux box generates — pure log data. The
-jury needs to see that this becomes classified events, then alerts, then
-one offense story."
+KEY POINT: Every screen we visit is fed by the same pipeline — no
+mocked panels, no fabricated charts.
 
 ---------------------------------------------------------------
-3. SWITCH TO ALERTS — "THE SIEM NAMED IT" (approximately 1 minute)
+1. THE HOST AND THE EVIDENCE (approximately 1 minute 30 seconds)
 ---------------------------------------------------------------
 
-TARGET: "Now let me switch to the SIEM alerts. The raw logs alone are
-just noise — but the SIEM has classified them and named the attack."
+ACTION: Go to Attack Lab (`/simulation`). Select target host
+`demo-server`, scenario **Multi-Stage Attack**, click **Run simulation**.
 
-[CLICK to Alerts view]
+TARGET: "Watch it run. It is not a progress bar — the events are being
+injected one at a time, and you can see the raw log lines arriving."
 
-ACTION: Point to the alert list showing:
-- "SSH brute force in progress on [hostname] from [source IP]"
-- "Privilege escalation detected on [hostname]"
-- "Compromised account — SSH success after failures"
+[WATCH the raw log tail scroll while the run streams]
+
+[POINT at the tail] "These are the raw log lines as the SIEM receives
+them: `Failed password for svc_deploy from 198.51.100.23 ...`, then the
+sudo lines, then the root login. Every line is prefixed `[SIMULATED]` —
+we label synthetic telemetry so nothing can be mistaken for real data."
+
+[POINT at the live banner] "Up top you can see the kill chain lighting
+up as it happens: recon → brute force → initial access → privilege
+escalation → impact."
+
+[POINT at the progress banner] "Injecting events → correlating offenses
+→ building timelines. That is the real pipeline stages, not a fake
+animation."
+
+TALK TRACK: "The evidence is a log line. Everything after this is
+interpretation by the platform."
+
+---------------------------------------------------------------
+2. SWITCH TO ALERTS — "THE SIEM NAMED IT" (approximately 1 minute)
+---------------------------------------------------------------
+
+TARGET: "Raw logs are noise. The rules gave them names."
+
+[ACTION: open the run result / Alerts view]
+
+ACTION: Point at the six alerts in order:
+
+- "SSH brute force in progress on demo-server from 198.51.100.23"
+  → 10 failed logins inside 5 minutes — MITRE **T1110**, Brute Force
+- "Brute Force Attempt"
+  → the same burst classified as a completed brute-force attack
+- "Compromised account on demo-server"
+  → a successful login immediately after failures — **T1110**
+- "Privilege escalation on demo-server"
+  → three sudo calls inside 5 minutes — **T1548.003**
+- "Direct root login on demo-server"
+  → root shell obtained — **T1078.003**
+- "Service Failure"
+  → the attacker broke something on purpose — impact stage
 
 TALK TRACK:
-- "12 failed logins in 5 minutes → alert named 'Brute Force Attempt'"
-- "MITRE T1110 — Credential Access, Brute Force"
-- "One successful login after failures → alert named 'Compromised Account'"
-- "MITRE T1110 + T1078 — Credential Access + Initial Access"
-- "Sudo usage → alert named 'Privilege Escalation Detected'"
-- "MITRE T1548.003 — Privilege Escalation"
+- "Six detections, five MITRE techniques, one attack."
+- "Nothing here was typed in by hand. The rule names matched thresholds:
+  10 failures in 5 minutes, 3 sudo in 5 minutes, 1 root login."
 
-KEY MESSAGE: "The SIEM named this attack. It didn't just show logs — it
-said 'this is a brute force attack,' 'this is privilege escalation,' and
-'this account is compromised.' That's what the jury needs to hear."
+KEY MESSAGE: "The SIEM named this attack. It didn't just display logs —
+it said *brute force*, *account compromised*, *privilege escalation*,
+*root*. That is the difference between a log viewer and a SIEM."
 
 ---------------------------------------------------------------
-4. SWITCH TO OFFENSE TIMELINE — "IT CORRELATED THE KILL CHAIN" (approximately 1 minute)
+3. SWITCH TO THE OFFENSE — "IT CORRELATED THE KILL CHAIN"
+(approximately 1 minute)
 ---------------------------------------------------------------
 
-TARGET: "Now let me show the offense — the SIEM's correlation of the
-entire kill chain into one story, not 50 separate lines."
+TARGET: "Six alerts would still be six disconnected emails. The offense
+engine groups them into one story."
 
-[CLICK to Offense view]
+[CLICK to Offenses, open offense #1397 (or the newest offense)]
 
 ACTION: Point to the offense card showing:
-- Title: "Likely SSH account compromise"
-- Timeline: chronological chain of events
-- Related user: admin
-- Attacker IP: 192.168.x.x
-- Event count: 14 events
-- Alert count: 3 alerts
+- Title: "SSH brute force in progress on demo-server from 198.51.100.23"
+- Risk: critical
+- 16 correlated events, 6 alerts grouped under it
+- Timeline: chronological chain of the whole attack
+- Related user: svc_deploy
+- Attacker IP: 198.51.100.23
 
 TALK TRACK:
-- "This is one Offense, not 40."
-- "The timeline shows the kill chain: brute force → success → sudo"
-- "Related user: admin — the account that was compromised"
-- "Attacker IP: 192.168.x.x — the source of the attacks"
-- "One click takes you to the Case Workspace / Incident"
+- "One Offense, not six alerts and 17 events."
+- "The timeline shows the kill chain end to end: brute force → success
+  → sudo → root → service impact."
+- "Related user svc_deploy, source 198.51.100.23 — the who and the from."
+- "One click takes it to the Case Workspace, where it becomes an
+  incident with evidence, notes and an audit trail."
 
-KEY MESSAGE: "The offense groups everything. You can see the full
-story in one place: what happened, when, on which host, and why it's
-an attack. This is the 'QRadar offense' the jury asks about."
+KEY MESSAGE: "This is the 'QRadar offense' concept: correlation into a
+single narrative with a risk score, not an inbox of alerts."
 
 ---------------------------------------------------------------
-5. POINT AT MITRE — STOP. TAKE QUESTIONS. (approximately 30 seconds)
+4. POINT AT MITRE — STOP. TAKE QUESTIONS. (approximately 30 seconds)
 ---------------------------------------------------------------
 
-TARGET: "Look at the MITRE techniques on the offense card."
-
-[POINT at MITRE mapping on the screen]
+ACTION: Point at the MITRE mapping on the offense / the MITRE ATT&CK page.
 
 TALK TRACK:
-- "T1110 — Brute Force: Password Guessing (the 12 failed logins)"
-- "T1078 — Valid Accounts: the successful login after failures"
-- "T1548.003 — Sudo and Sudo Caching (the privilege escalation)"
-- "T1078.003 — Valid Accounts: Local Accounts (if root login was involved)"
+- **T1110** — Brute Force: the 10 failed logins
+- **T1548.003** — Sudo and Sudo Caching: the privilege escalation
+- **T1078.003** — Valid Accounts: Local Accounts: the root login
 
 [PAUSE for questions]
 
-KEY MESSAGE: "All three tactics map to MITRE. The jury can see the full
-attack chain mapped to recognized techniques. This isn't made-up — these
-are the same MITRE techniques used globally to describe SSH compromise."
+KEY MESSAGE: "Every detection maps to a published MITRE technique. The
+jury can check these against the public ATT&CK matrix."
 
 ---------------------------------------------------------------
-BACKUP PLAN (if live SSH is flaky):
+5. THE REPLAY DEMONSTRATOR (optional, 30 seconds if asked)
 ---------------------------------------------------------------
 
-"If the live SSH connection is flaky, I'll run the Attack Lab
-multi-stage attack instead and say clearly: 'This is the same pipeline,
-simulated telemetry — the agent parser, detection rules, correlation
-engine, and offense timeline are all identical. The only difference is
-the source of the events — live logs vs. simulated steps. The jury sees
-the same named alerts, the same correlated offense, and the same MITRE
-labels.'"
+TARGET: "Same chain, again, on demand."
+
+ACTION: In Attack Lab → **History**, press **Replay** on that run.
+
+TALK TRACK: "Replay clears only that run's synthetic artifacts and
+re-executes it — you get the same six detections again. Press Reset and
+the instance is clean again: every simulated event, alert and timeline
+is removed, and real data on the same host is untouched. Purge in the
+History tab does it for the whole instance."
+
+KEY MESSAGE: "The demo is repeatable and reversible — important when
+the platform already holds real data."
+
+---------------------------------------------------------------
+BACKUP PLAN
+---------------------------------------------------------------
+
+If the frontend is slow or the stack is not up:
+
+"Let me show the same pipeline through the API." Then run:
+
+  POST /api/v1/simulation/run/multi_stage_attack?host_id=<id>&pace=instant
+
+and read the JSON response back: `event_count`, `alert_count`,
+`offense_count` and the `alerts[]` array with titles and MITRE ids.
+It is the identical code path the UI calls.
+
+Say clearly: "This is simulated telemetry. The agent parser, detection
+rules, correlation engine, offense grouping and MITRE mapping are the
+same code that runs for live agent data — only the source of the events
+differs, and the UI labels it `[SIMULATED]` so the two can never be
+confused."
+
+If a real enrolled Linux host is available (Option B in
+docs/DEPLOYMENT.md), run its attack script instead and follow sections
+2-4 unchanged — the alert titles will name that host instead of
+demo-server.
 
 ----------------------------------------------------------------------
 END OF SCRIPT

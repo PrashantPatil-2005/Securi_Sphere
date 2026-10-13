@@ -23,6 +23,14 @@ from app.schemas.auth import _validate_password
 INVITE_TTL_DAYS = 7
 
 
+def _require_valid_password(password: str) -> None:
+    """Password policy failures must surface as HTTP 400, never a raw ValueError (500)."""
+    try:
+        _validate_password(password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def user_admin_response(user: User) -> dict:
     return {
         "id": user.id,
@@ -68,7 +76,7 @@ async def provision_user(
         raise HTTPException(status_code=400, detail="Password required unless sso_only is true")
 
     if password:
-        _validate_password(password)
+        _require_valid_password(password)
 
     role = await _role_by_name(db, role_name)
     user = User(
@@ -159,7 +167,7 @@ async def accept_invite(
         raise HTTPException(status_code=400, detail="Email already registered")
 
     if password:
-        _validate_password(password)
+        _require_valid_password(password)
         hashed = hash_password(password)
     else:
         hashed = None

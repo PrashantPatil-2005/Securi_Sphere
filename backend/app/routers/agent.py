@@ -29,6 +29,48 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 class HeartbeatPayload(BaseModel):
     agent_hash: str | None = None
     agent_version: str | None = None
+    flows_enabled: bool | None = None
+    delivery: dict | None = None
+
+
+DELIVERY_INT_FIELDS = (
+    "buffered_events",
+    "consecutive_failures",
+    "dropped_events",
+)
+DELIVERY_STR_FIELDS = (
+    "last_flush_at",
+    "last_success_at",
+)
+
+
+def sanitize_delivery_stats(raw: dict | None) -> dict | None:
+    """Keep only known scalar fields from the agent's delivery block.
+
+    Agents are untrusted inputs: accept bounded ints and short strings only.
+    No raw logs or free-form content is stored.
+    """
+    if not isinstance(raw, dict):
+        return None
+    out: dict = {}
+    for key in DELIVERY_INT_FIELDS:
+        value = raw.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            continue
+        if value < 0 or value > 10_000_000:
+            continue
+        out[key] = value
+    for key in DELIVERY_STR_FIELDS:
+        value = raw.get(key)
+        if isinstance(value, str) and 0 < len(value) <= 40:
+            out[key] = value
+    auth_failed = raw.get("auth_failed")
+    if isinstance(auth_failed, bool):
+        out["auth_failed"] = auth_failed
+    if not out:
+        return None
+    out["reported_at"] = datetime.now(timezone.utc).isoformat()
+    return out
 
 
 class EventsIngestResponse(BaseModel):
@@ -106,6 +148,13 @@ async def heartbeat(
         status_changed = True
     if payload.agent_hash or payload.agent_version:
         await check_agent_integrity(db, host, payload.agent_hash, payload.agent_version)
+    delivery = sanitize_delivery_stats(payload.delivery)
+    if delivery is not None:
+        host.delivery_stats = delivery
+    if payload.flows_enabled is not None:
+        stats = dict(host.delivery_stats or {})
+        stats["flows_enabled"] = bool(payload.flows_enabled)
+        host.delivery_stats = stats
     if status_changed:
         await db.flush()
         from app.search.indexer import index_host

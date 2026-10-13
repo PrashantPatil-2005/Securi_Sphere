@@ -47,15 +47,23 @@ async def test_invite_and_accept_flow(admin_client: AsyncClient, client: AsyncCl
     assert preview.status_code == 200
     assert preview.json()["email"] == email
 
-    accept = await client.post(
+    # Weak password must be a clean 400 (it used to raise a raw ValueError -> 500)
+    weak = await client.post(
         "/api/v1/users/invites/accept",
         json={"token": token, "password": "invitepass123"},
+    )
+    assert weak.status_code == 400, weak.text
+    assert "Password must be at least 8 characters" in weak.json()["error"]["message"]
+
+    accept = await client.post(
+        "/api/v1/users/invites/accept",
+        json={"token": token, "password": "Invitepass!123"},
     )
     assert accept.status_code == 200
     assert accept.json()["email"] == email
 
     login = await client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "invitepass123"},
+        json={"email": email, "password": "Invitepass!123"},
     )
     assert login.status_code == 200

@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { API } from "@/lib/api/endpoints";
 import { buildQuery } from "@/lib/buildQuery";
 import { useTimeRange } from "@/lib/timeRange";
+import { useSimulationQueryParams } from "@/lib/simulation-session";
 import type {
   OffenseDetail,
   OffenseAiBrief,
@@ -19,13 +20,14 @@ export function useOffenseList(params: {
   filters: OffenseFilters;
 }) {
   const { queryParams } = useTimeRange();
+  const simParams = useSimulationQueryParams();
   const { page, pageSize, filters } = params;
 
   return useQuery({
-    queryKey: ["offenses", queryParams, page, pageSize, filters],
+    queryKey: ["offenses", queryParams, simParams, page, pageSize, filters],
     queryFn: async () => {
       const q = buildQuery(
-        { page, page_size: pageSize, ...filters },
+        { page, page_size: pageSize, ...simParams, ...filters },
         queryParams,
       );
       const r = await api<OffenseListResponse>(`${API.OFFENSES.LIST}${q}`);

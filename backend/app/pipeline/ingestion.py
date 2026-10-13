@@ -116,7 +116,7 @@ async def _ingest_event_batch_inner(
         normalized_type = normalize_event_type(item.event_type)
 
         from app.services.ingest_dedup import event_fingerprint, is_duplicate
-        fp = event_fingerprint(host.id, item.timestamp, normalized_type, item.raw_log)
+        fp = event_fingerprint(host.id, normalized_type, item.raw_log, item.description)
         with db.no_autoflush:
             duplicate = await is_duplicate(db, fp)
         if duplicate:
@@ -188,18 +188,15 @@ async def _ingest_event_batch_inner(
 
     host.last_seen = datetime.now(timezone.utc)
 
+    # Detection/correlation pipeline. With async_event_pipeline the job is
+    # enqueued in the post-commit hook (below) so the worker's fresh session
+    # can never observe the events before this ingest transaction commits —
+    # previously the job was enqueued pre-commit and first-batch detection
+    # could silently no-op. With the sync fallback the full pipeline runs
+    # in-request on the same session.
+    _enqueue_after_commit = False
     if async_pipeline and settings.async_event_pipeline:
-        try:
-            await job_queue.enqueue(
-                "correlation_pipeline",
-                {"host_id": str(host.id)},
-                priority=JobPriority.HIGH,
-            )
-        except Exception:
-            logger.exception(
-                "failed to enqueue correlation pipeline — events are persisted",
-                extra={"host_id": str(host.id)},
-            )
+        _enqueue_after_commit = True
     else:
         from app.pipeline.processor import run_post_ingestion_pipeline
         await run_post_ingestion_pipeline(db, host.id)
@@ -238,6 +235,18 @@ async def _ingest_event_batch_inner(
     ]
 
     async def _post_commit():
+        if _enqueue_after_commit:
+            try:
+                await job_queue.enqueue(
+                    "correlation_pipeline",
+                    {"host_id": str(_host_id)},
+                    priority=JobPriority.HIGH,
+                )
+            except Exception:
+                logger.exception(
+                    "failed to enqueue correlation pipeline — events are persisted",
+                    extra={"host_id": str(_host_id)},
+                )
         for snap in _event_snapshots:
             try:
                 await ws_manager.broadcast({"type": "security_feed", "data": snap})

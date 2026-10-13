@@ -3,19 +3,28 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { API } from "@/lib/api/endpoints";
+import { parsePaginatedList } from "@/lib/parseList";
 import type {
   IncidentSummary,
+  IncidentResponse,
   IncidentDetail,
   IncidentCreatePayload,
 } from "@/lib/types/incident";
 
-export function useIncidentList(params?: { status?: string }) {
+/**
+ * Full incident list (backend has no filter params beyond status), parsed into
+ * a stable `{ items, total }` envelope so callers can filter/sort/page client-side.
+ */
+export function useIncidentList() {
   return useQuery({
-    queryKey: ["incidents", params],
-    queryFn: () => {
-      const qs = params?.status ? `?status=${params.status}` : "";
-      return api<IncidentSummary[]>(`${API.INCIDENTS.LIST}${qs}`);
+    queryKey: ["incidents", "list"],
+    queryFn: async () => {
+      const r = await api<IncidentResponse[] | { items?: IncidentResponse[]; total?: number }>(
+        `${API.INCIDENTS.LIST}?page_size=500`,
+      );
+      return parsePaginatedList(r);
     },
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 }
@@ -66,6 +75,15 @@ export function useIncidentStatusMutation(options?: {
             i.id === id ? { ...i, status } : i,
           );
         }
+        const envelope = old as { items?: { id: string; status: string }[] };
+        if (Array.isArray(envelope.items)) {
+          return {
+            ...envelope,
+            items: envelope.items.map((i) => (i.id === id ? { ...i, status } : i)),
+          };
+        }
+        const detail = old as { id?: string; status?: string };
+        if (detail.id === id) return { ...old, status };
         return old;
       });
       return { previous };
@@ -82,6 +100,34 @@ export function useIncidentStatusMutation(options?: {
       queryClient.invalidateQueries({ queryKey: ["incidents"] });
       queryClient.invalidateQueries({ queryKey: ["incidents", "detail", variables.id] });
       options?.onSuccess?.();
+    },
+  });
+}
+
+/** Bulk status update — backend has no bulk endpoint, so fan out per incident. */
+export function useIncidentBulkStatusMutation(options?: {
+  onSuccess?: (result: { updated: number; failed: number }) => void;
+  onError?: (e: Error) => void;
+}) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          api(`${API.INCIDENTS.STATUS(id)}?status=${status}`, { method: "PATCH" }),
+        ),
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed === ids.length) throw new Error("Failed to update any incident");
+      return { updated: ids.length - failed, failed };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      options?.onSuccess?.(result);
+    },
+    onError: (e: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      options?.onError?.(e);
     },
   });
 }

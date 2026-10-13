@@ -308,7 +308,8 @@ This creates a demo admin account:
 - **Email:** demo@securi.local
 - **Password:** Demo1234!
 
-Demo mode includes pre-seeded detection rules, sample hosts, and attack simulation scenarios.
+Demo mode pre-seeds detection rules, MITRE data, the `demo@securi.local` user,
+a `demo-server` target host, and the attack simulation scenarios.
 
 For a full walkthrough: [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md)
 
@@ -412,6 +413,8 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and `scripts/deploy-linux.sh`.
 | [docs/HELM.md](docs/HELM.md) | Helm chart |
 | [docs/SOC_LAB_SCENARIO.md](docs/SOC_LAB_SCENARIO.md) | Attack lab walkthrough |
 | [docs/GUIDE_DEMO.md](docs/GUIDE_DEMO.md) | 5-minute demo guide |
+| [demo/DEMO.md](demo/DEMO.md) | Live demo walkthrough (verified facts) |
+| [jury_script.md](jury_script.md) | Full viva / jury talk track |
 | [CONTRIBUTIONS.md](CONTRIBUTIONS.md) | Team contributions and responsibility map |
 
 ---

@@ -64,14 +64,18 @@ export function CustomEventBuilder({
   });
 
   const eventTypes = eventTypesData?.event_types ?? [];
-  const defaultType = eventTypes[0]?.event_type ?? "ssh_login_failure";
+  // BUFFERED / REPLAY are scenario markers the custom endpoint rejects.
+  const firstUsableType = eventTypes.find(
+    (t) => t.event_type !== "BUFFERED" && t.event_type !== "REPLAY",
+  );
+  const defaultType = firstUsableType?.event_type ?? "ssh_login_failure";
 
   const [name, setName] = useState("Custom attack chain");
   const [steps, setSteps] = useState<CustomStepDraft[]>(() => [newStep(defaultType)]);
 
   useEffect(() => {
-    if (eventTypes.length && steps.length === 1 && steps[0].event_type === "ssh_login_failure") {
-      setSteps([newStep(eventTypes[0].event_type)]);
+    if (firstUsableType && steps.length === 1 && steps[0].event_type === "ssh_login_failure") {
+      setSteps([newStep(firstUsableType.event_type)]);
     }
   }, [eventTypes]); // eslint-disable-line react-hooks/exhaustive-deps
 

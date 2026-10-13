@@ -30,6 +30,7 @@ export function useNotificationHistory(page = 1, pageSize = 20, unreadOnly = fal
       api<HistoryResponse>(
         `/api/v1/notifications/history?page=${page}&page_size=${pageSize}&unread_only=${unreadOnly}`,
       ),
+    placeholderData: (prev) => prev,
     staleTime: 30_000,
   });
 }

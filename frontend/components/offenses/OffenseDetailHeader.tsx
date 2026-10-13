@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Shield } from "lucide-react";
 import { SeverityBadge, StatusBadge } from "@/components/design-system/Badge";
+import { workspaceHref } from "@/lib/hooks/useDeepLinkedSelection";
 import type { OffenseDetail } from "@/lib/types/offense";
 
 interface Props {
@@ -36,7 +37,7 @@ export function OffenseDetailHeader({ offense }: Props) {
 
           <div className="flex gap-2">
             <Link
-              href={`/investigation?offenseId=${offense.id}`}
+              href={workspaceHref({ offenseId: offense.id })}
               className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent/90 transition-colors"
             >
               <Shield className="w-3 h-3" />

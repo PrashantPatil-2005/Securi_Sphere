@@ -10,7 +10,13 @@ from app.database import get_db
 from app.dependencies import get_current_user, require_roles
 from app.models.incident import Incident, IncidentAlert, IncidentNote
 from app.models.user import User
-from app.schemas.incident import IncidentCreate, NoteCreate, IncidentResponse, IncidentDetailResponse
+from app.schemas.incident import (
+    IncidentAssignRequest,
+    IncidentCreate,
+    NoteCreate,
+    IncidentResponse,
+    IncidentDetailResponse,
+)
 from app.services.audit import log_audit
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
@@ -90,6 +96,36 @@ async def update_status(incident_id: UUID, status: str, db: AsyncSession = Depen
     if status in ("resolved", "closed"):
         inc.resolved_at = datetime.now(timezone.utc)
     await log_audit(db, "incident_status_change", user_id=user.id, resource_type="incident", resource_id=incident_id)
+    return inc
+
+
+@router.patch("/{incident_id}/assign", response_model=IncidentResponse)
+async def assign_incident(
+    incident_id: UUID,
+    body: IncidentAssignRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_roles("admin", "analyst")),
+):
+    result = await db.execute(select(Incident).where(Incident.id == incident_id))
+    inc = result.scalar_one_or_none()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Not found")
+    if body.assigned_to is not None:
+        target = (
+            await db.execute(select(User).where(User.id == body.assigned_to))
+        ).scalar_one_or_none()
+        if not target or not target.is_active:
+            raise HTTPException(status_code=400, detail="Unknown or inactive user")
+    inc.assigned_to = body.assigned_to
+    inc.updated_at = datetime.now(timezone.utc)
+    await log_audit(
+        db,
+        "incident_assign",
+        user_id=user.id,
+        resource_type="incident",
+        resource_id=incident_id,
+        details={"assigned_to": str(body.assigned_to) if body.assigned_to else None},
+    )
     return inc
 
 
