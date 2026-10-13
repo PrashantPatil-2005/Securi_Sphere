@@ -127,13 +127,20 @@ async def _create_incident_from_correlation(
     severity = rule.severity or "medium"
 
     # Build incident data
+    # Use a valid user ID for created_by — the host.id is not a valid user
+    # FK reference (incidents.created_by → users.id). Query the first active
+    # user from the database to ensure the constraint is satisfied.
+    from sqlalchemy import select
+    from app.models.user import User as _User
+    user_row = await db.execute(select(_User).limit(1))
+    created_by_user = user_row.scalar_one()
     incident_data = {
         "title": title,
         "description": description,
         "severity": severity,
         "status": "open",
         "host_id": host.id if hasattr(host, "id") else None,
-        "created_by": getattr(host, "id", None),  # will be overridden by actual user
+        "created_by": created_by_user.id,
         "first_observed": first_observed,
         "last_observed": last_observed,
         "affected_hosts": involved_hosts if involved_hosts else [str(host.id) if hasattr(host, "id") else None],
@@ -253,13 +260,16 @@ async def run_correlation_engine(db: AsyncSession, host_id: UUID, source: str | 
         confidence = matcher.score(matched)
 
         # Create alert linked to this correlation
+        # Use rule_id=None because correlation rules are not in the alert_rules
+        # table (which has a FK to alert_rules.id). The alert is still created
+        # with the correct title, severity, and description.
         alert = await create_alert(
             db,
             host_id,
             matched.description or rule.description or "Correlation matched",
             matched.description or rule.description or f"Correlation matched: {rule.name}",
             rule.severity,
-            rule.id,
+            rule_id=None,
             confidence=confidence,
             source=source,
             cooldown_minutes=rule.window_minutes or 15,

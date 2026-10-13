@@ -358,6 +358,12 @@ async def test_audit_integrity_failure_is_recorded_and_honest(admin_client: Asyn
         # Clear any stale audit chain state from prior tests.
         await db.execute(text("TRUNCATE TABLE audit_logs RESTART IDENTITY"))
         await db.commit()
+        # Clear any stale audit chain state from prior tests.
+        # TRUNCATE TABLE ... RESTART IDENTITY does not reset the
+        # audit_logs_chain_seq_seq sequence because chain_seq is a
+        # regular BigInteger column (not an IDENTITY/SERIAL), so we
+        # must explicitly restart the sequence so nextval() yields 1.
+        await db.execute(text("ALTER SEQUENCE audit_logs_chain_seq_seq RESTART WITH 1"))
         for i in range(3):
             await log_audit(db, action=f"test_action_{i}", user_id=None)
         await db.commit()

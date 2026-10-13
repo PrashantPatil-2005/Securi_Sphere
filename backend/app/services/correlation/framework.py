@@ -146,9 +146,18 @@ class SequenceMatcher(CorrelationRuleMatcher):
         )
 
         # Check minimum occurrence counts
-        for etype, min_count in (rule.min_occurrences or {}).items():
-            if sum(1 for e in recent if e.event_type == etype) < min_count:
+        min_occ = rule.min_occurrences or {}
+        if isinstance(min_occ, int):
+            # backwards compatibility: treat a bare int as a total minimum
+            if len(recent) < min_occ:
                 return None
+        elif isinstance(min_occ, dict):
+            for etype, min_count in min_occ.items():
+                if sum(1 for e in recent if e.event_type == etype) < min_count:
+                    return None
+        else:
+            # unknown type — skip this check
+            pass
 
         # Walk events in order, match against required sequence
         seq = rule.event_sequence or []
