@@ -447,7 +447,7 @@ function DemoCenterPage() {
         />
       )}
 
-      {user?.role?.name !== "viewer" && (
+      {user?.role?.name !== "viewer" ? (
         <>
           <SimulationLiveProgress
             running={isRunning}
