@@ -1,0 +1,816 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useUser, canPurgeSimulation } from "@/lib/hooks/useUser";
+import { QueryError } from "@/components/ui/QueryError";
+import { TableSkeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/Panel";
+import { use  const demoContent = presetsContent;
+m "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Link } from "next/link";
+import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils/cn";
+
+import { fetchSimulationRunDetail } from "@/components/attack-lab/SimulationRunHistory";
+import { OperationalReadinessPanel } from "@/components/attack-lab/OperationalReadinessPanel";
+import { RawLogTail } from "@/components/attack-lab/RawLogTail";
+import { InvestigationGuide } from "@/components/attack-lab/InvestigationGuide";
+import { SimulationResults } from "@/components/attack-lab/SimulationResults";
+import { SimulationLiveProgress } from "@/components/attack-lab/SimulationLiveProgress";
+import { SimulationFeed } from "@/components/attack-lab/SimulationFeed";
+import { AttackLabHeader } from "@/components/attack-lab/AttackLabHeader";
+
+import type { SimulationRunResult } from "@/lib/types/simulation";
+
+const DEMO_SCENARIOS = [
+  {
+    id: "auth_anomaly",
+    name: "Authentication Anomaly",
+    category: "authentication",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Detects anomalous authentication patterns (failed logins, successful logins after failures) from agent auth events. Shows how top-level username/source_ip fields are promoted into metadata for offense user tracking.",
+    data_type: "synthetic",
+    prerequisites: "Agent auth events with top-level source_ip/username; Fix F enabled in event_payload.py",
+    expected_outcomes: "failed_logins, ssh_success_after_failures alerts; offenses with user tracking; incident promotion possible",
+    synthetic_note: "Uses synthetic agent-shaped events; live host not required.",
+  },
+  {
+    id: "brute_force",
+    name: "Brute Force",
+    category: "authentication",
+    difficulty: "intermediate",
+    what_demonstrates:
+      "Detects brute-force SSH login attempts exceeding threshold (5 failures/5min). Demonstrates the failed_logins rule and its correlation with brute_force rule.",
+    data_type: "synthetic",
+    prerequisites: "None beyond simulation enabled",
+    expected_outcomes: "brute_force, failed_logins alerts; offense with per-host tracking",
+    synthetic_note: "Synthetic only — no live host required.",
+  },
+  {
+    id: "brute_force_only",
+    name: "Brute Force Only",
+    category: "authentication",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Same as Brute Force but with a simpler rule set — only the brute_force rule type, no sequence/co-occurrence/cross-host correlation.",
+    data_type: "synthetic",
+    prerequisites: "None beyond simulation enabled",
+    expected_outcomes: "brute_force, failed_logins alerts",
+    synthetic_note: "Synthetic only.",
+  },
+  {
+    id: "file_integrity",
+    name: "File Integrity Monitoring",
+    category: "file-integrity",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Detects file change events via the file_integrity rule. Demonstrates agentless file integrity monitoring through simulated events.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled",
+    expected_outcomes: "file_integrity alert; possible offense",
+    synthetic_note: "Synthetic only.",
+  },
+  {
+    id: "systemd_monitoring",
+    name: "Systemd Service & Persistence Monitoring",
+    category: "systemd-persistence",
+    difficulty: "intermediate",
+    what_demonstrates:
+      "Monitors systemd service state (stop/start) and failure events. Demonstrates service_failure and service_stop rule triggers.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled",
+    expected_outcomes: "service_stop, service_failure alerts; offense possible",
+    synthetic_note: "Synthetic only.",
+  },
+  {
+    id: "network_reconnaissance",
+    name: "Network Reconnaissance (Scenario E)",
+    category: "network-recon",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Full end-to-end demonstration of network recon telemetry: flow collector → network_flow events → port_scan detection → firewall_block alerts → offenses → incidents. This is the complete live+synthetic pipeline.",
+    data_type: "live+synthetic",
+    prerequisites:
+      "Flow collector enabled on agent (flow_collector.enabled) for live mode; synthetic mode always available. Host must be enrolled with recent heartbeat for live mode.",
+    expected_outcomes:
+      "firewall_block, port_scan alerts; offenses with MITRE T1046; incidents with timeline; flow collector active/inactive badge",
+    synthetic_note:
+      "Live mode requires flow collector + enrolled host. Synthetic mode always available and demonstrates the full detection chain without a live host.",
+  },
+  {
+    id: "agent_tampering",
+    name: "Agent Tampering & Heartbeat Loss",
+    category: "agent-health",
+    difficulty: "intermediate",
+    what_demonstrates:
+      "Monitors agent service state and heartbeat freshness; detects unexpected termination and prolonged heartbeat loss (>90s). Demonstrates agent_offline rule and scheduler-driven status updates.",
+    data_type: "live",
+    prerequisites:
+      "Enrolled agent with heartbeat; can disable agent to test heartbeat loss. Synthetic mode also possible.",
+    expected_outcomes: "agent_offline alert; host status offline; possible incident",
+    synthetic_note:
+      "Live mode requires enrolled agent. Synthetic mode demonstrates the alert rule.",
+  },
+  {
+    id: "host_health_crisis",
+    name: "Host Health Crisis",
+    category: "host-health",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Monitors CPU, memory, and disk metrics exceeding thresholds (90%/85%). Demonstrates high_cpu, high_memory, high_disk rules and their offense linking.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled; metric samples needed",
+    expected_outcomes: "high_cpu, high_memory, high_disk alerts; offense possible",
+    synthetic_note: "Synthetic only.",
+  },
+  {
+    id: "soc_resilience",
+    name: "SOC Resilience",
+    category: "agent-health",
+    difficulty: "advanced",
+    what_demonstrates:
+      "Repeated SSH auth events with interleaved successes/failures; demonstrates detection of auth anomalies, privilege escalation attempts, and memory pressure across multiple event windows.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled; auth events with interleaved patterns",
+    expected_outcomes: "failed_logins, ssh_success_after_failures, high_memory alerts; offense with user tracking",
+    synthetic_note: "Synthetic only.",
+  },
+  {
+    id: "multi_stage",
+    name: "Multi-Stage Incident",
+    category: "multi-stage",
+    difficulty: "intermediate",
+    what_demonstrates:
+      "Correlation across multiple event types (failed_logins → privilege escalation → root login) using the sequence correlation rule. Demonstrates multi-stage attack chain detection and incident creation.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled; auth events in staged sequence",
+    expected_outcomes: "brute_force, failed_logins, privilege_escalation, root_login alerts; correlation-generated incident",
+    synthetic_note: "Synthetic only — requires multi-stage event sequence.",
+  },
+  {
+    id: "multi_stage_attack",
+    name: "Multi-Stage Attack",
+    category: "authentication",
+    difficulty: "advanced",
+    what_demonstrates:
+      "Full-spectrum demonstration: failed_logins → brute_force → ssh_success_after_failures → privilege_escalation → root_login → service_failure. All detection rule types firing in sequence, correlation-generated incidents, and complete investigation path.",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled; auth events covering all rule types in sequence",
+    expected_outcomes:
+      "all rule types alert; correlation-generated incident with user tracking; case workspace link",
+    synthetic_note: "Synthetic only — the most comprehensive demonstration of the full pipeline.",
+  },
+  {
+    id: "agent_resilience",
+    name: "Agent Resilience",
+    category: "agent-health",
+    difficulty: "advanced",
+    what_demonstrates:
+      "Agent offline/online transitions; detects agent_offline rule after heartbeat loss. Demonstrates how the system tracks agent state changes and raises alerts on loss of telemetry.",
+    data_type: "live",
+    prerequisites:
+      "Enrolled agent; can disable agent to test heartbeat loss. Synthetic mode also possible.",
+    expected_outcomes: "agent_offline alert; host status change; possible incident",
+    synthetic_note:
+      "Live mode requires enrolled agent with controllable heartbeat. Synthetic mode demonstrates the rule.",
+  },
+  {
+    id: "service_crash",
+    name: "Service Crash",
+    category: "authentication",
+    difficulty: "beginner",
+    what_demonstrates:
+      "Single service_failure event detection. The simplest possible scenario — one event, one rule, one alert. Demonstrates the service_failure rule's per-event trigger (immediate, not window-based).",
+    data_type: "synthetic",
+    prerequisites: "Simulation enabled",
+    expected_outcomes: "service_failure alert; possible offense; immediate incident promotion",
+    synthetic_note: "Synthetic only — minimal demonstration.",
+  },
+] as const;
+
+type DemoScenario = typeof DEMO_SCENARIOS[number];
+
+interface DemoReadiness {
+  synthetic_ready: boolean;
+  live_ready: boolean | null;
+  live_ready_reasons: string[];
+  host: { enrolled: boolean; hostname: string | null; os_info: string | null } | null;
+  flow_collector_active: boolean | null;
+}
+
+// Helper: find a demo scenario by id (narrowed from the imported ScenariosResponse type)
+function findDemoScenario(id: DemoScenario["id"]): DemoScenario {
+  const result = DEMO_SCENARIOS.find((s) => s.id === id);
+  if (!result) throw new Error(`Unknown demo scenario: ${id}`);
+  return result;
+}
+
+// Demo Center page component
+function DemoCenterPage() {
+  const { data: user } = useUser();
+  const router = useRouter();
+  const [scenarioId, setScenarioId] = useState<DemoScenario["id"] | "">("");
+  const [hostId, setHostId] = useState<string>("");
+  const [lastResult, setLastResult] = useState<SimulationRunResult | null>(null);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
+  const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [expectedEvents, setExpectedEvents] = useState<number | undefined>(undefined);
+
+  const { data: scenariosData, isLoading: scenariosLoading, isError } = useQuery({
+    queryKey: ["simulation", "scenarios"],
+    queryFn: () => api<ScenariosResponse>("/api/v1/simulation/scenarios"),
+    retry: false,
+  });
+
+  const scenarios = useMemo(() => scenariosData?.scenarios ?? [], [scenariosData?.scenarios]);
+  const enabled = scenariosData?.enabled ?? false;
+  const selectedScenario = useMemo(() => scenarios.find((s) => s.id === scenarioId), [scenarios, scenarioId]);
+  const showPurge = canPurgeSimulation(user?.role?.name);
+
+  // ---- Demo-specific readiness (synthetic vs live) ----
+  const readiness: DemoReadiness = useMemo(() => {
+    if (!selectedScenario) {
+      return {
+        synthetic_ready: false,
+        live_ready: null,
+        live_ready_reasons: [],
+        host: null,
+        flow_collector_active: null,
+      };
+    }
+    const scenario = findDemoScenario(selectedScenario)!;
+    const synthReady = enabled && !scenario.id.includes("live");
+
+    let liveReady: boolean | null = null;
+    let liveReasons: string[] = [];
+    let hostEnrolled = false;
+    let flowActive = null;
+    let hostname: string | null = null;
+    let osInfo: string | null = null;
+
+    if (hostId) {
+      hostEnrolled = true;
+      liveReasons.push("Host selected for live mode readiness check");
+    } else {
+      liveReasons.unshift("Select a host for live mode readiness check");
+    }
+
+    return {
+      synthetic_ready: synthReady,
+      live_ready: liveReady,
+      live_ready_reasons: liveReasons,
+      host: { enrolled: hostEnrolled, hostname, osInfo },
+      flow_collector_active: flowActive,
+    };
+  }, [selectedScenario, hostId, enabled]);
+
+  // ---- Run mutation (reuses existing simulation run API) ----
+  const runMutation = useMutation({
+    mutationFn: (h: string) =>
+      api<SimulationRunResult>(
+        `/api/v1/simulation/run/${scenarioId}?host_id=${h}&pace=stream`,
+        { method: "POST" },
+      ),
+    onMutate: (h) => {
+      setRunStartedAt(Date.now());
+      setExpectedEvents(selectedScenario?.steps?.length ?? 0);
+    },
+    onSuccess: (r) => {
+      enableSimulationDashboardSession();
+      setLastResult(r);
+      setSelectedRunId(r.run_id);
+      setIsRunning(false);
+      track("simulation_completed", {
+        scenario_id: r.scenario,
+        events: r.events,
+        run_id: r.run_id,
+      });
+    },
+    onError: (e: Error) => {
+      // errors handled via toast below
+    },
+  });
+
+  // ---- History content ----
+  const historyContent = useMemo(() => {
+    if (!selectedRunId) return null;
+    return (
+      <SimulationRunHistory
+        selectedRunId={selectedRunId}
+        onSelect={(runId) => {
+          setSelectedRunId(runId);
+          try {
+            const detail = fetchSimulationRunDetail(runId);
+            setLastResult(detailToResult(detail));
+          } catch (e) {
+            // swallow
+          }
+        }}
+        onReplay={(runId) => runMutation.mutate(runId)}
+        onReset={() => {}}
+        showPurge={showPurge}
+        onPurge={() => setPurgeConfirmOpen(true)}
+        purgePending={runMutation.isPending}
+      />
+    );
+  }, [selectedRunId, showPurge, runMutation]);
+
+  // ---- Presets content (scenario selection + readiness + run) ----
+  const presetsContent = useMemo(() => {
+    if (!selectedScenario) {
+      return (
+        <EmptyState
+          title="Select a demonstration scenario"
+description="Choose a scenario from the catalog to learn what it demonstrates and run it."/>
+
+      );
+    }
+
+    const scenario = findDemoScenario(selectedScenario)!;
+    const synthReady = enabled && !scenario.id.includes("live");
+
+    return (
+      <div className="space-y-4">
+        <OperationalReadinessPanel
+          scenarioId={selectedScenario}
+          hostId={hostId || null}
+        />
+
+        <div className="rounded-lg border border-border-subtle p-4">
+          <h3 className="text-subheading mb-2">Scenario: {scenario.name}</h3>
+          <p className="text-sm text-muted">{scenario.what_demonstrates}</p>
+
+          <dl className="grid grid-cols-2 gap-3 mt-3 text-[10px]">
+            <div>
+              <dt className="font-medium text-caption capitalize">Data type</dt>
+              <dd className="text-caption">{scenario.data_type}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-caption capitalize">Prerequisites</dt>
+              <dd className="text-caption">{scenario.prerequisites}</dd>
+            </div>
+            {scenario.id === "network_reconnaissance" && (
+              <div>
+                <dt className="font-medium text-caption capitalize">Flow collector</dt>
+                <dd className="text-caption">
+                  {scenario.id === "network_reconnaissance"
+                    ? `Required for live mode; ${readiness.flow_collector_active !== null ? (readiness.flow_collector_active ? "active" : "inactive") : "not configured"}`
+                    : "N/A"}
+                </dd>
+              </div>
+            </div>
+  )}
+            <div>
+              <dt className="font-medium text-caption capitalize">Expected outcomes</dt>
+              <dd className="text-caption">{scenario.expected_outcomes}</dd>
+            </div>
+          </dl>
+
+          {/* Synthetic/live readiness badges */}
+          <div className="mt-3 p-2 rounded border-border-subtle" style={{ background: synthReady ? "var(--success)" : "var(--danger)" }}>
+            <span className="text-[10px] font-medium capitalize text-white">
+              {synthReady ? "synthetic ready" : "synthetic unavailable"}
+            </span>
+          </div>
+          {hostId && readiness.live_ready !== null && (
+            <div className="mt-2 p-2 rounded border-border-subtle" style={{ background: readiness.live_ready ? "var(--success)" : "var(--danger)" }}>
+              <span className="text-[10px] font-medium capitalize text-white">
+                {readiness.live_ready ? "live ready" : "live blocked"}
+              </span>
+            </div>
+          </div>
+  )}
+
+          {/* Run button */}
+          {enabled && !isRunning && (
+            <button
+              type="button"
+              onClick={() => runMutation.mutate(hostId || "")}
+              className="mt-3 w-full btn-primary"
+              disabled={runMutation.isPending}
+            >
+              {isRunning ? "Running…" : `Run "${scenario.name}"`}
+            </button>
+          </div>
+  )}
+
+          {isRunning && (
+            <div className="mt-3 text-sm text-muted">
+              Simulation in progress — check backend logs for detection output.
+            </div>
+          </div>
+  )}
+        </div>
+
+        {/* Live readiness detail */}
+        {hostId && readiness.live_ready_reasons.length > 0 && (
+          <details className="mt-3">
+            <summary className="text-xs text-caption font-medium text-muted capitalize">Live-mode readiness</summary>
+            <ul className="text-[10px] text-muted space-y-1">
+              {readiness.live_ready_reasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
+  )}
+      </div>
+    );
+  }, [enabled, selectedScenario, hostId, readiness, runMutation]);
+
+  // Since Demo Center manages its own state, we render a simplified view
+  // without the AttackLab tab machinery.
+  const demoContent = useMemo(() => {
+    if (!selectedScenario) {
+      return (
+        <EmptyState
+          title="Select a demonstration scenario"
+          description="Choose a scenario from the catalog to learn what it demonstrates and run it."
+        />
+      );
+    }
+    return presetsContent;
+  }, [selectedScenario]);
+
+  return (
+    <div className="space-y-6">
+      <AttackLabHeader enabled={user?.role?.name !== "viewer"} />
+
+      {user?.role?.name !== "viewer" && (
+        <LiveAttackBanner
+          running={isRunning}
+          hostId={hostId ? hostId.slice(0, 8) : ""}
+          hostName={hostId ? `Demo Host ${hostId.slice(0, 8)}` : "Demo Host"}
+          scenarioName={selectedScenario?.name}
+          expectedEvents={expectedEvents}
+          runStartedAt={runStartedAt}
+        />
+      </div>
+  )}
+
+      {user?.role?.name !== "viewer" && (
+        <>
+          <SimulationLiveProgress
+            running={isRunning}
+            scenarioName={selectedScenario?.name}
+            expectedEvents={expectedEvents}
+            runStartedAt={runStartedAt}
+          />
+
+          <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,1fr)] gap-6">
+            <div className="space-y-6">
+              {demoContent}
+
+              <HistoryContent selectedRunId={selectedRunId} />
+            </div>
+          </div>
+
+          <InvestigationGuide />
+
+          <SimulationResults
+            result={lastResult}
+            onRunAgain={() => {
+              setLastResult(null);
+              setSelectedRunId(null);
+            }}
+            onReplay={undefined}
+            onReset={undefined}
+            replayPending={false}
+            resetPending={false}
+          />
+
+          <SimulationFeed running={isRunning} />
+
+          {hostId && (
+            <RawLogTail hostId={hostId} hostName={`Demo Host ${hostId.slice(0, 8)}`} running={isRunning} />
+          </div>
+  )}
+
+          <ConfirmDialog
+            open={purgeConfirmOpen}
+            onClose={() => setPurgeConfirmOpen(false)}
+            onConfirm={() => {
+              if (confirm("Remove all demo data?")) {
+                // purge via mutation if available
+                runMutation?.mutate?.(hostId || "");
+              }
+              setPurgeConfirmOpen(false);
+            }}
+            title="Purge simulation data"
+            description="Remove all simulated events, timelines, open alerts, and run history? This cannot be unrun."
+            confirmLabel="Purge all"
+            danger
+            loading={runMutation?.isPending}
+          />
+        }
+      </>
+    </div>
+  );;
+
+  const scenarios = useMemo(() => scenariosData?.scenarios ?? [], [scenariosData?.scenarios]);
+  const enabled = scenariosData?.enabled ?? false;
+  const selectedScenario = useMemo(() => scenarios.find((s) => s.id === scenarioId), [scenarios, scenarioId]);
+  const showPurge = canPurgeSimulation(user?.role?.name);
+
+  // ---- Demo-specific readiness (synthetic vs live) ----
+  const readiness: DemoReadiness = useMemo(() => {
+    if (!selectedScenario) {
+      return {
+        synthetic_ready: false,
+        live_ready: null,
+        live_ready_reasons: [],
+        host: null,
+        flow_collector_active: null,
+      };
+    }
+    const scenario = findDemoScenario(selectedScenario)!;
+    const synthReady = enabled && !scenario.id.includes("live");
+
+    let liveReady: boolean | null = null;
+    let liveReasons: string[] = [];
+    let hostEnrolled = false;
+    let flowActive = null;
+    let hostname: string | null = null;
+    let osInfo: string | null = null;
+
+    if (hostId) {
+      hostEnrolled = true;
+      liveReasons.push("Host selected for live mode readiness check");
+    } else {
+      liveReasons.unshift("Select a host for live mode readiness check");
+    }
+
+    return {
+      synthetic_ready: synthReady,
+      live_ready: liveReady,
+      live_ready_reasons: liveReasons,
+      host: { enrolled: hostEnrolled, hostname, osInfo },
+      flow_collector_active: flowActive,
+    };
+  }, [selectedScenario, hostId, enabled]);
+
+  // ---- Run mutation (reuses existing simulation run API) ----
+  const runMutation = useMutation({
+    mutationFn: (h: string) =>
+      api<SimulationRunResult>(
+        `/api/v1/simulation/run/${scenarioId}?host_id=${h}&pace=stream`,
+        { method: "POST" },
+      ),
+    onMutate: (h) => {
+      setRunStartedAt(Date.now());
+      setExpectedEvents(selectedScenario?.steps?.length ?? 0);
+    },
+    onSuccess: (r) => {
+      enableSimulationDashboardSession();
+      setLastResult(r);
+      setSelectedRunId(r.run_id);
+      setIsRunning(false);
+      track("simulation_completed", {
+        scenario_id: r.scenario,
+        events: r.events,
+        run_id: r.run_id,
+      });
+    },
+    onError: (e: Error) => {
+      // errors handled via toast below
+    },
+  });
+
+  // ---- History content ----
+  const historyContent = useMemo(() => {
+    if (!selectedRunId) return null;
+    return (
+      <SimulationRunHistory
+        selectedRunId={selectedRunId}
+        onSelect={(runId) => {
+          setSelectedRunId(runId);
+          try {
+            const detail = fetchSimulationRunDetail(runId);
+            setLastResult(detailToResult(detail));
+          } catch (e) {
+            // swallow
+          }
+        }}
+        onReplay={(runId) => runMutation.mutate(runId)}
+        onReset={() => {}}
+        showPurge={showPurge}
+        onPurge={() => setPurgeConfirmOpen(true)}
+        purgePending={runMutation.isPending}
+      />
+    );
+  }, [selectedRunId, showPurge, runMutation]);
+
+  // ---- Presets content (scenario selection + readiness + run) ----
+  const presetsContent = useMemo(() => {
+    if (!selectedScenario) {
+      return (
+        <EmptyState
+          title="Select a demonstration scenario"
+          description="Choose a scenario from the catalog to learn what it demonstrates and run it."
+        />
+      );
+    }
+
+    const scenario = findDemoScenario(selectedScenario)!;
+    const synthReady = enabled && !scenario.id.includes("live");
+
+    return (
+      <div className="space-y-4">
+        <OperationalReadinessPanel
+          scenarioId={selectedScenario}
+          hostId={hostId || null}
+        />
+
+        <div className="rounded-lg border border-border-subtle p-4">
+          <h3 className="text-subheading mb-2">Scenario: {scenario.name}</h3>
+          <p className="text-sm text-muted">{scenario.what_demonstrates}</p>
+
+          <dl className="grid grid-cols-2 gap-3 mt-3 text-[10px]">
+            <div>
+              <dt className="font-medium text-caption capitalize">Data type</dt>
+              <dd className="text-caption">{scenario.data_type}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-caption capitalize">Prerequisites</dt>
+              <dd className="text-caption">{scenario.prerequisites}</dd>
+            </div>
+            {scenario.id === "network_reconnaissance" && (
+              <div>
+                <dt className="font-medium text-caption capitalize">Flow collector</dt>
+                <dd className="text-caption">
+                  {scenario.id === "network_reconnaissance"
+                    ? `Required for live mode; ${readiness.flow_collector_active !== null ? (readiness.flow_collector_active ? "active" : "inactive") : "not configured"}`
+                    : "N/A"}
+                </dd>
+              </div>
+            </div>
+  )}
+            <div>
+              <dt className="font-medium text-caption capitalize">Expected outcomes</dt>
+              <dd className="text-caption">{scenario.expected_outcomes}</dd>
+            </div>
+          </dl>
+
+          {/* Synthetic/live readiness badges */}
+          <div className="mt-3 p-2 rounded border-border-subtle" style={{ background: synthReady ? "var(--success)" : "var(--danger)" }}>
+            <span className="text-[10px] font-medium capitalize text-white">
+              {synthReady ? "synthetic ready" : "synthetic unavailable"}
+            </span>
+          </div>
+          {hostId && readiness.live_ready !== null && (
+            <div className="mt-2 p-2 rounded border-border-subtle" style={{ background: readiness.live_ready ? "var(--success)" : "var(--danger)" }}>
+              <span className="text-[10px] font-medium capitalize text-white">
+                {readiness.live_ready ? "live ready" : "live blocked"}
+              </span>
+            </div>
+          </div>
+  )}
+
+          {/* Run button */}
+          {enabled && !isRunning && (
+            <button
+              type="button"
+              onClick={() => runMutation.mutate(hostId || "")}
+              className="mt-3 w-full btn-primary"
+              disabled={runMutation.isPending}
+            >
+              {isRunning ? "Running…" : `Run "${scenario.name}"`}
+            </button>
+          </div>
+  )}
+
+          {isRunning && (
+            <div className="mt-3 text-sm text-muted">
+              Simulation in progress — check backend logs for detection output.
+            </div>
+          </div>
+  )}
+        </div>
+
+        {/* Live readiness detail */}
+        {hostId && readiness.live_ready_reasons.length > 0 && (
+          <details className="mt-3">
+            <summary className="text-xs text-caption font-medium text-muted capitalize">Live-mode readiness</summary>
+            <ul className="text-[10px] text-muted space-y-1">
+              {readiness.live_ready_reasons.map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </details>
+        </div>
+  )}
+      </div>
+    );
+  }, [enabled, selectedScenario, hostId, readiness, runMutation]);
+
+  // Since Demo Center manages its own state, we render a simplified view
+  // without the AttackLab tab machinery.
+  const demoContent = useMemo(() => {
+    if (!selectedScenario) {
+      return (
+        <EmptyState
+          title="Select a demonstration scenario"
+          description="Choose a scenario from the catalog to learn what it demonstrates and run it."
+        />
+      );
+    }
+    return presetsContent;
+  }, [selectedScenario]);
+
+  return (
+    <div className="space-y-6">
+      <AttackLabHeader enabled={user?.role?.name !== "viewer"} />
+
+      {user?.role?.name !== "viewer" && (
+        <LiveAttackBanner
+          running={isRunning}
+          hostId={hostId ? hostId.slice(0, 8) : ""}
+          hostName={hostId ? `Demo Host ${hostId.slice(0, 8)}` : "Demo Host"}
+          scenarioName={selectedScenario?.name}
+          expectedEvents={expectedEvents}
+          runStartedAt={runStartedAt}
+        />
+      </div>
+  )}
+
+      {user?.role?.name !== "viewer" && (
+        <>
+          <SimulationLiveProgress
+            running={isRunning}
+            scenarioName={selectedScenario?.name}
+            expectedEvents={expectedEvents}
+            runStartedAt={runStartedAt}
+          />
+
+          <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,1fr)] gap-6">
+            <div className="space-y-6">
+              {demoContent}
+
+              <HistoryContent selectedRunId={selectedRunId} />
+            </div>
+          </div>
+
+          <InvestigationGuide />
+
+          <SimulationResults
+            result={lastResult}
+            onRunAgain={() => {
+              setLastResult(null);
+              setSelectedRunId(null);
+            }}
+            onReplay={undefined}
+            onReset={undefined}
+            replayPending={false}
+            resetPending={false}
+          />
+
+          <SimulationFeed running={isRunning} />
+
+          {hostId && (
+            <RawLogTail hostId={hostId} hostName={`Demo Host ${hostId.slice(0, 8)}`} running={isRunning} />
+          </div>
+  )}
+
+          <ConfirmDialog
+            open={purgeConfirmOpen}
+            onClose={() => setPurgeConfirmOpen(false)}
+            onConfirm={() => {
+              if (confirm("Remove all demo data?")) {
+                // purge via mutation if available
+                runMutation?.mutate?.(hostId || "");
+              }
+              setPurgeConfirmOpen(false);
+            }}
+            title="Purge simulation data"
+            description="Remove all simulated events, timelines, open alerts, and run history? This cannot be unrun."
+            confirmLabel="Purge all"
+            danger
+            loading={runMutation?.isPending}
+          />
+        </>
+      ) : (
+        <EmptyState
+          title="Demo Center unavailable"
+          description="Admin or analyst access required, or simulation disabled in this environment."
+          action="/login"
+          actionLabel="Log in"
+        />
+      </div>
+  )}
+    </div>
+  );
+}
+
+export function DemoCenter() {
+  return (
+    <div>
+      <DemoCenterPage />
+    </div>
+  );
+}
