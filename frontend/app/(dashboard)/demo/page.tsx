@@ -420,7 +420,7 @@ function DemoCenterPage() {
 
   // Since Demo Center manages its own state, we render a simplified view
   // without the AttackLab tab machinery.
-  const demoContent = useMemo(() => {
+const demoContent = useMemo(() => {
     if (!selectedScenario) {
       return (
         <EmptyState
