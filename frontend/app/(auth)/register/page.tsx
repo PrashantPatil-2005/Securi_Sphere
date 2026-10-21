@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api, establishSession } from "@/lib/api";
+import { api, establishSession, setAccessToken } from "@/lib/api";
 import { passwordPolicyError } from "@/lib/password";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { Button } from "@/components/ui/Button";
@@ -52,7 +52,12 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api("/api/v1/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }, false);
-      await api("/api/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false);
+      const loginRes = await api<{ access_token?: string }>(
+        "/api/v1/auth/login",
+        { method: "POST", body: JSON.stringify({ email, password }) },
+        false,
+      );
+      setAccessToken(loginRes.access_token ?? null);
       await establishSession();
       router.push("/");
     } catch (err) {

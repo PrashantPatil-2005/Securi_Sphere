@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { api, clearTokens, establishSession } from "@/lib/api";
+import { api, clearTokens, establishSession, setAccessToken } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
@@ -66,6 +66,7 @@ function LoginForm() {
         { method: "POST", body: JSON.stringify({ email, password }) },
         false,
       );
+      setAccessToken(res.access_token ?? null);
       if (res.mfa_required && res.mfa_token) {
         setMfaToken(res.mfa_token);
         return;

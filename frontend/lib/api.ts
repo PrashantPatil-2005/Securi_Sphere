@@ -8,6 +8,25 @@ const API_URL =
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * In-memory bearer token, populated after a successful login/register so that
+ * authenticated requests (e.g. /api/v1/auth/me) can be authorised via the
+ * `Authorization: Bearer` header. get_current_user on the backend checks the
+ * header before falling back to the HttpOnly access_token cookie, so this
+ * keeps sessions working even if the cookie is not set by the backend.
+ */
+let accessToken: string | null = null;
+
+/** Call after a successful login/register to store the access token. */
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
+
+/** Read the currently stored access token (if any). */
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 /** WebSocket connects directly to the backend (not via Next rewrite). */
 export function getWsApiUrl(): string {
   if (typeof window !== "undefined") {
@@ -34,6 +53,7 @@ export async function establishSession(): Promise<void> {
 
 export function clearTokens() {
   clearAuthCookie();
+  accessToken = null;
 }
 
 function redirectToLogin() {
@@ -55,6 +75,8 @@ async function refreshAccessToken(): Promise<boolean> {
     clearTokens();
     return false;
   }
+  const data = (await res.json().catch(() => null)) as { access_token?: string } | null;
+  if (data?.access_token) setAccessToken(data.access_token);
   setAuthCookie();
   return true;
 }
@@ -133,6 +155,9 @@ export async function api<T>(
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
 
   let res: Response;
   try {
