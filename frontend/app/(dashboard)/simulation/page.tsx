@@ -17,7 +17,6 @@ import { SimulationLiveProgress } from "@/components/attack-lab/SimulationLivePr
 import { LiveAttackBanner } from "@/components/attack-lab/LiveAttackBanner";
 import { CustomEventBuilder } from "@/components/attack-lab/CustomEventBuilder";
 import { KillChainPreview } from "@/components/attack-lab/KillChainPreview";
-import { InvestigationGuide } from "@/components/attack-lab/InvestigationGuide";
 import { SimulationResults } from "@/components/attack-lab/SimulationResults";
 import { SimulationFeed } from "@/components/attack-lab/SimulationFeed";
 import { RawLogTail } from "@/components/attack-lab/RawLogTail";
@@ -379,16 +378,12 @@ export default function SimulationPage() {
             runStartedAt={runStartedAt}
           />
 
-          <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,1fr)] gap-6">
-            <div className="space-y-6">
-              {mode === "presets" && presetsContent}
-              {mode === "custom" && customContent}
-              {mode === "history" && historyContent}
-              {mode === "live" && liveContent}
-              {mode === "replay" && replayContent}
-            </div>
-
-            <InvestigationGuide />
+          <div className="space-y-6">
+            {mode === "presets" && presetsContent}
+            {mode === "custom" && customContent}
+            {mode === "history" && historyContent}
+            {mode === "live" && liveContent}
+            {mode === "replay" && replayContent}
           </div>
         </>
       )}
